@@ -54,9 +54,6 @@ def plot_mesh(mesh: meshio.Mesh) -> None:
     points = mesh.points[:, :2]  # Only take x, y for 2D
     gridtype = list(mesh.cells_dict.keys())[0]
     cells = mesh.cells_dict[gridtype]  # Extract cells
-    print(points)
-    print(cells)
-    print(mesh)
     fig, ax = plt.subplots(figsize=(6, 6))
     # Extract actual coordinates for plotting
     if len(cells.shape) > 1:
