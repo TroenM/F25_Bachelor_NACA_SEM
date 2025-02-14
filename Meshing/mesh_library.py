@@ -9,8 +9,9 @@ def add_dummy_geometrical_data(mesh) -> meshio.Mesh:
     if "gmsh:geometrical" not in mesh.cell_data:
         mesh.cell_data["gmsh:geometrical"] = {}
     # Assign geometrical tags
-    for key in mesh.cells_dict.keys():
-        mesh.cell_data["gmsh:geometrical"][key] = np.zeros(len(mesh.cells_dict[key]), dtype=int)  # Default to entity 0
+    mesh.cell_data["gmsh:geometrical"] = []
+    for i in range(len(mesh.cells_dict.keys())):
+        mesh.cell_data["gmsh:geometrical"].append(np.zeros(len(mesh.cell_data["gmsh:physical"][i]), dtype=int))  # Default to entity 0
     return mesh
 
 
@@ -42,12 +43,12 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
         for j in range(2):
             for i in range(N_cols-1):
                 lines[2*(N_rows-1)+i+j*(N_cols-1),:] = np.array([i,i+1]) + j*(N_cols)*(N_rows-1)
-        cells = [(gridtype, squares),("line",lines)]
+        cells = [("line",lines),(gridtype, squares)]
         mesh = meshio.Mesh(points=points, cells=cells)
-        mesh.cell_data["gmsh:physical"] = {
-            "line": np.hstack((np.repeat(1,N_rows-1), np.repeat(2,N_rows-1), np.repeat(3,N_rows-1),np.repeat(4,N_rows-1))),
-            gridtype: np.repeat(6,amount_of_squares)
-        }
+        mesh.cell_data["gmsh:physical"] = [
+            np.hstack((np.repeat(1,N_rows-1), np.repeat(2,N_rows-1), np.repeat(3,N_cols-1),np.repeat(4,N_cols-1))),
+            np.repeat(6,amount_of_squares)
+        ]
         mesh = add_dummy_geometrical_data(mesh)
         return mesh
         
@@ -67,12 +68,12 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
         for j in range(2):
             for i in range(N_cols-1):
                 lines[2*(N_rows-1)+i+j*(N_cols-1),:] = np.array([i,i+1]) + j*(N_cols)*(N_rows-1)
-        cells = [(gridtype, triangles),("line",lines)]
+        cells = [("line",lines), (gridtype, triangles)]
         mesh = meshio.Mesh(points=points, cells=cells)
-        mesh.cell_data["gmsh:physical"] = {
-            "line": np.hstack((np.repeat(1,N_rows-1), np.repeat(2,N_rows-1), np.repeat(3,N_rows-1),np.repeat(4,N_rows-1))),
-            gridtype: np.repeat(6,amount_of_triangles)
-        }
+        mesh.cell_data["gmsh:physical"] = [
+            np.hstack((np.repeat(1,N_rows-1), np.repeat(2,N_rows-1), np.repeat(3,N_cols-1),np.repeat(4,N_cols-1))),
+            np.repeat(6,amount_of_triangles)
+        ]
         mesh = add_dummy_geometrical_data(mesh)
         return mesh
     else:
