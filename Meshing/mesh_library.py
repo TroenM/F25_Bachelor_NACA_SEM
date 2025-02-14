@@ -60,7 +60,7 @@ def plot_mesh(mesh: meshio.Mesh) -> None:
         cell_coords = [[points[point] for point in cell] for cell in cells]
         pc = PolyCollection(cell_coords, edgecolor="black", facecolor="lightblue", alpha=0.5)
     elif len(cells.shape) == 1:
-        cell_coords = [points[point] for point in cells]
+        cell_coords = [[points[point] for point in cells]]
         pc = PolyCollection(cell_coords, edgecolor="black", facecolor="lightblue", alpha=0.5)
 
     
