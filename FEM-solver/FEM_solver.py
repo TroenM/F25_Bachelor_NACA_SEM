@@ -23,15 +23,6 @@ class PotentialFlowSolver_FEM():
         2D array containing the point coordinates.
     boundary_indices : np.ndarray
         An array containing the boundary indices.
-
-    f1 : callable
-        Boundary condition function for the first boundary.
-    f2 : callable
-        Boundary condition function for the second boundary.
-    f3 : callable
-        Boundary condition function for the third boundary.
-    f4 : callable
-        Bondary condition function for the fourth boundary.
     
     N : int
         Number of elements in the mesh.
@@ -73,21 +64,18 @@ class PotentialFlowSolver_FEM():
     Boundary Condition Methods
     -------
     impose_BC(BC : int, BC_type : str, BC_func : callable)
-        Impose boundary conditions on the system. And saves BC_func in the corresponding boundary condition attribute.
+        Impose boundary conditions on the system using impose_Dirichlet_BC or impose_Neumann_BC.
 
     impose_Dirichlet_BC(BC : int, BC_func : callable)
-        Impose Dirichlet boundary conditions on the system. And saves BC_func in the corresponding boundary condition attribute.
+        Impose Dirichlet boundary conditions on the system. 
     
     impose_Neumann_BC(BC : int, BC_func : callable)
-        Impose Neumann boundary conditions on the system. And saves BC_func in the corresponding boundary condition attribute.
+        Impose Neumann boundary conditions on the system. 
         
     Solution Methods
     -------
     solve()
         Solves the finite element problem.
-    
-
-    
 
     """
 
@@ -95,13 +83,8 @@ class PotentialFlowSolver_FEM():
     ##################### ATTRIBUTES #####################
     mesh: meshio.Mesh
     EtoV: np.ndarray
-    points: np.ndarray
+    coords: np.ndarray
     boundary_indices: np.ndarray
-
-    f0: callable
-    f1: callable
-    f2: callable
-    f3: callable
 
     N: int
     M: int
@@ -121,10 +104,12 @@ class PotentialFlowSolver_FEM():
             A mesh object containing the mesh information.
         """
         self.mesh = mesh
-        self.EtoV, self.points, self.boundary_indices = self.get_mesh_info(mesh)
-        self.points = self.points[:, :2]
-        self.N = self.EtoV.shape[0]
-        self.M = self.points.shape[0]
+        self.EtoV, self.coords = self.get_mesh_info(mesh)
+        self.coords = self.coords[:, :2]
+
+        self.N = len(self.EtoV)
+        self.M = self.coords.shape[0]
+
         self.A = np.zeros((self.M, self.M))
         self.b = np.zeros(self.M)
         self.u = np.zeros(self.M)
@@ -150,32 +135,35 @@ class PotentialFlowSolver_FEM():
             [node 0, node 1, ..., node n-1] for element 0
             [node 0, node 1, ..., node n-1] for element 1
             ...
-        points : np.ndarray
+        coords : np.ndarray
             3D array containing the point coordinates.
 
             Format:
             [x, y, z] for point 0
             [x, y, z] for point 1
             ...
-        boundary_indices : np.ndarray
-            An array containing the boundary indices.
-
-            Format:
-            [node 0, index 1, ..., index n-1] for boundary 0
-            [node 0, index 1, ..., index n-1] for boundary 1
-            ... 
         """
 
-        # Extract the element to vertex matrix (Update to support mixed meshes)
-        EtoV = mesh.cells_dict["triangle"]
+        # initialize list capable of holding multiple cell types
+        EtoV = []
 
-        # Extract the point coordinates
-        points = mesh.points
+        # Try to extract triangular cells
+        try :
+            for element in mesh.cells_dict["triangle"]:
+                EtoV.append(element)
+        except:
+            print("No triangle cells found")
 
-        # Extract the boundary indices
-        boundary_indices = mesh.cell_sets["boundary"]
+        # Try to extract quad cells
+        try :
+            EtoV.append(mesh.cells_dict["quad"])
+        except:
+            print("No quad cells found")
 
-        return EtoV, points, boundary_indices
+        # Extract the node coordinates
+        coords = mesh.points[:, :2]
+
+        return EtoV, coords
     
 
     ##################### Construction Methods #####################
@@ -197,7 +185,7 @@ class PotentialFlowSolver_FEM():
         """
 
        # Get the coordinates of the vertices
-        coords = self.points[EtoV]
+        coords = self.coords[EtoV]
 
         Delta = 1/2 * (coords[1, 0]*coords[2, 1] - coords[1,1]*coords[2, 0]
                            -(coords[0, 0]*coords[2, 1] - coords[0,1]*coords[2, 0])
@@ -226,8 +214,10 @@ class PotentialFlowSolver_FEM():
         k : float
             Element of the element matrix.
         """
-        # Get the vertices of the element
 
+        ### TO DO: Implement for quad elements ###
+
+        # Call the correct method based on the element type 
         if len(EtoV) == 3:
             return self.compute_triangular_k(EtoV, r, s)
         else:
@@ -240,8 +230,8 @@ class PotentialFlowSolver_FEM():
         """
         
         for element in self.EtoV:
-            for r in range(3):
-                for s in range(3):
+            for r in range(len(element)):
+                for s in range(len(element)):
                     self.A[element[r], element[s]] += self.compute_k(element, r, s)
 
     ##################### Boundary Condition Methods #####################
@@ -277,24 +267,15 @@ class PotentialFlowSolver_FEM():
         BC_func : callable
             Boundary condition function.
         """
+        BC_nodes = np.unique(self.mesh.cells_dict["line"][np.where(self.mesh.cell_data["gmsh:physical"][0] == BC)[0]].flatten())
 
-        BC_nodes = self.boundary_indices[BC]
-
+        if len(BC_nodes) == 0:
+            raise ValueError("No nodes found at boundary tag {}".format(BC))
+        
         for node in BC_nodes:
             self.A[node, :] = 0
             self.A[node, node] = 1
-            self.b[node] = BC_func(*self.points[node])
-
-        if BC == 0:
-            self.f0 = BC_func
-        elif BC == 1:
-            self.f1 = BC_func
-        elif BC == 2:
-            self.f2 = BC_func
-        elif BC == 3:
-            self.f3 = BC_func
-        else:
-            raise ValueError("That is not a valid boundary condition, it should be between 0 and 3")
+            self.b[node] = BC_func(*self.coords[node])
         
     def impose_Neumann_BC(self, BC: int, BC_func: callable):
         """
@@ -309,24 +290,18 @@ class PotentialFlowSolver_FEM():
         """
 
         ##### TO BE IMPLEMENTED #####
-
-        if BC == 0:
-            self.f0 = BC_func
-        elif BC == 1:
-            self.f1 = BC_func
-        elif BC == 2:
-            self.f2 = BC_func
-        elif BC == 3:
-            self.f3 = BC_func
-        else:
-            raise ValueError("That is not a valid boundary condition, it should be between 0 and 3")
+        print("Not implemented yet")
     
     ##################### Solution Methods #####################
     def solve(self):
         """
         Solves the finite element problem.
         """
-        self.u = np.linalg.solve(self.A, self.b)
+        #### MODIFY TO ACCEPT NON-SQUARE MESHES ####
+        try:
+            self.u = np.linalg.solve(self.A, self.b)
+        except:
+            raise ValueError("Plotting method is not implemented for non-square meshes")
 
     def plot_solution(self, figsize = (8, 8), title = "Potential Flow Solution"):
         """
@@ -336,8 +311,8 @@ class PotentialFlowSolver_FEM():
 
         plt.figure(figsize=figsize)
         plt.imshow(u_plot, cmap="viridis", origin="lower", 
-                   extent=[np.min(self.points[:,0]), np.max(self.points[:,0]), np.min(self.points[:,1]), 
-                           np.max(self.points[:,1])])
+                   extent=[np.min(self.coords[:,0]), np.max(self.coords[:,0]), np.min(self.coords[:,1]), 
+                           np.max(self.coords[:,1])])
         plt.title(title)
         plt.colorbar()
         plt.show()
