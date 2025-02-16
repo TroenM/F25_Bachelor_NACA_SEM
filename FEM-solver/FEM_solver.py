@@ -34,6 +34,8 @@ class PotentialFlowSolver_FEM():
         The right-hand side vector.
     u : np.ndarray
         The solution vector.
+    v: np.ndarray
+        The velocity field.
     
 
     Initialization Methods
@@ -76,7 +78,15 @@ class PotentialFlowSolver_FEM():
     -------
     solve()
         Solves the finite element problem.
-
+    
+    Post-Processing Methods
+    -------
+    plot_solution(figsize : tuple, title : str)
+        Plots the solution. Currently only supports square meshes.
+    
+    compute_velocity_field():
+        Computes the velocity field v = gradient(u).
+    
     """
 
 
@@ -91,6 +101,7 @@ class PotentialFlowSolver_FEM():
     A: sps.csr_matrix
     b: np.ndarray
     u: np.ndarray
+    v: np.ndarray
 
 
     ##################### INITIALIZATION #####################
@@ -113,6 +124,7 @@ class PotentialFlowSolver_FEM():
         self.A = np.zeros((self.M, self.M))
         self.b = np.zeros(self.M)
         self.u = np.zeros(self.M)
+        self.v = np.zeros((self.M, 2))
 
         self.construct_initial_system()
 
@@ -275,7 +287,7 @@ class PotentialFlowSolver_FEM():
         for node in BC_nodes:
             self.A[node, :] = 0
             self.A[node, node] = 1
-            self.b[node] = BC_func(*self.coords[node])
+            self.b[node] += BC_func(*self.coords[node])
         
     def impose_Neumann_BC(self, BC: int, BC_func: callable):
         """
@@ -303,16 +315,63 @@ class PotentialFlowSolver_FEM():
         except:
             raise ValueError("Plotting method is not implemented for non-square meshes")
 
-    def plot_solution(self, figsize = (8, 8), title = "Potential Flow Solution"):
+    
+    ##################### Post-Processing Methods #####################
+    def plot_solution(self, velocity = False, figsize = (8, 8), title = "Potential Flow Solution"):
         """
         Plots the solution.
+
+        Parameters
+        ----------
+        figsize : tuple
+            Figure size.
+        title : str
+            Title of the plot.
+        velocity : bool
+            If True, the velocity field will be plotted on top of the solution.
         """
         u_plot = self.u.reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)))
 
-        plt.figure(figsize=figsize)
-        plt.imshow(u_plot, cmap="viridis", origin="lower", 
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.imshow(u_plot, cmap="viridis", origin="lower", 
                    extent=[np.min(self.coords[:,0]), np.max(self.coords[:,0]), np.min(self.coords[:,1]), 
                            np.max(self.coords[:,1])])
         plt.title(title)
-        plt.colorbar()
+        plt.colorbar(ax.imshow(u_plot, cmap="viridis", origin="lower", 
+               extent=[np.min(self.coords[:,0]), np.max(self.coords[:,0]), np.min(self.coords[:,1]), 
+                   np.max(self.coords[:,1])]))
+
+        if velocity:
+            self.compute_velocity_field()
+            ax.quiver(self.coords[::3,0], self.coords[::3,1], self.v[::3,0], self.v[::3,1], color="white")
         plt.show()
+
+    def compute_velocity_field(self):
+        """
+        Computes the velocity field v = gradient(u) using 1.order downwind differences.
+        """
+        # Converting the solution to a 2D array
+        self.u = self.u.reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)))
+        self.v = self.v.reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)), 2)
+
+        # Computing x-distances between nodes for downwind differences
+        coords_x = self.coords[:, 0].reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)))
+        dx = coords_x[:, 1:] - coords_x[:, :-1]
+
+        # Computing y-distances between nodes for downwind differences
+        coords_y = self.coords[:, 1].reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)))
+        dy = coords_y[1:, :] - coords_y[:-1, :]
+
+        # Computing the velocity field
+        self.v[:,:-1, 0] = np.diff(self.u, axis=1) / dx
+        self.v[:-1,:, 1] = np.diff(self.u, axis=0) / dy
+
+        # Flattening the velocity field
+        self.v = self.v.reshape(self.M, 2)
+
+        # restoring the solution to a 1D array
+        self.u = self.u.flatten()
+
+
+
+    

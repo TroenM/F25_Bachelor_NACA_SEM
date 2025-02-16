@@ -20,3 +20,4 @@ FEM_solver.py: Contains the class defintion for an incompressible potential flow
         1. Implement neumann BC
         2. Implement plotting methods for non-square meshes
         3. Implement plotting methods for non-unform meshes
+        4. Implement a potential to velocity methods aswell as plotting
