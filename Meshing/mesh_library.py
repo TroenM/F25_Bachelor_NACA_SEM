@@ -3,6 +3,16 @@ import meshio
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 
+def add_dummy_geometrical_data(mesh) -> meshio.Mesh:
+    
+    # Ensure cell_data exists and has 'gmsh:geometrical'
+    if "gmsh:geometrical" not in mesh.cell_data:
+        mesh.cell_data["gmsh:geometrical"] = {}
+    # Assign geometrical tags
+    mesh.cell_data["gmsh:geometrical"] = []
+    for i in range(len(mesh.cells_dict.keys())):
+        mesh.cell_data["gmsh:geometrical"].append(np.zeros(len(mesh.cell_data["gmsh:physical"][i]), dtype=int))  # Default to entity 0
+    return mesh
 
 
 def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.Mesh:
@@ -19,29 +29,53 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
     first_list = np.tile(np.linspace(-2,3,N_cols),N_rows)
     second_list = np.repeat(np.linspace(-2,2,N_rows),N_cols)
     points = np.array(((first_list,second_list,np.zeros(N_cols*N_rows)))).T
-    boundary_edges = np.array([
-            np.where((points[:, 1] == np.min(points[:, 1])))[0],   # Left boundary
-            np.where((points[:, 1] == np.max(points[:, 1])))[0],   # Right boundary
-            np.where((points[:, 0] == np.min(points[:, 0])))[0],   # Bottom boundary
-            np.where((points[:, 0] == np.max(points[:, 0])))[0]    # Top boundary
-    ])
-    boundary_markers = {"bottom": [0], "right": [1], "top": [2], "left": [3]} 
     if gridtype.lower() == "quad":
-        squares = np.zeros(((N_cols-1)*(N_rows-1),4), dtype=int)
+        amount_of_squares = (N_cols-1)*(N_rows-1)
+        squares = np.zeros((amount_of_squares,4), dtype=int)
         for i in range(N_cols-1):
             for j in range(N_rows-1):
                 squares[(N_cols-1)*j+i,:] = [i+j*N_cols, i+1+j*N_cols, i+1+(j+1)*N_cols, i+(j+1)*N_cols]
-        cells = [(gridtype, squares)]
-        return meshio.Mesh(points=points, cells=cells, cell_sets={"boundary": boundary_edges})
+        
+        lines = np.zeros((2*(N_cols-1) + 2*(N_rows-1),2), dtype=int)
+        for j in range(2):
+            for i in range(N_rows-1):
+                lines[i+j*(N_rows-1),:] = np.array([i*N_cols,(i+1)*N_cols]) + j*(N_cols-1)
+        for j in range(2):
+            for i in range(N_cols-1):
+                lines[2*(N_rows-1)+i+j*(N_cols-1),:] = np.array([i,i+1]) + j*(N_cols)*(N_rows-1)
+        cells = [("line",lines),(gridtype, squares)]
+        mesh = meshio.Mesh(points=points, cells=cells)
+        mesh.cell_data["gmsh:physical"] = [
+            np.hstack((np.repeat(1,N_rows-1), np.repeat(2,N_rows-1), np.repeat(3,N_cols-1),np.repeat(4,N_cols-1))),
+            np.repeat(6,amount_of_squares)
+        ]
+        mesh = add_dummy_geometrical_data(mesh)
+        return mesh
+        
     
     elif gridtype.lower() == "triangle":
-        triangles = np.zeros(((N_cols-1)*(N_rows-1)*2,3), dtype=int)
+        amount_of_triangles = (N_cols-1)*(N_rows-1)*2
+        triangles = np.zeros((amount_of_triangles,3), dtype=int)
         for i in range(N_cols-1):
             for j in range(N_rows-1):
                 triangles[((N_cols-1)*j+i)*2,:] = [i+j*N_cols, i+1+j*N_cols, i+1+(j+1)*N_cols]
                 triangles[((N_cols-1)*j+i)*2+1,:] = [i+j*N_cols, i+1+(j+1)*N_cols, i+(j+1)*N_cols]
-        cells = [(gridtype, triangles)]
-        return meshio.Mesh(points=points, cells=cells, cell_sets={"boundary": boundary_edges})
+        
+        lines = np.zeros((2*(N_cols-1) + 2*(N_rows-1),2), dtype=int)
+        for j in range(2):
+            for i in range(N_rows-1):
+                lines[i+j*(N_rows-1),:] = np.array([i*N_cols,(i+1)*N_cols]) + j*(N_cols-1)
+        for j in range(2):
+            for i in range(N_cols-1):
+                lines[2*(N_rows-1)+i+j*(N_cols-1),:] = np.array([i,i+1]) + j*(N_cols)*(N_rows-1)
+        cells = [("line",lines), (gridtype, triangles)]
+        mesh = meshio.Mesh(points=points, cells=cells)
+        mesh.cell_data["gmsh:physical"] = [
+            np.hstack((np.repeat(1,N_rows-1), np.repeat(2,N_rows-1), np.repeat(3,N_cols-1),np.repeat(4,N_cols-1))),
+            np.repeat(6,amount_of_triangles)
+        ]
+        mesh = add_dummy_geometrical_data(mesh)
+        return mesh
     else:
         raise ValueError("That is not a valid gridtype, it should either be triangle or quad")
 
