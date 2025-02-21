@@ -80,10 +80,10 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
         raise ValueError("That is not a valid gridtype, it should either be triangle or quad")
 
 
-def plot_mesh(mesh: meshio.Mesh) -> None:
+def plot_mesh(mesh: meshio.Mesh, xlim : list = [-3,3], ylim : list = [-2,2]) -> None:
     # Extract points and cells
     points = mesh.points[:, :2]  # Only take x, y for 2D
-    gridtype = list(mesh.cells_dict.keys())[0]
+    gridtype = list(mesh.cells_dict.keys())[1]
     cells = mesh.cells_dict[gridtype]  # Extract cells
     fig, ax = plt.subplots(figsize=(6, 6))
     # Extract actual coordinates for plotting
@@ -96,10 +96,12 @@ def plot_mesh(mesh: meshio.Mesh) -> None:
 
     
     ax.add_collection(pc)
-    ax.scatter(points[:, 0], points[:, 1], color="red", s=10)  # Plot nodes
+    ax.scatter(points[:, 0], points[:, 1], color="red", s=1)  # Plot nodes
+    ax.set_xlim(xlim[0], xlim[1])
+    ax.set_ylim(ylim[0], ylim[1])
+    
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.title("2D Mesh Visualization")
-    plt.axis("equal")
     plt.show()
     return None
