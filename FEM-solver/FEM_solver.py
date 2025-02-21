@@ -1,8 +1,10 @@
 import numpy as np
 import scipy.sparse as sps
-import matplotlib.pyplot as plt
 import meshio
+
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 
 class PotentialFlowSolver_FEM():
     """
@@ -183,7 +185,6 @@ class PotentialFlowSolver_FEM():
     def compute_triangular_k(self, EtoV: np.ndarray, r, s) -> float:
         """
         Computes the element in element matrix for a triangular element. 
-        (Remember to multiply with the area of the element when constructing the global matrix)
 
         Parameters
         ----------
@@ -211,6 +212,20 @@ class PotentialFlowSolver_FEM():
         cs = coords[(s+2)%3,0] - coords[(s+1)%3,0]
 
         return 1/(4*np.abs(Delta))* (br*bs + cr*cs)
+    
+    def compute_quad_k(self, EtoV: np.ndarray, r, s) -> float:
+        """
+        Computes the element in element matrix for a quad element.
+        """
+
+        # Get the coordinates of the vertices
+        coords = self.coords[EtoV]
+
+        # Declaring x_i, y_i for i = 0, 1, 2, 3
+        x = coords[:, 0]
+        y = coords[:, 1]
+
+        # Compute the area of the quad element
     
     def compute_k(self, EtoV: np.ndarray, r, s) -> float:
         """
@@ -261,9 +276,9 @@ class PotentialFlowSolver_FEM():
         BC_func : callable
             Boundary condition function.
         """
-        if BC_type == "Dirichlet":
+        if BC_type.upper() == "DIRICHLET":
             self.impose_Dirichlet_BC(BC, BC_func)
-        elif BC_type == "Neumann":
+        elif BC_type.upper() == "NEUMANN":
             self.impose_Neumann_BC(BC, BC_func)
         else:
             raise ValueError("That is not a valid boundary condition type, it should either be Dirichlet or Neumann")
@@ -315,37 +330,6 @@ class PotentialFlowSolver_FEM():
         except:
             raise ValueError("Plotting method is not implemented for non-square meshes")
 
-    
-    ##################### Post-Processing Methods #####################
-    def plot_solution(self, velocity = False, figsize = (8, 8), title = "Potential Flow Solution"):
-        """
-        Plots the solution.
-
-        Parameters
-        ----------
-        figsize : tuple
-            Figure size.
-        title : str
-            Title of the plot.
-        velocity : bool
-            If True, the velocity field will be plotted on top of the solution.
-        """
-        u_plot = self.u.reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)))
-
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.imshow(u_plot, cmap="viridis", origin="lower", 
-                   extent=[np.min(self.coords[:,0]), np.max(self.coords[:,0]), np.min(self.coords[:,1]), 
-                           np.max(self.coords[:,1])])
-        plt.title(title)
-        plt.colorbar(ax.imshow(u_plot, cmap="viridis", origin="lower", 
-               extent=[np.min(self.coords[:,0]), np.max(self.coords[:,0]), np.min(self.coords[:,1]), 
-                   np.max(self.coords[:,1])]))
-
-        if velocity:
-            self.compute_velocity_field()
-            ax.quiver(self.coords[::3,0], self.coords[::3,1], self.v[::3,0], self.v[::3,1], color="white")
-        plt.show()
-
     def compute_velocity_field(self):
         """
         Computes the velocity field v = gradient(u) using 1.order downwind differences.
@@ -372,7 +356,36 @@ class PotentialFlowSolver_FEM():
         # restoring the solution to a 1D array
         self.u = self.u.flatten()
 
-    def plot3d(self, include_elements: bool = True, cmap: str = "thermal"):
+    ##################### Post-Processing Methods #####################
+    def plot_solution(self, show_elements: bool = True, figsize: tuple = (10, 10), title: str = "Potential Flow Solution"):
+        """
+        Plots the solution.
+
+        Inspired by: https://stackoverflow.com/questions/52202014/how-can-i-plot-2d-fem-results-using-matplotlib
+        Answer by Carlos Jan 29 2020
+
+        Parameters
+        ----------
+        figsize : tuple
+            Figure size.
+        title : str
+            Title of the plot.
+        """
+        triangulation = tri.Triangulation(self.coords[:,0], self.coords[:, 1], self.EtoV )
+        plt.tricontourf(triangulation, self.u, cmap="plasma", levels = 100)
+
+        if show_elements:
+            for element in self.EtoV:
+                x = [self.coords[:, 0][element[i]] for i in range(len(element))]
+                y = [self.coords[:, 1][element[i]] for i in range(len(element))]
+                plt.fill(x, y, edgecolor='black', fill=False, linewidth=0.5)
+        
+        plt.colorbar()
+        plt.title(title)
+        plt.axis("equal")
+        plt.show()
+
+    def plot3d(self, show_elements: bool = True, cmap: str = "thermal"):
         """
         Plot the solution in 3D as nodes and elements
         """
@@ -392,7 +405,7 @@ class PotentialFlowSolver_FEM():
                 colorbar_title = "Stream function"
             )
         
-        if include_elements:
+        if show_elements:
 
             tri_points = points_3d[self.EtoV]
             #extract the lists of x, y, z coordinates of the triangle vertices and connect them by a line
@@ -416,9 +429,21 @@ class PotentialFlowSolver_FEM():
 
 
             fig = go.Figure(data=[mesh_3d, lines])
-            fig.show()
         else:
             fig = go.Figure(data=[mesh_3d])
-            fig.show()
-
     
+        fig.show()
+
+
+if __name__ == "__main__":
+    print("Reading mesh\n")
+    mesh = meshio.read("./FEM-solver/meshes/NACAmesh.msh")
+    print("Initializing solver")
+    model = PotentialFlowSolver_FEM(mesh)
+    print("Imposing BCs\n")
+    model.impose_BC("Dirichlet", 1, lambda x, y: -10)
+    model.impose_BC("Dirichlet", 2, lambda x, y: 10/4)
+    print("Solving\n")
+    model.solve()
+    print("Plotting\n")
+    model.plot_solution(show_elements=True, figsize=(7,7))
