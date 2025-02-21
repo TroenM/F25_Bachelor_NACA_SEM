@@ -2,6 +2,7 @@ import numpy as np
 import scipy.sparse as sps
 import matplotlib.pyplot as plt
 import meshio
+import plotly.graph_objects as go
 
 class PotentialFlowSolver_FEM():
     """
@@ -94,7 +95,6 @@ class PotentialFlowSolver_FEM():
     mesh: meshio.Mesh
     EtoV: np.ndarray
     coords: np.ndarray
-    boundary_indices: np.ndarray
 
     N: int
     M: int
@@ -372,6 +372,53 @@ class PotentialFlowSolver_FEM():
         # restoring the solution to a 1D array
         self.u = self.u.flatten()
 
+    def plot3d(self, include_elements: bool = True, cmap: str = "thermal"):
+        """
+        Plot the solution in 3D as nodes and elements
+        """
 
+        points_3d = np.hstack((self.coords, self.u.reshape(-1, 1)))
+        EtoV = np.array(self.EtoV)
+        mesh_3d = go.Mesh3d(
+                x = points_3d[:, 0],
+                y = points_3d[:, 1],
+                z = points_3d[:, 2],
+                i = EtoV[:, 0],
+                j = EtoV[:, 1],
+                k = EtoV[:, 2],
+                opacity = 1,
+                colorscale = cmap,
+                intensity = points_3d[:, 2],
+                colorbar_title = "Stream function"
+            )
+        
+        if include_elements:
+
+            tri_points = points_3d[self.EtoV]
+            #extract the lists of x, y, z coordinates of the triangle vertices and connect them by a line
+            Xe = []
+            Ye = []
+            Ze = []
+            for T in tri_points:
+                Xe.extend([T[k%3][0] for k in range(4)]+[ None])
+                Ye.extend([T[k%3][1] for k in range(4)]+[ None])
+                Ze.extend([T[k%3][2] for k in range(4)]+[ None])
+
+            #define the trace for triangle sides
+            lines = go.Scatter3d(
+                               x=Xe,
+                               y=Ye,
+                               z=Ze,
+                               mode='lines',
+                               name='',
+                               opacity=1,
+                               line=dict(color= 'rgb(10,10,10)', width=0.5)) 
+
+
+            fig = go.Figure(data=[mesh_3d, lines])
+            fig.show()
+        else:
+            fig = go.Figure(data=[mesh_3d])
+            fig.show()
 
     
