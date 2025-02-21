@@ -26,7 +26,7 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
     gridtype : str
         The gridtype is "triangle" if you want the grid to be made up of triangles, or "quad" if you want your grid to be made of squares
     '''
-    first_list = np.tile(np.linspace(-2,3,N_cols),N_rows)
+    first_list = np.tile(np.linspace(-3,3,N_cols),N_rows)
     second_list = np.repeat(np.linspace(-2,2,N_rows),N_cols)
     points = np.array(((first_list,second_list,np.zeros(N_cols*N_rows)))).T
     if gridtype.lower() == "quad":
@@ -80,11 +80,10 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
         raise ValueError("That is not a valid gridtype, it should either be triangle or quad")
 
 
-def plot_mesh(mesh: meshio.Mesh, xlim : list = [-3,3], ylim : list = [-2,2]) -> None:
+def plot_mesh(mesh: meshio.Mesh, celltype : str = "quad",xlim : list = [-3,3], ylim : list = [-2,2]) -> None:
     # Extract points and cells
     points = mesh.points[:, :2]  # Only take x, y for 2D
-    gridtype = list(mesh.cells_dict.keys())[1]
-    cells = mesh.cells_dict[gridtype]  # Extract cells
+    cells = mesh.cells_dict[celltype]  # Extract cells
     fig, ax = plt.subplots(figsize=(6, 6))
     # Extract actual coordinates for plotting
     if len(cells.shape) > 1:
