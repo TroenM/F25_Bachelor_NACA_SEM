@@ -215,7 +215,7 @@ class PotentialFlowSolver_FEM():
         cr = coords[(r+2)%3,0] - coords[(r+1)%3,0]
         cs = coords[(s+2)%3,0] - coords[(s+1)%3,0]
 
-        return 1/(4*np.abs(Delta))* (br*bs + cr*cs)
+        return 1/(4*np.abs(Delta)) * (br*bs + cr*cs)
     
     def compute_quad_k(self, EtoV: np.ndarray, r, s) -> float:
         """
@@ -273,28 +273,23 @@ class PotentialFlowSolver_FEM():
         x2,y2 = coords[1]
         x3,y3 = coords[2]
 
-        # Parameterization of element
-        r_x = lambda u, t: x3 + t*(x2-x3 + u*(x1-x2))
-        r_y = lambda u, t: y3 + t*(y2-y3 + u*(y1-y2))
+        #x = (x1+x2+x3)/3
+        #y = (y1+y2+y3)/3
 
-        Jacobi = lambda u,t: t*(x1-x2)*(y2-y3 + u*(y1-y2)) - t*(y1-y2)*(x2-x3 + u*(x1-x2))
+        q = (self.rhs(x1,y1) + self.rhs(x2,y2) + self.rhs(x3,y3))/3
 
         # Constructing coefficients of the basis functions
-        ar = coords[(r+1)%3, 0]*coords[(r+2)%3, 1] - coords[(r+2)%3, 0]*coords[(r+1)%3, 1]  # xj*yk - xk*yj
-        br = coords[(r+1)%3,1] - coords[(r+2)%3,1]
-        cr = coords[(r+2)%3,0] - coords[(r+1)%3,0]
+        #ar = coords[(r+1)%3, 0]*coords[(r+2)%3, 1] - coords[(r+2)%3, 0]*coords[(r+1)%3, 1]  # xj*yk - xk*yj
+        #br = coords[(r+1)%3,1] - coords[(r+2)%3,1]
+        #cr = coords[(r+2)%3,0] - coords[(r+1)%3,0]
 
         Delta = 1/2 * (coords[1, 0]*coords[2, 1] - coords[1,1]*coords[2, 0]
                            -(coords[0, 0]*coords[2, 1] - coords[0,1]*coords[2, 0])
                            + coords[0, 0]*coords[1, 1] - coords[0,1]*coords[1, 0])
 
-        # integrating the weak form rhs
-        #integrand = lambda s, t: ar + br*x(s,t) + cr*y(s,t)
-        integrand = lambda s,t: self.rhs(r_x(s,t), r_y(s,t)) * (ar + br*r_x(s,t) + cr*r_y(s,t)) * Jacobi(s,t)
+        qr = abs(Delta)/3 * q
 
-        qr = integrate.dblquad(integrand, 0,1, 0,1)
-
-        return 1/(2*Delta) * qr[0]
+        return qr
         
 
     def construct_initial_system(self):
@@ -373,10 +368,8 @@ class PotentialFlowSolver_FEM():
         Solves the finite element problem.
         """
         #### MODIFY TO ACCEPT NON-SQUARE MESHES ####
-        try:
-            self.sol = np.linalg.solve(self.A, self.b)
-        except:
-            raise ValueError("Plotting method is not implemented for non-square meshes")
+
+        self.sol = np.linalg.solve(self.A, self.b)
 
     def compute_velocity_field(self):
         """
