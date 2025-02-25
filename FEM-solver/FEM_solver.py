@@ -1,8 +1,12 @@
 import numpy as np
 import scipy.sparse as sps
-import matplotlib.pyplot as plt
+from scipy import integrate
+
 import meshio
+
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 
 class PotentialFlowSolver_FEM():
     """
@@ -100,12 +104,13 @@ class PotentialFlowSolver_FEM():
     M: int
     A: sps.csr_matrix
     b: np.ndarray
-    u: np.ndarray
+    sol: np.ndarray
     v: np.ndarray
+    rhs: callable
 
 
     ##################### INITIALIZATION #####################
-    def __init__(self, mesh: meshio.Mesh):
+    def __init__(self, mesh: meshio.Mesh, rhs: callable = lambda x, y: 0):
         """
         Initializes the FEM_solver object.
 
@@ -123,8 +128,9 @@ class PotentialFlowSolver_FEM():
 
         self.A = np.zeros((self.M, self.M))
         self.b = np.zeros(self.M)
-        self.u = np.zeros(self.M)
+        self.sol = np.zeros(self.M)
         self.v = np.zeros((self.M, 2))
+        self.rhs = rhs
 
         self.construct_initial_system()
 
@@ -183,7 +189,6 @@ class PotentialFlowSolver_FEM():
     def compute_triangular_k(self, EtoV: np.ndarray, r, s) -> float:
         """
         Computes the element in element matrix for a triangular element. 
-        (Remember to multiply with the area of the element when constructing the global matrix)
 
         Parameters
         ----------
@@ -212,6 +217,20 @@ class PotentialFlowSolver_FEM():
 
         return 1/(4*np.abs(Delta))* (br*bs + cr*cs)
     
+    def compute_quad_k(self, EtoV: np.ndarray, r, s) -> float:
+        """
+        Computes the element in element matrix for a quad element.
+        """
+
+        # Get the coordinates of the vertices
+        coords = self.coords[EtoV]
+
+        # Declaring x_i, y_i for i = 0, 1, 2, 3
+        x = coords[:, 0]
+        y = coords[:, 1]
+
+        # Compute the area of the quad element
+    
     def compute_k(self, EtoV: np.ndarray, r, s) -> float:
         """
         Computes the element in element matrix for a given element
@@ -235,6 +254,49 @@ class PotentialFlowSolver_FEM():
         else:
             raise ValueError("Only triangular elements are supported")
         
+    def compute_rhs(self, element: np.ndarray, r) -> float:
+        """
+        Computes the Right hand side for a given element
+        
+        Parameters
+        ----------
+        element: EtoV infor for the element
+        r: row index
+
+
+        """
+
+        ### Parameterizing the element ###
+        coords = self.coords[element]
+
+        x1,y1 = coords[0]
+        x2,y2 = coords[1]
+        x3,y3 = coords[2]
+
+        # Parameterization of element
+        r_x = lambda u, t: x3 + t*(x2-x3 + u*(x1-x2))
+        r_y = lambda u, t: y3 + t*(y2-y3 + u*(y1-y2))
+
+        Jacobi = lambda u,t: t*(x1-x2)*(y2-y3 + u*(y1-y2)) - t*(y1-y2)*(x2-x3 + u*(x1-x2))
+
+        # Constructing coefficients of the basis functions
+        ar = coords[(r+1)%3, 0]*coords[(r+2)%3, 1] - coords[(r+2)%3, 0]*coords[(r+1)%3, 1]  # xj*yk - xk*yj
+        br = coords[(r+1)%3,1] - coords[(r+2)%3,1]
+        cr = coords[(r+2)%3,0] - coords[(r+1)%3,0]
+
+        Delta = 1/2 * (coords[1, 0]*coords[2, 1] - coords[1,1]*coords[2, 0]
+                           -(coords[0, 0]*coords[2, 1] - coords[0,1]*coords[2, 0])
+                           + coords[0, 0]*coords[1, 1] - coords[0,1]*coords[1, 0])
+
+        # integrating the weak form rhs
+        #integrand = lambda s, t: ar + br*x(s,t) + cr*y(s,t)
+        integrand = lambda s,t: self.rhs(r_x(s,t), r_y(s,t)) * (ar + br*r_x(s,t) + cr*r_y(s,t)) * Jacobi(s,t)
+
+        qr = integrate.dblquad(integrand, 0,1, 0,1)
+
+        return 1/(2*Delta) * qr[0]
+        
+
     def construct_initial_system(self):
         """
         Constructs the initial system of equations, saves the coefficient matrix in A
@@ -243,6 +305,7 @@ class PotentialFlowSolver_FEM():
         
         for element in self.EtoV:
             for r in range(len(element)):
+                self.b[element[r]] += self.compute_rhs(element, r)
                 for s in range(len(element)):
                     self.A[element[r], element[s]] += self.compute_k(element, r, s)
 
@@ -261,9 +324,9 @@ class PotentialFlowSolver_FEM():
         BC_func : callable
             Boundary condition function.
         """
-        if BC_type == "Dirichlet":
+        if BC_type.upper() == "DIRICHLET":
             self.impose_Dirichlet_BC(BC, BC_func)
-        elif BC_type == "Neumann":
+        elif BC_type.upper() == "NEUMANN":
             self.impose_Neumann_BC(BC, BC_func)
         else:
             raise ValueError("That is not a valid boundary condition type, it should either be Dirichlet or Neumann")
@@ -287,7 +350,7 @@ class PotentialFlowSolver_FEM():
         for node in BC_nodes:
             self.A[node, :] = 0
             self.A[node, node] = 1
-            self.b[node] += BC_func(*self.coords[node])
+            self.b[node] = BC_func(*self.coords[node])
         
     def impose_Neumann_BC(self, BC: int, BC_func: callable):
         """
@@ -311,47 +374,16 @@ class PotentialFlowSolver_FEM():
         """
         #### MODIFY TO ACCEPT NON-SQUARE MESHES ####
         try:
-            self.u = np.linalg.solve(self.A, self.b)
+            self.sol = np.linalg.solve(self.A, self.b)
         except:
             raise ValueError("Plotting method is not implemented for non-square meshes")
-
-    
-    ##################### Post-Processing Methods #####################
-    def plot_solution(self, velocity = False, figsize = (8, 8), title = "Potential Flow Solution"):
-        """
-        Plots the solution.
-
-        Parameters
-        ----------
-        figsize : tuple
-            Figure size.
-        title : str
-            Title of the plot.
-        velocity : bool
-            If True, the velocity field will be plotted on top of the solution.
-        """
-        u_plot = self.u.reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)))
-
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.imshow(u_plot, cmap="viridis", origin="lower", 
-                   extent=[np.min(self.coords[:,0]), np.max(self.coords[:,0]), np.min(self.coords[:,1]), 
-                           np.max(self.coords[:,1])])
-        plt.title(title)
-        plt.colorbar(ax.imshow(u_plot, cmap="viridis", origin="lower", 
-               extent=[np.min(self.coords[:,0]), np.max(self.coords[:,0]), np.min(self.coords[:,1]), 
-                   np.max(self.coords[:,1])]))
-
-        if velocity:
-            self.compute_velocity_field()
-            ax.quiver(self.coords[::3,0], self.coords[::3,1], self.v[::3,0], self.v[::3,1], color="white")
-        plt.show()
 
     def compute_velocity_field(self):
         """
         Computes the velocity field v = gradient(u) using 1.order downwind differences.
         """
         # Converting the solution to a 2D array
-        self.u = self.u.reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)))
+        self.sol = self.sol.reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)))
         self.v = self.v.reshape(int(np.sqrt(self.M)), int(np.sqrt(self.M)), 2)
 
         # Computing x-distances between nodes for downwind differences
@@ -363,21 +395,50 @@ class PotentialFlowSolver_FEM():
         dy = coords_y[1:, :] - coords_y[:-1, :]
 
         # Computing the velocity field
-        self.v[:,:-1, 0] = np.diff(self.u, axis=1) / dx
-        self.v[:-1,:, 1] = np.diff(self.u, axis=0) / dy
+        self.v[:,:-1, 0] = np.diff(self.sol, axis=1) / dx
+        self.v[:-1,:, 1] = np.diff(self.sol, axis=0) / dy
 
         # Flattening the velocity field
         self.v = self.v.reshape(self.M, 2)
 
         # restoring the solution to a 1D array
-        self.u = self.u.flatten()
+        self.sol = self.sol.flatten()
 
-    def plot3d(self, include_elements: bool = True, cmap: str = "thermal"):
+    ##################### Post-Processing Methods #####################
+    def plot_solution(self, show_elements: bool = True, figsize: tuple = (10, 10), title: str = "Potential Flow Solution"):
+        """
+        Plots the solution.
+
+        Inspired by: https://stackoverflow.com/questions/52202014/how-can-i-plot-2d-fem-results-using-matplotlib
+        Answer by Carlos Jan 29 2020
+
+        Parameters
+        ----------
+        figsize : tuple
+            Figure size.
+        title : str
+            Title of the plot.
+        """
+        triangulation = tri.Triangulation(self.coords[:,0], self.coords[:, 1], self.EtoV )
+        plt.tricontourf(triangulation, self.sol, cmap="plasma", levels = 100)
+
+        if show_elements:
+            for element in self.EtoV:
+                x = [self.coords[:, 0][element[i]] for i in range(len(element))]
+                y = [self.coords[:, 1][element[i]] for i in range(len(element))]
+                plt.fill(x, y, edgecolor='black', fill=False, linewidth=0.5)
+        
+        plt.colorbar()
+        plt.title(title)
+        plt.axis("equal")
+        plt.show()
+
+    def plot3d(self, show_elements: bool = True, cmap: str = "thermal"):
         """
         Plot the solution in 3D as nodes and elements
         """
 
-        points_3d = np.hstack((self.coords, self.u.reshape(-1, 1)))
+        points_3d = np.hstack((self.coords, self.sol.reshape(-1, 1)))
         EtoV = np.array(self.EtoV)
         mesh_3d = go.Mesh3d(
                 x = points_3d[:, 0],
@@ -392,7 +453,7 @@ class PotentialFlowSolver_FEM():
                 colorbar_title = "Stream function"
             )
         
-        if include_elements:
+        if show_elements:
 
             tri_points = points_3d[self.EtoV]
             #extract the lists of x, y, z coordinates of the triangle vertices and connect them by a line
@@ -416,9 +477,21 @@ class PotentialFlowSolver_FEM():
 
 
             fig = go.Figure(data=[mesh_3d, lines])
-            fig.show()
         else:
             fig = go.Figure(data=[mesh_3d])
-            fig.show()
-
     
+        fig.show()
+
+
+if __name__ == "__main__":
+    print("Reading mesh\n")
+    mesh = meshio.read("./FEM-solver/meshes/NACAmesh.msh")
+    print("Initializing solver")
+    model = PotentialFlowSolver_FEM(mesh)
+    print("Imposing BCs\n")
+    model.impose_BC("Dirichlet", 1, lambda x, y: 10)
+    model.impose_BC("Dirichlet", 2, lambda x, y: 10)
+    print("Solving\n")
+    model.solve()
+    print("Plotting\n")
+    model.plot_solution(show_elements=False, figsize=(7,7))
