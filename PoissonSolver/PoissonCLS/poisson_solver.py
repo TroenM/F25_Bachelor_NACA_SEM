@@ -65,17 +65,27 @@ class PoissonSolver:
         if __name__ != "__main__":
             print("PoissonSolver initialized!")
     
-    def impose_rhs(self, rhs_func: fd.Function):
+    def impose_rhs(self, rhs_func: fd.Function, func_type = "fd"):
         """Impose the right-hand side of the Poisson problem
 
         Args:
             rhs_func: callable
-                Function that represents the right-hand side of the Poisson problem
+                Function that represents the right-hand side of the Poisson 
+            
+            func_type: str
+                Type of the right-hand side function
         """
-        self.f.assign(interpolate(rhs_func, self.V))
-        self.L = self.f * self.v * fd.dx
+        if func_type == "fd":
+            self.f = rhs_func
+        elif func_type == "callable":
+            self.f = fd.Function(self.V)
+            self.f.interpolate(rhs_func(self.x, self.y))
+        else:
+            raise ValueError("Right-hand side must be a firedrake.function.Function or a callable object")
+        
+        self.L = (-self.f) * self.v * fd.dx
     
-    def MMS(self, true_sol_func: fd.Function, DBCs: list[int] = [], NBCs: list[int] = []):
+    def MMS(self, true_sol_func: fd.Function, DBCs: list[int] = [], NBCs: list[int] = [], func_type = "fd"):
         """ Method of manufactured solutions
 
         Args:
@@ -88,32 +98,50 @@ class PoissonSolver:
             NBCs: list[int]
                 List of indices/tags of the Neumann boundary conditions
         """
-        self.true_sol = true_sol_func
+        if func_type == "fd":
+            self.true_sol = true_sol_func
+        elif func_type == "callable":
+            self.true_sol = fd.Function(self.V)
+            self.true_sol.interpolate(true_sol_func(self.x, self.y))
+        else:
+            raise ValueError("True solution must be a firedrake.function.Function or a callable object")
+
 
         self.f = -fd.div(fd.grad(self.true_sol))
         self.L = self.f * self.v * fd.dx
 
         for DBC in DBCs:
             self.impose_DBC(self.true_sol, DBC)
-        
-        for NBC in NBCs:
-            self.impose_NBC(fd.grad(self.true_sol), NBC)
+        # 
+        # for NBC in NBCs:
+            # self.impose_NBC(fd.grad(self.true_sol), NBC)
 
 
 
     ########## BOUNDARY METHODS ##########
-    def impose_DBC(self, bc_func: fd.Function, bc_idx: int):
+    def impose_DBC(self, bc_func: callable, bc_idx: int|list[int], func_type = "fd"):
         """Impose Dirichlet boundary conditions
         
         Args:
             bc_func: callable
                 Function that represents the boundary condition
-            bc_idx: int
+            bc_idx: list[int] | int
                 Index/tag of the boundary
         """
-        self.DirBCs.append(fd.DirichletBC(self.V, bc_func, bc_idx))
+
+        if func_type == "fd":
+            self.DirBCs.append(fd.DirichletBC(self.V, bc_func, bc_idx))
+
+        elif func_type == "callable":
+            bc = fd.Function(self.V)
+            bc.interpolate(bc_func(self.x, self.y))
+            self.DirBCs.append(fd.DirichletBC(self.V, bc,bc_idx))
+        
+        else:
+            raise ValueError("Boundary condition must be a firedrake.function.Function or a callable object")
+
     
-    def impose_NBC(self, bc_func: fd.Function, bc_idx: int):
+    def impose_NBC(self, bc_func: fd.Function, bc_idx: list[int], func_type = "fd"):
         """Impose Neumann boundary conditions
         
         Args:
@@ -122,13 +150,30 @@ class PoissonSolver:
             bc_idx: int
                 Index/tag of the boundary
         """
+        # Ensure looping over the indices are possible for integer input
+        bc_idx = [bc_idx] if type(bc_idx) == int else bc_idx
 
-        if bc_func.ufl_shape == ():
-            self.L += bc_func * self.v * fd.ds(bc_idx)
+        if func_type == "fd":
+            # Handeling scalar Neumann BCs
+            if bc_func.ufl_shape == ():
+                for idx in bc_idx:
+                    self.L += bc_func * self.v * fd.ds(idx)
 
-        elif bc_func.ufl_shape == (2,):
-            n = fd.FacetNormal(self.mesh)
-            self.L += fd.inner(bc_func, n) * self.v * fd.ds(bc_idx)
+            # Handeling vector Neumann BCs
+            elif bc_func.ufl_shape != (): # change to == (2,) for 2D only
+                n = fd.FacetNormal(self.mesh)
+                for idx in bc_idx:
+                    self.L += fd.inner(bc_func, n) * self.v * fd.ds(idx)
+        
+        elif func_type == "callable":
+            # Scalar Neumann BCs
+            bc = fd.Function(self.V)
+            bc.interpolate(bc_func(self.x, self.y))
+            for idx in bc_idx:
+                self.L += bc * self.v * fd.ds(idx)
+
+        
+
         
     
     ########## SOLUTION AND PLOTTING METHODS ##########
@@ -167,15 +212,22 @@ class PoissonSolver:
 
 if __name__ == "__main__":
 
+    from time import time
+
     print("Computing h-convergence...\n")
 
-    # Meshes resolutions
-    hs = np.arange(50, 501, 50)
+    # Meshes resolutions (3 time h = 4 to reset cache for accurate time measurements)
+    hs = [4, 4, 4, 5, 10, 100, 200, 300, 500, 1000]#np.array([10, 50, 100, 200, 300, 400, 500])
     error_h = []
+
+    true_sol = lambda x,y: fd.sin(x)*fd.sin(y)
+    rhs = lambda x,y: -2*fd.sin(x)*fd.sin(y)
+    NBC3 = lambda x,y: -fd.sin(x)*fd.cos(y)
+    NBC4 = lambda x,y: fd.sin(x)*fd.cos(y)
     
     for h in hs:
         print(f"Computing for h = {h}...")
-
+        t1 = time()
         # Mesh
         mesh = fd.UnitSquareMesh(h, h)
 
@@ -183,68 +235,62 @@ if __name__ == "__main__":
         model = PoissonSolver(mesh, P = 1)
 
         # Imposing true solution
-        true_sol = fd.Function(model.V)
-        true_sol.interpolate(fd.sin(model.x)*fd.sin(model.y))
-        model.MMS(true_sol, DBCs=[1, 2], NBCs=[3, 4])
+        model.MMS(true_sol, DBCs=[1, 2], func_type="callable")
+        model.impose_rhs(rhs, func_type="callable")
+        model.impose_NBC(NBC3, 3, func_type="callable")
+        model.impose_NBC(NBC4, 4, func_type="callable")
 
         # Solve
         model.solve()
 
-        # Compute error
-        error_h.append(fd.errornorm(true_sol, model.u_sol, norm_type="L2"))
+        time_taken = time() - t1
+
+        if h != 4:
+            print(f"\t\t Time elapsed: {time_taken:.2f} s")
+            err = fd.errornorm(model.true_sol, model.u_sol, norm_type="L2")
+            print(f"\t\t Error: {err}\n")
+            # Compute error
+            error_h.append(np.array([h, err, time_taken]))
     
-    print(error_h)   
+    print(error_h, "\n")   
 
     print("Computing p-convergence...\n")
 
     # Setup
-    Ps = np.arange(1, 7)
+    Ps = np.arange(1, 10)
     error_p = []
 
     for P in Ps:
-        print(f"Computing for P = {P}...")
+        print(f"\t Computing for P = {P}...")
+        t1 = time()
 
         # Mesh
-        mesh = fd.UnitSquareMesh(100, 100)
+        mesh = fd.UnitSquareMesh(5, 5)
 
         # Solver
         model = PoissonSolver(mesh, P = int(P))
 
         # Imposing true solution
-        true_sol = fd.Function(model.V)
-        true_sol.interpolate(fd.sin(model.x)*fd.sin(model.y))
-        model.MMS(true_sol, DBCs=[1, 2], NBCs=[3, 4])
+        model.MMS(true_sol, DBCs=[1, 2], func_type="callable")
+        model.impose_rhs(rhs, func_type="callable")
+        model.impose_NBC(NBC3, 3, func_type="callable")
+        model.impose_NBC(NBC4, 4, func_type="callable")
 
         # Solve
         model.solve()
 
+        time_taken = time() - t1
+        err = fd.errornorm(model.true_sol, model.u_sol, norm_type="L2")
+        print(f"\t\t Time elapsed: {time_taken:.2f} s")
+        print(f"\t\t Error: {err} \n")
+
         # Compute error
-        error_p.append(fd.errornorm(true_sol, model.u_sol, norm_type="L2"))
-    print(error_p)
+        error_p.append(np.array([P, err, time_taken]))
+    print(error_p, "\n")
 
-    error_h = np.array(error_h).reshape(-1, 1)
-    error_p = np.array(error_p).reshape(-1, 1)
+    error_h = np.array(error_h)
+    error_p = np.array(error_p)
 
-    np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonError_h.txt", error_h)
-    np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonError_p.txt", error_p)
+    #np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonCLS/PoissonError_h.txt", error_h)
+    #np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonCLS/PoissonError_p.txt", error_p)
     
-
-
-    # Plotting
-
-    fig, axes = plt.subplots(1, 2, figsize = (10, 5))
-
-    axes[0].loglog(hs, error_h, "-o")
-    axes[0].set_title("h-convergence")
-    axes[0].set_xlabel("h")
-    axes[0].set_ylabel("Error")
-
-    axes[1].loglog(Ps, error_p, "-o")
-    axes[1].set_title("p-convergence")
-    axes[1].set_xlabel("P")
-    axes[1].set_ylabel("Error")
-
-    plt.show()
-
-
-
