@@ -4,3 +4,4 @@ FEM-solver/__pycache__/FEM_solver.cpython-311.pyc
 FEM-solver/meshes/SimpleMesh_3by3.msh
 FEM-solver/__pycache__/mesh_library.cpython-311.pyc
 Meshing/__pycache__/mesh_library.cpython-310.pyc
+PoissonSolver/__pycache__/poisson_solver.cpython-312.pyc
