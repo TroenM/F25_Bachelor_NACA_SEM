@@ -55,11 +55,11 @@ class PoissonSolver:
         self.L = self.f * self.v * fd.dx
 
 
-        self.bcs = []
+        self.DirBCs = []
         self.x, self.y = fd.SpatialCoordinate(self.mesh)
 
         self.u_sol = fd.Function(self.V)
-        true_sol = None
+        self.true_sol = None
 
         
         if __name__ != "__main__":
@@ -75,18 +75,29 @@ class PoissonSolver:
         self.f.assign(interpolate(rhs_func, self.V))
         self.L = self.f * self.v * fd.dx
     
-    def impose_true_sol(self, true_sol_func: fd.Function):
-        """Impose the true solution of the Poisson problem for method of manufactured solutions, 
-        and automatically sets the right-hand side
+    def MMS(self, true_sol_func: fd.Function, DBCs: list[int] = [], NBCs: list[int] = []):
+        """ Method of manufactured solutions
 
         Args:
             true_sol_func: callable
                 Function that represents the true solution of the Poisson problem
+            
+            DBCs: list[int]
+                List of indices/tags of the Dirichlet boundary conditions
+            
+            NBCs: list[int]
+                List of indices/tags of the Neumann boundary conditions
         """
         self.true_sol = true_sol_func
 
         self.f = -fd.div(fd.grad(self.true_sol))
         self.L = self.f * self.v * fd.dx
+
+        for DBC in DBCs:
+            self.impose_DBC(self.true_sol, DBC)
+        
+        for NBC in NBCs:
+            self.impose_NBC(fd.grad(self.true_sol), NBC)
 
 
 
@@ -100,7 +111,7 @@ class PoissonSolver:
             bc_idx: int
                 Index/tag of the boundary
         """
-        self.bcs.append(fd.DirichletBC(self.V, bc_func, bc_idx))
+        self.DirBCs.append(fd.DirichletBC(self.V, bc_func, bc_idx))
     
     def impose_NBC(self, bc_func: fd.Function, bc_idx: int):
         """Impose Neumann boundary conditions
@@ -123,7 +134,7 @@ class PoissonSolver:
     ########## SOLUTION AND PLOTTING METHODS ##########
     def solve(self, solver_params: dict = {"ksp_type": "cg"}):
         """Solve the Poisson problem"""
-        fd.solve(self.a == self.L, self.u_sol, bcs=self.bcs, solver_parameters=solver_params)
+        fd.solve(self.a == self.L, self.u_sol, bcs=self.DirBCs, solver_parameters=solver_params)
 
     def plot_results(self, levels:int = 50, norm: str = "H1"):
         """Plot the solution"""
@@ -174,26 +185,7 @@ if __name__ == "__main__":
         # Imposing true solution
         true_sol = fd.Function(model.V)
         true_sol.interpolate(fd.sin(model.x)*fd.sin(model.y))
-        model.impose_true_sol(true_sol)
-
-        # Dirichlet Boundary conditions
-        DirBCs = fd.Function(model.V)
-        DirBCs.interpolate(fd.sin(model.x)*fd.sin(model.y))
-        model.impose_DBC(DirBCs, 1)
-        model.impose_DBC(DirBCs, 2)
-
-        # Neumann Boundary conditions
-        NBC_x = fd.Function(model.V)
-        NBC_y = fd.Function(model.V)
-
-        NBC_x.interpolate(fd.cos(model.x)*fd.sin(model.y))
-        NBC_y.interpolate(fd.sin(model.x)*fd.cos(model.y))
-
-        NBCs = fd.Function(model.W)
-        NBCs.vector().set_local(np.concatenate((NBC_x.vector().get_local(), NBC_y.vector().get_local())))
-
-        model.impose_NBC(NBCs, 3)
-        model.impose_NBC(NBCs, 4)
+        model.MMS(true_sol, DBCs=[1, 2], NBCs=[3, 4])
 
         # Solve
         model.solve()
@@ -221,26 +213,7 @@ if __name__ == "__main__":
         # Imposing true solution
         true_sol = fd.Function(model.V)
         true_sol.interpolate(fd.sin(model.x)*fd.sin(model.y))
-        model.impose_true_sol(true_sol)
-
-        # Dirichlet Boundary conditions
-        DirBCs = fd.Function(model.V)
-        DirBCs.interpolate(fd.sin(model.x)*fd.sin(model.y))
-        model.impose_DBC(DirBCs, 1)
-        model.impose_DBC(DirBCs, 2)
-
-        # Neumann Boundary conditions
-        NBC_x = fd.Function(model.V)
-        NBC_y = fd.Function(model.V)
-
-        NBC_x.interpolate(fd.cos(model.x)*fd.sin(model.y))
-        NBC_y.interpolate(fd.sin(model.x)*fd.cos(model.y))
-
-        NBCs = fd.Function(model.W)
-        NBCs.vector().set_local(np.concatenate((NBC_x.vector().get_local(), NBC_y.vector().get_local())))
-
-        model.impose_NBC(NBCs, 3)
-        model.impose_NBC(NBCs, 4)
+        model.MMS(true_sol, DBCs=[1, 2], NBCs=[3, 4])
 
         # Solve
         model.solve()
@@ -252,8 +225,8 @@ if __name__ == "__main__":
     error_h = np.array(error_h).reshape(-1, 1)
     error_p = np.array(error_p).reshape(-1, 1)
 
-    #np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonError_h.txt", error_h)
-    #np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonError_p.txt", error_p)
+    np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonError_h.txt", error_h)
+    np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonError_p.txt", error_p)
     
 
 
