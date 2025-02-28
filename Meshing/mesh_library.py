@@ -80,19 +80,20 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
         raise ValueError("That is not a valid gridtype, it should either be triangle or quad")
 
 
-def plot_mesh(mesh: meshio.Mesh, celltype : str = "quad",xlim : list = [-3,3], ylim : list = [-2,2]) -> None:
+def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2]) -> None:
     # Extract points and cells
     points = mesh.points[:, :2]  # Only take x, y for 2D
-    cell_dict = mesh.cell_data_dict.keys()
+    cell_dict = mesh.cells_dict.keys()
     for celltype in cell_dict:
-        cells = mesh.cells_dict[celltype]  # Extract cells
-        # Extract actual coordinates for plotting
-        if len(cells.shape) > 1:
-            cell_coords = [[points[point] for point in cell] for cell in cells]
-            pc = PolyCollection(cell_coords, edgecolor="black", facecolor="lightblue", alpha=0.5)
-        elif len(cells.shape) == 1:
-            cell_coords = [[points[point] for point in cells]]
-            pc = PolyCollection(cell_coords, edgecolor="black", facecolor="lightblue", alpha=0.5)
+        if celltype in ["quad","triangle"]:
+            cells = mesh.cells_dict[celltype]  # Extract cells
+            # Extract actual coordinates for plotting
+            if len(cells.shape) > 1:
+                cell_coords = [[points[point] for point in cell] for cell in cells]
+                pc = PolyCollection(cell_coords, edgecolor="black", facecolor="lightblue", alpha=0.5)
+            elif len(cells.shape) == 1:
+                cell_coords = [[points[point] for point in cells]]
+                pc = PolyCollection(cell_coords, edgecolor="black", facecolor="lightblue", alpha=0.5)
     
 
     fig, ax = plt.subplots(figsize=(6, 6))
