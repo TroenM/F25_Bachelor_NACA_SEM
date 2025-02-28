@@ -300,7 +300,7 @@ class PotentialFlowSolver_FEM():
         
         for element in self.EtoV:
             for r in range(len(element)):
-                self.b[element[r]] += self.compute_rhs(element, r)
+                self.b[element[r]] -= self.compute_rhs(element, r)
                 for s in range(len(element)):
                     self.A[element[r], element[s]] += self.compute_k(element, r, s)
 
@@ -317,7 +317,7 @@ class PotentialFlowSolver_FEM():
         BC_type : str
             Type of boundary condition.
         BC_func : callable
-            Boundary condition function.
+            Boundary condition function. This should be the gradient of a function when BC is Neumann
         """
         if BC_type.upper() == "DIRICHLET":
             self.impose_Dirichlet_BC(BC, BC_func)
@@ -347,7 +347,7 @@ class PotentialFlowSolver_FEM():
             self.A[node, node] = 1
             self.b[node] = BC_func(*self.coords[node])
         
-    def impose_Neumann_BC(self, BC: int, BC_func: callable):
+    def impose_Neumann_BC(self, BC: int, GRAD_func: callable):
         """
         Impose Neumann boundary conditions on the system. And saves BC_func in the corresponding boundary condition attribute.
 
@@ -359,8 +359,46 @@ class PotentialFlowSolver_FEM():
             Boundary condition function.
         """
 
-        ##### TO BE IMPLEMENTED #####
-        print("Not implemented yet")
+        BC_lines = self.mesh.cells_dict["line"][np.where(self.mesh.cell_data["gmsh:physical"][0] == BC)[0]]
+        
+        if len(BC_lines) == 0:
+            raise ValueError("No nodes found at boundary tag {}".format(BC))
+        
+        for line in BC_lines:
+            p1, p2 = line
+            x1,y1 = self.coords[p1]
+            x2,y2 = self.coords[p2]
+
+            # Find cell that includes both p1 and p2
+            if "triangle" in self.mesh.cells_dict.keys():
+                triangles = self.mesh.cells_dict["triangle"]
+                mask = (np.isin(triangles, p1).sum(axis=1) > 0) & (np.isin(triangles, p2).sum(axis=1) > 0)
+                indices = np.where(mask)[0]
+                if len(indices) > 0:
+                    relevant_cell = triangles[indices][0]
+            if "quad" in self.mesh.cells_dict.keys():
+                quads = self.mesh.cells_dict["quad"]
+                mask = (np.isin(quads, p1).sum(axis=1) > 0) & (np.isin(quads, p2).sum(axis=1) > 0)
+                indices = np.where(mask)[0]
+                if len(indices) > 0:
+                    relevant_cell = quads[indices][0]
+
+            # Use this cell, and counter clockwise numeration to define the normal vector out of the mesh
+            relevant_cell = np.tile(relevant_cell,2)
+            for i in range(len(relevant_cell)):
+                if (p1 == relevant_cell[i] and p2 == relevant_cell[i+1]):
+                    n = np.array([y2-y1,x1-x2])
+                    n /= np.linalg.norm(n,2)
+                    break
+                if (p2 == relevant_cell[i] and p1 == relevant_cell[i+1]):
+                    n = np.array([y1-y2,x2-x1])
+                    n /= np.linalg.norm(n,2)
+                    break
+
+            q = np.array(GRAD_func((x1+x2)/2, (y1+y2)/2)) @ n
+            integral = q/2 * np.linalg.norm(np.array([x1-x2,y1-y2]), 2)
+            self.b[p2] += integral
+            self.b[p2] += integral
     
     ##################### Solution Methods #####################
     def solve(self):
