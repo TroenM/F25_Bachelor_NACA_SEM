@@ -32,16 +32,16 @@ Plane Surface(1) = {1, 2};
 
 
 //+
-Physical Curve("in", 147) = {12};
+Physical Curve("in", 1) = {12};
 //+
-Physical Curve("out", 148) = {14};
+Physical Curve("out", 2) = {14};
 //+
-Physical Curve("bed", 149) = {13};
+Physical Curve("bed", 3) = {13};
 //+
-Physical Curve("naca", 150) = {1};
+Physical Curve("naca", 5) = {1};
 
 //+
-Physical Curve("fs", 153) = {15};
+Physical Curve("fs", 4) = {15};
 
 
 //Recombine Surface {1};
