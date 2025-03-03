@@ -302,13 +302,13 @@ def NACA_mesh(POA : int, PTA : int, NACA_name : str, gridtype : str = "quad", an
             areas[(POA*(PTA-1)+ j)*2+1] = np.array([j, POA + ((j+1)*PTA)%((POA)*(PTA+1)-POA), (j+1)%POA])
     
     # Defining boundaries
-    ones = np.where(NACA_points[:,0] == -3)[0]
+    ones = np.where(np.round(NACA_points[:,0],3) == -3)[0]
     nr_ones = len(ones)
-    twos = np.where(NACA_points[:,0] == 3)[0]
+    twos = np.where(np.round(NACA_points[:,0],3) == 3)[0]
     nr_twos = len(twos)
-    threes = np.where(NACA_points[:,1] == -2)[0]
+    threes = np.where(np.round(NACA_points[:,1],3) == -2)[0]
     nr_threes = len(threes)
-    fours = np.where(NACA_points[:,1] == 2)[0]
+    fours = np.where(np.round(NACA_points[:,1],3) == 2)[0]
     nr_fours = len(fours)
     fives = np.arange(POA)
     nr_fives = len(fives)
@@ -316,7 +316,10 @@ def NACA_mesh(POA : int, PTA : int, NACA_name : str, gridtype : str = "quad", an
     for i in range(nr_ones-1):
         lines[i] = np.array([ones[i],ones[i+1]], dtype=int)
     for i in range(nr_twos-1):
-        lines[nr_ones-1 + i] = np.array([twos[i],twos[i+1]], dtype=int)
+        if abs(twos[i]-twos[i+1]) == PTA:
+            lines[nr_ones-1 + i] = np.array([twos[i],twos[i+1]], dtype=int)
+        else:
+            lines[nr_ones-1 + i] = np.array([np.max(twos),np.min(twos)], dtype=int)
     for i in range(nr_threes-1):
         lines[nr_ones + nr_twos - 2 + i] = np.array([threes[i],threes[i+1]], dtype=int)
     for i in range(nr_fours-1):
@@ -342,18 +345,17 @@ def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : calla
     airfoil_points = np.unique(airfoil_lines)
 
     
-    original_point = mesh.points
-    point = original_point.copy()
+    point = mesh.points
     func_before = np.vectorize(func_before)
     func_after = np.vectorize(func_after)
     airfoil_values = point[airfoil_points]
 
-    # Points on both sides of airfoil
-    point_mask = np.where((point[:,1] > np.max(airfoil_values[:,1])))#(point[:,0] < np.min(airfoil_values[:,0])) | (point[:,0] > np.max(airfoil_values[:,0])))
+    # Mask all points above airfoil
+    point_mask = np.where((point[:,1] > np.max(airfoil_values[:,1])))
     min_point_val = np.min(point[point_mask,1])
     
     point[point_mask,1] -= min_point_val
-    point[point_mask,1] = point[point_mask,1] / func_before(point[point_mask,0]) * func_after(point[point_mask,0])
+    point[point_mask,1] = point[point_mask,1] * (func_after(point[point_mask,0]) /  func_before(point[point_mask,0]))
     point[point_mask,1] += min_point_val
 
     mesh.points = point
