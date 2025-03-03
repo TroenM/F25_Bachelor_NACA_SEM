@@ -44,6 +44,16 @@ gmsh.model.geo.addCurveLoop([outlet], tag = 2)
 gmsh.model.geo.addCurveLoop([top], tag = 3)
 gmsh.model.geo.addCurveLoop([bottum], tag = 4)
 
+# Physical boundaries
+gmsh.model.addPhysicalGroup(1, [1], tag = 1)
+gmsh.model.setPhysicalName(1, 1, "inlet")
+gmsh.model.addPhysicalGroup(1, [2], tag = 2)
+gmsh.model.setPhysicalName(1, 2, "outlet")
+gmsh.model.addPhysicalGroup(1, [3], tag = 3)
+gmsh.model.setPhysicalName(1, 3, "top")
+gmsh.model.addPhysicalGroup(1, [4], tag = 4)
+gmsh.model.setPhysicalName(1, 4, "bottum")
+
 
 ##### LOADING NACA COORDINATES FROM TXT FILE #####
 filename = args.filename
@@ -89,8 +99,17 @@ lines.append(line)
 # Create line loop
 line_loop = gmsh.model.geo.addCurveLoop(lines, tag = 5)
 
+# Create physical boundary
+gmsh.model.addPhysicalGroup(1, lines, tag = 5)
+gmsh.model.setPhysicalName(1, 5, "airfoil")
+
 # Create plane surface
 gmsh.model.geo.addPlaneSurface([1, 2, 3, 4, 5], tag = 1)
+
+# Create physical surface
+gmsh.model.addPhysicalGroup(2, [1], tag = 1)
+gmsh.model.setPhysicalName(2, 1, "domain")
+
 
 gmsh.model.geo.synchronize()
 
