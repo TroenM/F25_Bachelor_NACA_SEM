@@ -181,7 +181,7 @@ class PoissonSolver:
         """Solve the Poisson problem"""
         fd.solve(self.a == self.L, self.u_sol, bcs=self.DirBCs, solver_parameters=solver_params)
 
-    def plot_results(self, levels:int = 50, norm: str = "H1"):
+    def plot_results(self, levels:int = 50, norm: str = "H1", xlim = None, ylim = None, figsize = None):
         """Plot the solution"""
         if self.true_sol is not None:
             fig, axes = plt.subplots(1, 3, figsize = (15, 5))
@@ -197,6 +197,13 @@ class PoissonSolver:
             p3 = fd.tricontourf(diff, axes=axes[2], levels = levels)
             axes[2].set_title(f"Error, $E_{{{norm}}}=$ {np.round(fd.errornorm(self.true_sol, self.u_sol, norm),3)}")
 
+            if xlim is not None:
+                for ax in axes:
+                    ax.set_xlim(xlim)
+            if ylim is not None:
+                for ax in axes:
+                    ax.set_ylim(ylim)
+
             fig.colorbar(p1, ax=axes[0])
             fig.colorbar(p2, ax=axes[1])
             fig.colorbar(p3, ax=axes[2])
@@ -205,8 +212,19 @@ class PoissonSolver:
             plt.show()
 
         else:
-            plt.colorbar(fd.tricontourf(self.u_sol, levels = 50))
-            plt.title("Nummerical solution")
+            figsize = (10,5) if figsize is None else figsize
+            fig, ax = plt.subplots(1, 1, figsize = figsize)
+
+            p1 = fd.tricontourf(self.u_sol, levels = levels, axes = ax)
+            fig.colorbar(p1, ax=ax)
+
+            ax.set_title("Nummerical solution")
+
+            if xlim is not None:
+                ax.set_xlim(xlim)
+            if ylim is not None:
+                ax.set_ylim(ylim)
+            
             plt.show()
         
 
