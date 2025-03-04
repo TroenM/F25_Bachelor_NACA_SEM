@@ -1,5 +1,7 @@
 import gmsh
 import numpy as np
+import meshio
+from mesh_library import plot_mesh
 
 
 def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple = (-2,1), **kwargs):
@@ -133,13 +135,37 @@ def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     if kwargs.get('test', False):
         gmsh.fltk.run()
 
+    # ==================== Converting to meshio ====================
+    # Extracting nodes
+    node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
+    points = np.array([node_coords]).reshape(-1, 3)
+
+    # Extracting elements
+    cell_types = gmsh.model.mesh.getElementTypes()
+    cells = []
+
+    for cell_type in cell_types:
+        element_tags, node_tags = gmsh.model.mesh.getElementsByType(cell_type)
+        if gmsh.model.mesh.getElementProperties(cell_type)[2] >= 1:
+            node_tags = np.array(node_tags).reshape(-1, gmsh.model.mesh.getElementProperties(cell_type)[2])
+            cells.append((meshio.gmsh.gmsh_to_meshio_type[cell_type], node_tags - 1)) # Convert 1-based index to 0-based
+    
+    mesh = meshio.Mesh(points=points, cells=cells)
+
+    mesh.cell_data_dict['gmsh:physical'] = []
+    
+    
     gmsh.finalize()
 
-    return None
+    return mesh
 
 
 if __name__ == '__main__':
-    naca_gmsh('NACA_0015.txt', test = True, kwargs = {"poa" : 120, "n_airfoil" : 120, "n_in" : 70, "n_out" : 70, "n_bed" : 320, "n_fs" : 500})
+    mesh = naca_gmsh('NACA_0015.txt', test = False, poa = 120, n_airfoil = 120, n_in = 70, n_out = 70, n_bed = 70, n_fs = 500)
+
+    print(mesh)
+
+    plot_mesh(mesh)
 
 
 
