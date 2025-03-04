@@ -80,7 +80,7 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
         raise ValueError("That is not a valid gridtype, it should either be triangle or quad")
 
 
-def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], legend : bool=False) -> None:
+def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], legend : bool=False, dpi=300) -> None:
     # Extract points and cells
     points = mesh.points[:, :2]  # Only take x, y for 2D
     cell_dict = mesh.cells_dict.keys()
@@ -95,7 +95,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     # setting legends, colors and linewidth
     BC_dict = {"in":1, "out":2, "deck":3, "fs":4, "naca":5}
     BC_colors = {"in":"darkgreen", "out":"darkred", "deck":"darkblue", "fs":"yellow", "naca":"red"}
-    linew = 1
+    linew = 1.5
 
     # setting color and size for points
     point_color = "black"
@@ -110,10 +110,13 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
         ylim = [y_min-margin*yrange, y_max+margin*yrange]
     xrange = xlim[1] - xlim[0]
     yrange = ylim[1] - ylim[0]
-    fig, ax = plt.subplots(figsize=(xrange*2, yrange*2))
+    ranges = np.array([xrange,yrange])
+    a = 20/xrange ; b = 20/yrange
+    ranges *= min(a,b)
+    fig, ax = plt.subplots(figsize=ranges, dpi=dpi)
     
     for celltype in cell_dict:
-        if celltype in ["quad","triangle"]:
+        if celltype in ["quad","triangle", "polygon"]:
             cells = mesh.cells_dict[celltype]  # Extract cells
             # Extract actual coordinates for plotting
             if len(cells.shape) > 1:
@@ -345,7 +348,7 @@ def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : calla
     airfoil_points = np.unique(airfoil_lines)
 
     
-    point = mesh.points
+    point = mesh.points.copy()
     func_before = np.vectorize(func_before)
     func_after = np.vectorize(func_after)
     airfoil_values = point[airfoil_points]
@@ -358,6 +361,39 @@ def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : calla
     point[point_mask,1] = point[point_mask,1] * (func_after(point[point_mask,0]) /  func_before(point[point_mask,0]))
     point[point_mask,1] += min_point_val
 
-    mesh.points = point
+    copy_mesh = mesh.copy()
+    copy_mesh.points = point
+    return copy_mesh
 
-    return mesh
+
+def naca_4digit(string : str, n : int) -> np.ndarray:
+    """
+    Returns the airfoil camber line and thickness distribution.
+    Parameters
+    ----------
+    string : str
+        A string consisting of 4 integers like "0012". This is the "name" of the airfoil
+    n : int
+        The number of points you want to modulate the airfoil with
+    """
+    if len(string) != 4:
+        raise IndexError("The string needs to have the length 4")
+    m = int(string[0])/100
+    p = int(string[1])/10 if string[1] != "0" else 0.1
+    t = int(string[2] + string[3])/100
+    beta = np.linspace(0,np.pi,(n//2)+1)
+    x = (1-np.cos(beta))/2
+    yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
+    yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
+    lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1]
+    if (n//2)*2 == n:
+        upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:-1]
+    else:
+        beta = np.linspace(0,np.pi,(n//2)+2)
+        x = (1-np.cos(beta))/2
+        yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
+        yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
+        upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:-1]
+    points = np.vstack((lower, upper))
+    points[0] = np.array([1,0])
+    return points
