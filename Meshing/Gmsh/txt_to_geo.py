@@ -5,7 +5,8 @@ import numpy as np
 import argparse
 
 
-###### HANDELING FLAGS #########
+# ==================== Handling the input arguments ====================
+# Create the parser
 parser = argparse.ArgumentParser(description='Converts a txt file with NACA coordinates to a Gmsh geo file')
 parser.add_argument('filename', type=str, help='Name of the txt file with NACA coordinates')
 parser.add_argument('-write', action='store_true', help='Write the geo file')
@@ -16,14 +17,15 @@ parser.add_argument('-alpha', type=float, help='Angle of attack in degrees')
 parser.add_argument('-scale', type=float, help='Element scale factor')
 args = parser.parse_args()
 
-######## INITIALIZE GMSH AND CREATE DOMAIN ########
+# ==================== Creating the geometry ====================
+# Initialize the model
 gmsh.initialize()
 
 # Simple rectangular domain
 xmin = -5
 xmax = 10
 ymin = -5
-ymax = 2
+ymax = 1
 scale = 1 if args.scale is None else args.scale
 gmsh.model.geo.addPoint(xmin, ymin, 0, scale, tag = 1)
 gmsh.model.geo.addPoint(xmin, ymax, 0, scale, tag = 2)
@@ -36,26 +38,13 @@ inlet = gmsh.model.geo.addLine(1, 2, tag = 1)
 outlet = gmsh.model.geo.addLine(3, 4, tag = 2)
 # Walls
 top = gmsh.model.geo.addLine(2, 4, tag = 3)
-bottum = gmsh.model.geo.addLine(1, 3, tag = 4)
+bottom = gmsh.model.geo.addLine(1, 3, tag = 4)
 
 # Line loop
-gmsh.model.geo.addCurveLoop([inlet], tag = 1)
-gmsh.model.geo.addCurveLoop([outlet], tag = 2)
-gmsh.model.geo.addCurveLoop([top], tag = 3)
-gmsh.model.geo.addCurveLoop([bottum], tag = 4)
+boundary_loop = gmsh.model.geo.addCurveLoop([inlet, top, -outlet, -bottom], tag = 1)
 
-# Physical boundaries
-gmsh.model.addPhysicalGroup(1, [1], tag = 1)
-gmsh.model.setPhysicalName(1, 1, "inlet")
-gmsh.model.addPhysicalGroup(1, [2], tag = 2)
-gmsh.model.setPhysicalName(1, 2, "outlet")
-gmsh.model.addPhysicalGroup(1, [3], tag = 3)
-gmsh.model.setPhysicalName(1, 3, "top")
-gmsh.model.addPhysicalGroup(1, [4], tag = 4)
-gmsh.model.setPhysicalName(1, 4, "bottum")
-
-
-##### LOADING NACA COORDINATES FROM TXT FILE #####
+# ==================== Handling the airfoil ====================
+# Check if the file exists
 filename = args.filename
 if filename is None:
     print("Please provide the name of the txt file with NACA coordinates")
@@ -96,21 +85,35 @@ for idx in range(len(points)-1):
 line = gmsh.model.geo.addLine(points[-1], points[0], tag = 4+len(points))
 lines.append(line)
 
-# Create line loop
-line_loop = gmsh.model.geo.addCurveLoop(lines, tag = 5)
+airfoil_loop = gmsh.model.geo.addCurveLoop(lines, tag = 2)
 
-# Create physical boundary
-gmsh.model.addPhysicalGroup(1, lines, tag = 5)
-gmsh.model.setPhysicalName(1, 5, "airfoil")
+# Create geometric surface
+surface = gmsh.model.geo.addPlaneSurface([boundary_loop, airfoil_loop], tag = 1)
 
-# Create plane surface
-gmsh.model.geo.addPlaneSurface([1, 2, 3, 4, 5], tag = 1)
+# ===================== ADDING PHYSICAL GROUPS =====================
+# Add physical groups
+gmsh.model.geo.addPhysicalGroup(1, [inlet], tag=101)  # Inlet
+gmsh.model.setPhysicalName(1, 101, "Inlet")
 
-# Create physical surface
-gmsh.model.addPhysicalGroup(2, [1], tag = 1)
-gmsh.model.setPhysicalName(2, 1, "domain")
+gmsh.model.geo.addPhysicalGroup(1, [outlet], tag=102)  # Outlet
+gmsh.model.setPhysicalName(1, 102, "Outlet")
+
+gmsh.model.geo.addPhysicalGroup(1, [top], tag=103)  # Top wall
+gmsh.model.setPhysicalName(1, 103, "Top")
+
+gmsh.model.geo.addPhysicalGroup(1, [bottom], tag=104)  # Bottom wall
+gmsh.model.setPhysicalName(1, 104, "Bottom")
+
+# Airfoil boundary (all airfoil lines together)
+gmsh.model.geo.addPhysicalGroup(1, lines, tag=105)  # Airfoil
+gmsh.model.setPhysicalName(1, 105, "Airfoil")
+
+# Physical Surface (Computational Domain)
+gmsh.model.geo.addPhysicalGroup(2, [surface], tag=201)  # Plane Surface
+gmsh.model.setPhysicalName(2, 201, "Domain")
 
 
+# Synchronize the model
 gmsh.model.geo.synchronize()
 
 if args.write:
@@ -124,8 +127,3 @@ if '-nopopup' not in sys.argv:
     gmsh.fltk.run()
 
 gmsh.finalize()
-
-
-
-
-
