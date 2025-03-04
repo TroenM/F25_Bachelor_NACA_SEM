@@ -97,6 +97,10 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     BC_colors = {"in":"darkgreen", "out":"darkred", "deck":"darkblue", "fs":"yellow", "naca":"red"}
     linew = 1
 
+    # setting color and size for points
+    point_color = "black"
+    point_size = 1
+
     # Set y and x lim
     yrange = y_max - y_min
     margin = 0.03
@@ -104,8 +108,9 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
         xlim = [x_min-margin*xrange, x_max+margin*xrange]
     if ylim == [-2,2]:
         ylim = [y_min-margin*yrange, y_max+margin*yrange]
-    
-    fig, ax = plt.subplots(figsize=(6, 6))
+    xrange = xlim[1] - xlim[0]
+    yrange = ylim[1] - ylim[0]
+    fig, ax = plt.subplots(figsize=(xrange*2, yrange*2))
     
     for celltype in cell_dict:
         if celltype in ["quad","triangle"]:
@@ -169,7 +174,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
 
     
     ax.add_collection(pc)
-    ax.scatter(points[:, 0], points[:, 1], color="red", s=1)  # Plot nodes
+    ax.scatter(points[:, 0], points[:, 1], color=point_color, s=point_size)  # Plot nodes
     ax.set_xlim(xlim[0], xlim[1])
     ax.set_ylim(ylim[0], ylim[1])
     if legend:
@@ -297,13 +302,13 @@ def NACA_mesh(POA : int, PTA : int, NACA_name : str, gridtype : str = "quad", an
             areas[(POA*(PTA-1)+ j)*2+1] = np.array([j, POA + ((j+1)*PTA)%((POA)*(PTA+1)-POA), (j+1)%POA])
     
     # Defining boundaries
-    ones = np.where(NACA_points[:,0] == -3)[0]
+    ones = np.where(np.round(NACA_points[:,0],3) == -3)[0]
     nr_ones = len(ones)
-    twos = np.where(NACA_points[:,0] == 3)[0]
+    twos = np.where(np.round(NACA_points[:,0],3) == 3)[0]
     nr_twos = len(twos)
-    threes = np.where(NACA_points[:,1] == -2)[0]
+    threes = np.where(np.round(NACA_points[:,1],3) == -2)[0]
     nr_threes = len(threes)
-    fours = np.where(NACA_points[:,1] == 2)[0]
+    fours = np.where(np.round(NACA_points[:,1],3) == 2)[0]
     nr_fours = len(fours)
     fives = np.arange(POA)
     nr_fives = len(fives)
@@ -311,7 +316,10 @@ def NACA_mesh(POA : int, PTA : int, NACA_name : str, gridtype : str = "quad", an
     for i in range(nr_ones-1):
         lines[i] = np.array([ones[i],ones[i+1]], dtype=int)
     for i in range(nr_twos-1):
-        lines[nr_ones-1 + i] = np.array([twos[i],twos[i+1]], dtype=int)
+        if abs(twos[i]-twos[i+1]) == PTA:
+            lines[nr_ones-1 + i] = np.array([twos[i],twos[i+1]], dtype=int)
+        else:
+            lines[nr_ones-1 + i] = np.array([np.max(twos),np.min(twos)], dtype=int)
     for i in range(nr_threes-1):
         lines[nr_ones + nr_twos - 2 + i] = np.array([threes[i],threes[i+1]], dtype=int)
     for i in range(nr_fours-1):
@@ -327,4 +335,29 @@ def NACA_mesh(POA : int, PTA : int, NACA_name : str, gridtype : str = "quad", an
     ]
     mesh = add_dummy_geometrical_data(mesh)
     mesh.points = np.array(mesh.points, dtype=np.float64)
+    return mesh
+
+
+
+def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : callable) -> meshio.Mesh:
+    line_clasifications = mesh.cell_data_dict["gmsh:physical"]["line"]
+    airfoil_lines = mesh.cells_dict["line"][np.where(line_clasifications == 5)[0]]
+    airfoil_points = np.unique(airfoil_lines)
+
+    
+    point = mesh.points
+    func_before = np.vectorize(func_before)
+    func_after = np.vectorize(func_after)
+    airfoil_values = point[airfoil_points]
+
+    # Mask all points above airfoil
+    point_mask = np.where((point[:,1] > np.max(airfoil_values[:,1])))
+    min_point_val = np.min(point[point_mask,1])
+    
+    point[point_mask,1] -= min_point_val
+    point[point_mask,1] = point[point_mask,1] * (func_after(point[point_mask,0]) /  func_before(point[point_mask,0]))
+    point[point_mask,1] += min_point_val
+
+    mesh.points = point
+
     return mesh
