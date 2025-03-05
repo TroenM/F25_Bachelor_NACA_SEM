@@ -386,14 +386,13 @@ def naca_4digit(string : str, n : int) -> np.ndarray:
     yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
     yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
     lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1]
-    if (n//2)*2 == n:
-        upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:-1]
+    if (n//2)*2 != n:
+        upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:]
     else:
-        beta = np.linspace(0,np.pi,(n//2)+2)
+        beta = np.linspace(0,np.pi,(n//2))
         x = (1-np.cos(beta))/2
         yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
         yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
-        upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:-1]
+        upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:]
     points = np.vstack((lower, upper))
-    points[0] = np.array([1,0])
     return points
