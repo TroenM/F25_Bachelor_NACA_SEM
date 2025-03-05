@@ -149,7 +149,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["in"], label=f"{BC_dict["in"]}")
+                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["in"], label=f"{BC_dict['in']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["in"])
             for i in range(len(out_lines)):
@@ -157,7 +157,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["out"], label=f"{BC_dict["out"]}")
+                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["out"], label=f"{BC_dict['out']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["out"])
             for i in range(len(deck_lines)):
@@ -165,7 +165,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["deck"], label=f"{BC_dict["deck"]}")
+                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["deck"], label=f"{BC_dict['deck']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["deck"])
             for i in range(len(fs_lines)):
@@ -173,7 +173,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["fs"], label=f"{BC_dict["fs"]}")
+                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["fs"], label=f"{BC_dict['fs']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["fs"])
             for i in range(len(naca_lines)):
@@ -181,7 +181,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["naca"], label=f"{BC_dict["naca"]}")
+                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["naca"], label=f"{BC_dict['naca']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["naca"])
     
@@ -414,7 +414,7 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
 
     return mesh
 
-def meshio_to_fd(mesh: meshio.Mesh) -> fd.Mesh:
+def meshio_to_fd(mesh: meshio.Mesh):
     """
     Converts a meshio mesh to a firedrake mesh
     """
@@ -423,3 +423,8 @@ def meshio_to_fd(mesh: meshio.Mesh) -> fd.Mesh:
     os.system("rm temp.msh")
 
     return fd_mesh
+
+if __name__ == "__main__":
+    mesh = naca_mesh("0012", write = True, o = "test", n_in = 70, n_out = 70, n_bed = 70, n_fs = 300)
+
+    plot_mesh(mesh)
