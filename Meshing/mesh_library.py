@@ -294,6 +294,7 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
 
     # ==================== Initializing the model ====================
     gmsh.initialize()
+    gmsh.option.setNumber("General.Verbosity", 0)
 
     # Creating domain
     xmin, xmax = xlim
@@ -330,7 +331,6 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     
     line = gmsh.model.geo.addLine(points[-1], points[0], tag = 4+len(points))
     lines.append(line)
-    print(lines, "\n")
 
     airfoil_line = gmsh.model.geo.addCurveLoop(lines, tag=5)
 
