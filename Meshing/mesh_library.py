@@ -260,7 +260,7 @@ def naca_4digit(string : str, n : int) -> np.ndarray:
 
 
 
-def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple = (-2,1), **kwargs):
+def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple = (-2,1), **kwargs):
     """
     
     parameters
@@ -419,5 +419,5 @@ def meshio_to_fd(mesh: meshio.Mesh) -> fd.Mesh:
     meshio.write("temp.msh", mesh, file_format="gmsh22")
     fd_mesh = fd.Mesh("temp.msh")
     os.system("rm temp.msh")
-    
+
     return fd_mesh
