@@ -226,7 +226,7 @@ def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : calla
     return copy_mesh
 
 
-def naca_4digit(string : str, n : int) -> np.ndarray:
+def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : np.ndarray = np.array([0.5,0])) -> np.ndarray:
     """
     Returns the airfoil camber line and thickness distribution.
     Parameters
@@ -255,6 +255,13 @@ def naca_4digit(string : str, n : int) -> np.ndarray:
         yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
         upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:]
     points = np.vstack((lower, upper))
+
+    # rotatig the airfoil
+    points -= np.array([0.5,0])
+    alpha = np.deg2rad(alpha)
+    rot_matrix = np.array([[np.cos(alpha), -np.sin(alpha)], [np.sin(alpha), np.cos(alpha)]])
+    points = np.dot(points, rot_matrix)
+    points += position_of_center
     return points
 
 
@@ -307,12 +314,8 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
 
     # ==================== Handling the airfoil ====================
     poa = kwargs.get('poa', 200)
-    coords = naca_4digit(airfoil, poa)
+    coords = naca_4digit(airfoil, poa, alpha=alpha)
 
-    # AoA
-    alpha = np.deg2rad(alpha)
-    rot_matrix = np.array([[np.cos(alpha), -np.sin(alpha)], [np.sin(alpha), np.cos(alpha)]])
-    coords = np.dot(coords, rot_matrix)
 
     points = []
     for idx, coord in enumerate(coords[::len(coords)//poa]):
