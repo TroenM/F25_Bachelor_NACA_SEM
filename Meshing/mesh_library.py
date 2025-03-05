@@ -2,6 +2,17 @@ import numpy as np
 import meshio
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
+import os
+
+try:
+    import gmsh
+except:
+    print("Could not import gmsh")
+
+try:
+    import firedrake as fd
+except:
+    print("Could not import firedrake")
 
 def add_dummy_geometrical_data(mesh) -> meshio.Mesh:
     
@@ -191,157 +202,6 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
 
 
 
-def find_point_on_boundary(point : np.ndarray, rot_mat : np.ndarray, inv_rot_mat : np.ndarray, func : callable = lambda x: 3*x/4) -> np.ndarray:
-    vec = np.array([0,0])
-    un_rotated_point = point @ inv_rot_mat
-    BP = np.array([func(un_rotated_point[0]),0])
-    BP = BP@rot_mat
-    point_vec = point - BP
-    y_sign = np.sign(point[1] - BP[1])
-    x_sign = np.sign(point[0] - BP[0])
-    b = 0
-    c = 0
-    if point_vec[1] != 0:
-        b = ((2*y_sign - point[1])/point_vec[1])
-    if point_vec[0] != 0:
-        c = ((3*x_sign - point[0])/point_vec[0])
-    if b != 0 and abs(b*point_vec[0] + point[0]) < 3:
-        vec = point + point_vec*b
-    else:
-        vec = point + point_vec*c
-
-    if -3 > vec[0] or vec[0] > 3 or vec[1] < -2 or 2 < vec[1]:
-        a = 2
-    if np.linalg.norm(vec) == 0:
-        raise KeyError("Du tog ikke højde for dette scenarie")
-    return vec
-
-
-def transfinite_line(N : int, p1 : np.ndarray, p2 : np.ndarray, func : callable = lambda x: x**2) -> np.ndarray:
-    """
-    Generates a line from p1 to p2 with N points, where the spacing between points
-    is dictated by the function `func`.
-    
-    Parameters:
-        N (int): Number of points including p1 and p2.
-        p1 (np.ndarray): Start point in the plane (2D or 3D).
-        p2 (np.ndarray): End point in the plane (2D or 3D).
-        func (callable): Function that defines the spacing transformation. 
-                         It should take a parameter in [0, 1] and return a value in [0, 1].
-
-    Returns:
-        np.ndarray: An array of shape (N, dim) containing the generated points.
-    """
-    p1, p2 = np.array(p1), np.array(p2)
-    assert p1.shape == p2.shape, "p1 and p2 must have the same dimensions"
-    
-    # Generate uniform parameter values in [0,1]
-    s_uniform = np.linspace(0, 1, N+1)
-    
-    # Apply transformation function
-    s_transformed = np.array([func(s) for s in s_uniform])
-    
-    # Normalize transformed values to stay in [0,1] range
-    s_transformed = (s_transformed - s_transformed[0]) / (s_transformed[-1] - s_transformed[0])
-    
-    # Compute interpolated points
-    points = (1 - s_transformed)[:, None] * p1 + s_transformed[:, None] * p2
-    
-    return points[1:,:]
-
-
-
-def NACA_mesh(POA : int, PTA : int, NACA_name : str, gridtype : str = "quad", angle_of_attack : float = 0, func : callable = lambda x : x**2) -> meshio.Mesh:
-    try:
-        NACA_points = np.loadtxt(f"NACA_{NACA_name}.txt")
-    except:
-        raise ValueError("The data for this NACA-airfoil is not in the directory")
-    # Defining points
-    NACA_points = NACA_points[::(200//POA),:]
-    NACA_points = NACA_points - np.array([0.5,0])
-    POA = NACA_points.shape[0]
-    angle_of_attack_rad = angle_of_attack*np.pi/180
-    rot_mat = np.array([
-        [np.cos(angle_of_attack_rad), -np.sin(angle_of_attack_rad)],
-        [np.sin(angle_of_attack_rad), np.cos(angle_of_attack_rad)]
-    ])
-    inv_rot_mat = np.linalg.inv(rot_mat)
-    NACA_points = (NACA_points)@rot_mat
-    p2s = []
-    for i in range(len(NACA_points)):
-        p1 = NACA_points[i]
-        p2s.append(find_point_on_boundary(p1,rot_mat, inv_rot_mat))
-    p2s = np.array(p2s)
-    for cornerpoint in [[-3,-2],[3,-2],[3,2],[-3,2]]:
-        distances = np.linalg.norm(p2s - cornerpoint, axis=1)
-
-        closest_index = np.argmin(distances)
-        p2s[closest_index] = cornerpoint
-
-    for i in range(len(NACA_points)):
-        p1 = NACA_points[i]
-        p2 = p2s[i]
-        NACA_points = np.vstack([NACA_points,transfinite_line(PTA, p1, p2, func)])
-
-    final_points = np.append(NACA_points, np.zeros((NACA_points.shape[0],1)), axis=1)
-    # Defining cells
-    if gridtype.lower() == "quad":
-        amount_of_areas = (POA)*(PTA)
-        areas = np.zeros((amount_of_areas,4), dtype=int)
-        for j in range(POA):
-            for i in range(PTA-1):
-                areas[j+i*POA,:] = POA + ((np.array([j*PTA+i, j*PTA+(i+1), (j+1)*PTA+(i+1), (j+1)*PTA+i], dtype=int)) % ((POA)*(PTA+1)-POA))
-        for j in range(POA):
-            areas[POA*(PTA-1)+ j] = np.array([j, POA + j*PTA, POA + ((j+1)*PTA)%((POA)*(PTA+1)-POA), (j+1)%POA])
-    if gridtype.lower() == "triangle":
-        amount_of_areas = (POA)*(PTA)*2
-        areas = np.zeros((amount_of_areas,3), dtype=int)
-        for j in range(POA):
-            for i in range(PTA-1):
-                areas[(j+i*POA)*2,:] = POA + ((np.array([j*PTA+i, j*PTA+(i+1), (j+1)*PTA+(i+1)], dtype=int)) % ((POA)*(PTA+1)-POA))
-                areas[(j+i*POA)*2+1,:] = POA + ((np.array([j*PTA+i, (j+1)*PTA+(i+1), (j+1)*PTA+i], dtype=int)) % ((POA)*(PTA+1)-POA))
-        for j in range(POA):
-            areas[(POA*(PTA-1)+ j)*2] = np.array([j, POA + j*PTA, POA + ((j+1)*PTA)%((POA)*(PTA+1)-POA)])
-            areas[(POA*(PTA-1)+ j)*2+1] = np.array([j, POA + ((j+1)*PTA)%((POA)*(PTA+1)-POA), (j+1)%POA])
-    
-    # Defining boundaries
-    ones = np.where(np.round(NACA_points[:,0],3) == -3)[0]
-    nr_ones = len(ones)
-    twos = np.where(np.round(NACA_points[:,0],3) == 3)[0]
-    nr_twos = len(twos)
-    threes = np.where(np.round(NACA_points[:,1],3) == -2)[0]
-    nr_threes = len(threes)
-    fours = np.where(np.round(NACA_points[:,1],3) == 2)[0]
-    nr_fours = len(fours)
-    fives = np.arange(POA)
-    nr_fives = len(fives)
-    lines = np.zeros((nr_fives + nr_ones + nr_twos + nr_threes + nr_fours - 4,2), dtype=int)
-    for i in range(nr_ones-1):
-        lines[i] = np.array([ones[i],ones[i+1]], dtype=int)
-    for i in range(nr_twos-1):
-        if abs(twos[i]-twos[i+1]) == PTA:
-            lines[nr_ones-1 + i] = np.array([twos[i],twos[i+1]], dtype=int)
-        else:
-            lines[nr_ones-1 + i] = np.array([np.max(twos),np.min(twos)], dtype=int)
-    for i in range(nr_threes-1):
-        lines[nr_ones + nr_twos - 2 + i] = np.array([threes[i],threes[i+1]], dtype=int)
-    for i in range(nr_fours-1):
-        lines[nr_ones + nr_twos + nr_threes - 3 + i] = np.array([fours[i],fours[i+1]], dtype=int)
-    for i in range(nr_fives):
-        lines[nr_ones + nr_twos + nr_threes + nr_fours - 4 + i] = np.array([fives[i],fives[(i+1)%nr_fives]], dtype=int)
-
-    cells = [("line",lines),(gridtype, areas)]
-    mesh = meshio.Mesh(points=NACA_points, cells=cells)
-    mesh.cell_data["gmsh:physical"] = [
-        np.hstack((np.repeat(1,nr_ones-1), np.repeat(2,nr_twos-1), np.repeat(3,nr_threes-1),np.repeat(4,nr_fours-1), np.repeat(5,POA))),
-        np.repeat(6,amount_of_areas)
-    ]
-    mesh = add_dummy_geometrical_data(mesh)
-    mesh.points = np.array(mesh.points, dtype=np.float64)
-    return mesh
-
-
-
 def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : callable) -> meshio.Mesh:
     line_clasifications = mesh.cell_data_dict["gmsh:physical"]["line"]
     airfoil_lines = mesh.cells_dict["line"][np.where(line_clasifications == 5)[0]]
@@ -397,3 +257,167 @@ def naca_4digit(string : str, n : int) -> np.ndarray:
     points = np.vstack((lower, upper))
     points[0] = np.array([1,0])
     return points
+
+
+
+def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple = (-2,1), **kwargs):
+    """
+    
+    parameters
+    ----------
+    airfoil: str
+        directory of the airfoil coordinates in txt format
+    alpha: float
+        angle of attack in degrees
+    xlim: tuple
+        x limits of the domain
+    ylim: tuple
+        y limits of the domain
+    
+    ** kwargs:
+        - n_in, n_out, n_bed, n_fs, n_airfoil: int
+            Number of points in the inlet, outlet, bed, front step and airfoil
+        - prog_in, prog_out, prog_bed, prog_fs: float
+            Progression in the inlet, outlet, bed and front step
+        - scale: float
+            Element scale factor
+        - poa: int
+            points on airfoil
+        
+    """
+
+    # ==================== Initializing the model ====================
+    gmsh.initialize()
+
+    # Creating domain
+    xmin, xmax = xlim
+    ymin, ymax = ylim
+
+    scale = kwargs.get('scale', 1.034)
+    gmsh.model.geo.addPoint(xmin, ymin, 0, scale, tag=1) # bottom left
+    gmsh.model.geo.addPoint(xmin, ymax, 0, scale, tag=2) # top left
+    gmsh.model.geo.addPoint(xmax, ymin, 0, scale, tag=3) # bottom right
+    gmsh.model.geo.addPoint(xmax, ymax, 0, scale, tag=4) # top right
+
+    inlet = gmsh.model.geo.addLine(1, 2, tag=1)
+    outlet = gmsh.model.geo.addLine(3, 4, tag=2)
+    bed = gmsh.model.geo.addLine(1, 3, tag=3)
+    fs = gmsh.model.geo.addLine(2, 4, tag=4)
+
+    boundary_loop = gmsh.model.geo.addCurveLoop([inlet, fs, -outlet, -bed], tag=1)
+
+    # ==================== Handling the airfoil ====================
+    poa = kwargs.get('poa', 200)
+    coords = naca_4digit(airfoil, poa)
+
+    # AoA
+    alpha = np.deg2rad(alpha)
+    rot_matrix = np.array([[np.cos(alpha), -np.sin(alpha)], [np.sin(alpha), np.cos(alpha)]])
+    coords = np.dot(coords, rot_matrix)
+
+    points = []
+    for idx, coord in enumerate(coords[::len(coords)//poa]):
+        points.append(gmsh.model.geo.addPoint(coord[0], coord[1], 0, scale, tag=5+idx))
+    
+    # Create lines
+    lines = []
+    for idx in range(len(points)-1):
+        line = gmsh.model.geo.addLine(points[idx], points[idx+1], tag = 4+idx + 1)
+        lines.append(line)
+    
+    
+    line = gmsh.model.geo.addLine(points[-1], points[0], tag = 4+len(points))
+    lines.append(line)
+    print(lines, "\n")
+
+    airfoil_line = gmsh.model.geo.addCurveLoop(lines, tag=5)
+
+    # ==================== Creating the surface ====================
+
+    # Create the surface
+    gmsh.model.geo.addPlaneSurface([boundary_loop, airfoil_line], tag=1)
+
+    gmsh.model.geo.synchronize()
+
+    # ==================== Physical groups ====================
+
+    # Inlet
+    gmsh.model.addPhysicalGroup(1, [inlet], tag=1)
+    gmsh.model.setPhysicalName(1, 1, 'inlet')
+
+    # Outlet
+    gmsh.model.addPhysicalGroup(1, [outlet], tag=2)
+    gmsh.model.setPhysicalName(1, 2, 'outlet')
+
+    # Bed
+    gmsh.model.addPhysicalGroup(1, [bed], tag=3)
+    gmsh.model.setPhysicalName(1, 3, 'bed')
+
+    # Free surface
+    gmsh.model.addPhysicalGroup(1, [fs], tag=4)
+    gmsh.model.setPhysicalName(1, 4, 'free_surface')
+
+    # Airfoil
+    gmsh.model.addPhysicalGroup(1, lines, tag=5)
+    gmsh.model.setPhysicalName(1, 5, 'airfoil')
+
+    # Domain
+    gmsh.model.addPhysicalGroup(2, [1], tag=6)
+    gmsh.model.setPhysicalName(2, 6, 'domain')
+    # ==================== Transfinte curves ====================
+    # Inlet
+    n_in = kwargs.get('n_in', 10*7)
+    prog_in = kwargs.get('prog_in', 0.99)
+    gmsh.model.mesh.setTransfiniteCurve(tag = inlet, numNodes=n_in, coef=prog_in)
+
+    # Outlet
+    n_out = kwargs.get('n_out', 10*7)
+    prog_out = kwargs.get('prog_out', 0.99)
+    gmsh.model.mesh.setTransfiniteCurve(tag = outlet, numNodes=n_out, coef=prog_out)
+
+    # Bed
+    n_bed = kwargs.get('n_bed', 40*8)
+    prog_bed = kwargs.get('prog_bed', 1)
+    gmsh.model.mesh.setTransfiniteCurve(tag = bed, numNodes=n_bed, coef=prog_bed)
+
+    # Free surface
+    n_fs = kwargs.get('n_fs', 100*5)
+    prog_fs = kwargs.get('prog_fs', 1)
+    gmsh.model.mesh.setTransfiniteCurve(tag = fs, numNodes=n_fs, coef=prog_fs)
+
+    # Airfoil
+    n_airfoil = kwargs.get('n_airfoil', 50*6)
+    prog_airfoil = kwargs.get('prog_airfoil', 1)
+    for line in lines:
+        gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(lines), coef=prog_airfoil)
+
+    # ==================== Meshing and writing model ====================
+    gmsh.model.mesh.generate(2)
+
+    if kwargs.get('test', False):
+        gmsh.fltk.run()
+
+    if kwargs.get("write", False):
+        out_name = kwargs.get('o', "naca")
+        file_type = kwargs.get("file_type", "msh")
+        gmsh.write(out_name + "." + file_type)
+
+    # ==================== Converting to meshio ====================
+    gmsh.write("temp.msh")
+
+    mesh = meshio.read("temp.msh")
+    os.system("rm temp.msh")
+    
+    gmsh.finalize()
+
+    return mesh
+
+def meshio_to_fd(mesh: meshio.Mesh) -> fd.Mesh:
+    """
+    Converts a meshio mesh to a firedrake mesh
+    """
+    meshio.write("temp.msh", mesh, file_format="gmsh22")
+    fd_mesh = fd.Mesh("temp.msh")
+    os.system("rm temp.msh")
+    
+    return fd_mesh

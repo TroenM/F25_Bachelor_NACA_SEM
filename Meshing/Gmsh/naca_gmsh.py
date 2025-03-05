@@ -1,6 +1,7 @@
 import gmsh
 import numpy as np
 import meshio
+import os
 from mesh_library import plot_mesh
 
 
@@ -66,8 +67,10 @@ def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
         line = gmsh.model.geo.addLine(points[idx], points[idx+1], tag = 4+idx + 1)
         lines.append(line)
     
+    
     line = gmsh.model.geo.addLine(points[-1], points[0], tag = 4+len(points))
     lines.append(line)
+    print(lines, "\n")
 
     airfoil_line = gmsh.model.geo.addCurveLoop(lines, tag=5)
 
@@ -97,7 +100,7 @@ def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     gmsh.model.setPhysicalName(1, 4, 'free_surface')
 
     # Airfoil
-    gmsh.model.addPhysicalGroup(1, [airfoil_line], tag=5)
+    gmsh.model.addPhysicalGroup(1, lines, tag=5)
     gmsh.model.setPhysicalName(1, 5, 'airfoil')
 
     # Domain
@@ -107,27 +110,28 @@ def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     # Inlet
     n_in = kwargs.get('n_in', 10*7)
     prog_in = kwargs.get('prog_in', 0.99)
-    gmsh.model.mesh.setTransfiniteCurve(tag = 1, numNodes=n_in, coef=prog_in)
+    gmsh.model.mesh.setTransfiniteCurve(tag = inlet, numNodes=n_in, coef=prog_in)
 
     # Outlet
     n_out = kwargs.get('n_out', 10*7)
     prog_out = kwargs.get('prog_out', 0.99)
-    gmsh.model.mesh.setTransfiniteCurve(tag = 2, numNodes=n_out, coef=prog_out)
+    gmsh.model.mesh.setTransfiniteCurve(tag = outlet, numNodes=n_out, coef=prog_out)
 
     # Bed
     n_bed = kwargs.get('n_bed', 40*8)
     prog_bed = kwargs.get('prog_bed', 1)
-    gmsh.model.mesh.setTransfiniteCurve(tag = 3, numNodes=n_bed, coef=prog_bed)
+    gmsh.model.mesh.setTransfiniteCurve(tag = bed, numNodes=n_bed, coef=prog_bed)
 
     # Free surface
     n_fs = kwargs.get('n_fs', 100*5)
     prog_fs = kwargs.get('prog_fs', 1)
-    gmsh.model.mesh.setTransfiniteCurve(tag = 4, numNodes=n_fs, coef=prog_fs)
+    gmsh.model.mesh.setTransfiniteCurve(tag = fs, numNodes=n_fs, coef=prog_fs)
 
     # Airfoil
     n_airfoil = kwargs.get('n_airfoil', 50*6)
+    prog_airfoil = kwargs.get('prog_airfoil', 1)
     for line in lines:
-        gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(lines), coef=1)
+        gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(lines), coef=prog_airfoil)
 
     # ==================== Finalize the model ====================
     gmsh.model.mesh.generate(2)
@@ -136,24 +140,10 @@ def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
         gmsh.fltk.run()
 
     # ==================== Converting to meshio ====================
-    # Extracting nodes
-    node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
-    points = np.array([node_coords]).reshape(-1, 3)
+    gmsh.write("temp.msh")
 
-    # Extracting elements
-    cell_types = gmsh.model.mesh.getElementTypes()
-    cells = []
-
-    for cell_type in cell_types:
-        element_tags, node_tags = gmsh.model.mesh.getElementsByType(cell_type)
-        if gmsh.model.mesh.getElementProperties(cell_type)[2] >= 1:
-            node_tags = np.array(node_tags).reshape(-1, gmsh.model.mesh.getElementProperties(cell_type)[2])
-            cells.append((meshio.gmsh.gmsh_to_meshio_type[cell_type], node_tags - 1)) # Convert 1-based index to 0-based
-    
-    mesh = meshio.Mesh(points=points, cells=cells)
-
-    mesh.cell_data_dict['gmsh:physical'] = []
-    
+    mesh = meshio.read("temp.msh")
+    os.system("rm temp.msh")
     
     gmsh.finalize()
 
@@ -163,7 +153,8 @@ def naca_gmsh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
 if __name__ == '__main__':
     mesh = naca_gmsh('NACA_0015.txt', test = False, poa = 120, n_airfoil = 120, n_in = 70, n_out = 70, n_bed = 70, n_fs = 500)
 
-    print(mesh)
+    print(mesh.cell_data_dict, "\n")
+    print(mesh, "\n")
 
     plot_mesh(mesh)
 
