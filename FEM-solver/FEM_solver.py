@@ -359,8 +359,7 @@ class PotentialFlowSolver_FEM():
             Boundary condition function.
         """
 
-        BC_lines = self.mesh.cells_dict["line"][np.where(self.mesh.cell_data["gmsh:physical"][0] == BC)[0]]
-        
+        BC_lines = self.mesh.cells_dict["line"][np.where(np.concatenate(self.mesh.cell_data["gmsh:physical"]) == BC)[0]]
         if len(BC_lines) == 0:
             raise ValueError("No nodes found at boundary tag {}".format(BC))
         
@@ -387,11 +386,11 @@ class PotentialFlowSolver_FEM():
             relevant_cell = np.tile(relevant_cell,2)
             for i in range(len(relevant_cell)):
                 if (p1 == relevant_cell[i] and p2 == relevant_cell[i+1]):
-                    n = np.array([y2-y1,x1-x2])
+                    n = np.array([y1-y2,x2-x1])
                     n /= np.linalg.norm(n,2)
                     break
                 if (p2 == relevant_cell[i] and p1 == relevant_cell[i+1]):
-                    n = np.array([y1-y2,x2-x1])
+                    n = np.array([y2-y1,x1-x2])
                     n /= np.linalg.norm(n,2)
                     break
 
@@ -435,6 +434,19 @@ class PotentialFlowSolver_FEM():
         # restoring the solution to a 1D array
         self.sol = self.sol.flatten()
 
+    def write_pvd(self):
+        self.mesh.cell_sets = {}
+        self.mesh.point_data = {"scalar_function": np.array(self.sol)}
+        self.mesh.write("output.vtu")  # Save as VTU format (ParaView-friendly)
+
+        # Create a PVD file referencing the VTU file
+        with open("output.pvd", "w") as f:
+            f.write(f"""<?xml version="1.0"?>
+        <VTKFile type="Collection" version="0.1">
+        <Collection>
+            <DataSet timestep="0" file="output.vtu"/>
+        </Collection>
+        </VTKFile>""")
     ##################### Post-Processing Methods #####################
     def plot_solution(self, show_elements: bool = True, figsize: tuple = (10, 10), title: str = "Potential Flow Solution"):
         """
