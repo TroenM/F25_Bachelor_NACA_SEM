@@ -435,6 +435,7 @@ class PotentialFlowSolver_FEM():
         self.sol = self.sol.flatten()
 
     def write_pvd(self):
+        a = self.mesh.cell_sets.copy()
         self.mesh.cell_sets = {}
         self.mesh.point_data = {"scalar_function": np.array(self.sol)}
         self.mesh.write("output.vtu")  # Save as VTU format (ParaView-friendly)
@@ -447,6 +448,11 @@ class PotentialFlowSolver_FEM():
             <DataSet timestep="0" file="output.vtu"/>
         </Collection>
         </VTKFile>""")
+        self.mesh.cell_sets = a
+        return None
+    
+
+    
     ##################### Post-Processing Methods #####################
     def plot_solution(self, show_elements: bool = True, figsize: tuple = (10, 10), title: str = "Potential Flow Solution"):
         """
