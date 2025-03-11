@@ -337,7 +337,7 @@ class PotentialFlowSolver_FEM():
         BC_func : callable
             Boundary condition function.
         """
-        BC_nodes = np.unique(self.mesh.cells_dict["line"][np.where(self.mesh.cell_data["gmsh:physical"][0] == BC)[0]].flatten())
+        BC_nodes = np.unique(self.mesh.cells_dict["line"][np.where(np.concatenate(self.mesh.cell_data["gmsh:physical"]) == BC)[0]])
 
         if len(BC_nodes) == 0:
             raise ValueError("No nodes found at boundary tag {}".format(BC))
