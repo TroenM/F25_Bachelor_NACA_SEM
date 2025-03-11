@@ -287,8 +287,6 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
             Progression in the inlet, outlet, bed and front step
         - scale: float
             Element scale factor
-        - poa: int
-            points on airfoil
         
     """
 
@@ -314,12 +312,12 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     boundary_loop = gmsh.model.geo.addCurveLoop([inlet, fs, -outlet, -bed], tag=1)
 
     # ==================== Handling the airfoil ====================
-    poa = kwargs.get('poa', 200)
-    coords = naca_4digit(airfoil, poa, alpha=alpha)
+    n_airfoil = kwargs.get('n_airfoil', 60)
+    coords = naca_4digit(airfoil, n = n_airfoil, alpha=alpha)
 
 
     points = []
-    for idx, coord in enumerate(coords[::len(coords)//poa]):
+    for idx, coord in enumerate(coords[::len(coords)//n_airfoil]):
         points.append(gmsh.model.geo.addPoint(coord[0], coord[1], 0, scale, tag=5+idx))
     
     # Create lines
@@ -378,17 +376,16 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     gmsh.model.mesh.setTransfiniteCurve(tag = outlet, numNodes=n_out, coef=prog_out)
 
     # Bed
-    n_bed = kwargs.get('n_bed', 40*8)
+    n_bed = kwargs.get('n_bed', 200)
     prog_bed = kwargs.get('prog_bed', 1)
     gmsh.model.mesh.setTransfiniteCurve(tag = bed, numNodes=n_bed, coef=prog_bed)
 
     # Free surface
-    n_fs = kwargs.get('n_fs', 100*5)
+    n_fs = kwargs.get('n_fs', 200)
     prog_fs = kwargs.get('prog_fs', 1)
     gmsh.model.mesh.setTransfiniteCurve(tag = fs, numNodes=n_fs, coef=prog_fs)
 
     # Airfoil
-    n_airfoil = kwargs.get('n_airfoil', 50*6)
     prog_airfoil = kwargs.get('prog_airfoil', 1)
     for line in lines:
         gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(lines), coef=prog_airfoil)

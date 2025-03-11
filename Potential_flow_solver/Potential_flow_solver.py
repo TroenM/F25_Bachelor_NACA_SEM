@@ -28,8 +28,8 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, **kwargs) -> None:
     p3 = (p1+p2)/2
     fd_mesh = meshio_to_fd(mesh)
     model = PoissonSolver(fd_mesh, P)
-    model.impose_NBC(kwargs.get("V_inf", fd.constant(1.0)), kwargs.get("inlet", 1))
-    model.impose_NBC(kwargs.get("V_inf", fd.constant(1.0)), kwargs.get("outlet", 2))
+    model.impose_NBC(kwargs.get("V_inf", fd.Constant(1.0)), kwargs.get("inlet", 1))
+    model.impose_NBC(kwargs.get("V_inf", fd.Constant(1.0)), kwargs.get("outlet", 2))
     model.solve()
     u0 = model.u_sol
     velocity = fd.Function(model.W, name="initial velocity")
