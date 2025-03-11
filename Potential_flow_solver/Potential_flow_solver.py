@@ -1,5 +1,7 @@
 import firedrake as fd
 import numpy as np
+from time import time
+import shutil
 
 
 # Fetching own packages
@@ -12,6 +14,7 @@ from mesh_library import*
 os.chdir(currdir)
 
 
+
 def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, **kwargs) -> None:
     """
     Computes potential flow and correction using kutta-condition
@@ -21,11 +24,20 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, **kwargs) -> None:
     mesh: meshio.Mesh
         - The 
     """
+    if os.path.exists("./output"):
+        shutil.rmtree("./output")
+
+    try:
+        os.remove("./output.pvd")
+    except:
+        pass
+
+
     naca_lines = mesh.cells_dict["line"][np.where(np.concatenate(mesh.cell_data["gmsh:physical"]) == kwargs.get("naca", 5))[0]]
     naca_points = np.unique(naca_lines)
-    p1 = mesh.points[np.min(naca_points)]
-    p2 = mesh.points[np.max(naca_points)]
-    p3 = (p1+p2)/2
+    p1 = mesh.points[np.min(naca_points)][:2]
+    p2 = mesh.points[np.max(naca_points)][:2]
+    p3 = ((p1+p2)/2)[:2]
     fd_mesh = meshio_to_fd(mesh)
     model = PoissonSolver(fd_mesh, P)
     model.impose_NBC(kwargs.get("V_inf", fd.Constant(1.0)), kwargs.get("inlet", 1))
@@ -42,15 +54,21 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, **kwargs) -> None:
     Gamma_old = 100
     vortex_sum = fd.Function(model.W, name="vortex")
     velocityBC_sum = fd.Function(model.W, name="Boundary correction")
+
+    it = 0
     while not converged:
-        v1 = velocity.get([p1])
-        v2 = velocity.get([p2])
+        t1 = time()
+        print(f"Iteration {it}")
+        it += 1
+
+        v1 = velocity.at(p1)
+        v2 = velocity.at(p2)
         du = (v1 + v2)[1]
-        Gamma = du*2*np.pi*(p3@p3.T/p3[1])
+        Gamma = -du*2*np.pi*(p3@p3.T/p3[1])
         if du < 10**(-3) and np.abs(Gamma - Gamma_old) < 10**(-3):
             converged = True
         vortex = fd.Function(model.W)
-        vortex.project(fd.as_vector([-Gamma/2*np.pi*(model.x)/(model.x**2 + model.y**2), -Gamma/2*np.pi*(model.x)/(model.x**2 + model.y**2)]))
+        vortex.project(fd.as_vector([-Gamma/2*np.pi*(model.x)/(model.x**2 + model.y**2), Gamma/2*np.pi*(model.x)/(model.x**2 + model.y**2)]))
         vortex_sum += vortex
         velocity += vortex
 
@@ -67,8 +85,21 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, **kwargs) -> None:
         velocityBC_sum += velocityBC
 
         velocity += velocityBC
+        
+
 
         outfile.write(velocity)
+
+        print(f"\t Itteration time: {time()-t1}")
+        print(f"\t dGamma: {Gamma - Gamma_old}")
+
+        Gamma_old = Gamma
+        
+
+        
+
+
+
     
     outfile.write(velocityBC_sum)
     outfile.write(vortex_sum)
