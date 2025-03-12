@@ -7,7 +7,7 @@ import shutil
 # Fetching own packages
 import os
 currdir = os.getcwd()
-os.chdir("../PoissonSolver/PoissonCLS")
+os.chdir("../../PoissonSolver/PoissonCLS")
 from poisson_solver import PoissonSolver
 os.chdir("../../Meshing")
 from mesh_library import*
