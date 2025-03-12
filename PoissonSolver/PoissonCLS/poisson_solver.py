@@ -62,7 +62,7 @@ class PoissonSolver:
         self.true_sol = None
 
         
-        if __name__ != "__main__":
+        if __name__ == "__main__":
             print("PoissonSolver initialized!")
     
     def impose_rhs(self, rhs_func: fd.Function, func_type = "fd"):
@@ -180,6 +180,17 @@ class PoissonSolver:
     def solve(self, solver_params: dict = {"ksp_type": "cg"}):
         """Solve the Poisson problem"""
         fd.solve(self.a == self.L, self.u_sol, bcs=self.DirBCs, solver_parameters=solver_params)
+        # except:
+        #     # Create a function in the same space as the solution
+        #     const_mode = fd.Function(self.V)
+        #     const_mode.assign(1.0)  # Set all values to 1 (constant null space)
+
+        #     # Define the null space correctly
+        #     nullspace = fd.VectorSpaceBasis([const_mode])
+        #     nullspace.orthonormalize()
+        #     # A = fd.assemble(self.a)
+        #     # A.setNullSpace(nullspace)
+        #     fd.solve(self.a == self.L, self.u_sol, bcs=self.DirBCs, nullspace=nullspace, solver_parameters=solver_params)
 
     def plot_results(self, levels:int = 50, norm: str = "H1", xlim = None, ylim = None, figsize = None):
         """Plot the solution"""
