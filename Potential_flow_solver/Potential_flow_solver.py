@@ -34,25 +34,33 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, write : bool = True, *
             pass
 
 
+    # Identifying the trailing edge
     naca_lines = mesh.cells_dict["line"][np.where(np.concatenate(mesh.cell_data["gmsh:physical"]) == kwargs.get("naca", 5))[0]]
     naca_points = np.unique(naca_lines)
-    center_of_airfoil = np.array([0.5,0])
     p1 = mesh.points[np.min(naca_points)][:2]
     p2 = mesh.points[np.max(naca_points)][:2]
-    p1 = (p1-center_of_airfoil)*1.2 + center_of_airfoil
-    p2 = (p2-center_of_airfoil)*1.2 + center_of_airfoil
+    p_leadingedge = mesh.points[np.min(naca_points) + (np.max(naca_points) - np.min(naca_points))//2][:2]
+    p_te = ((p1+p2)/2)[:2] # Trailing edge point
+    center_of_airfoil = np.array([2,0.5])#p_leadingedge + (p_te-p_leadingedge)*0.8
+    p1 = (p1-center_of_airfoil)*1.01 + center_of_airfoil
+    p2 = (p2-center_of_airfoil)*1.01 + center_of_airfoil
+    p_te = ((p1+p2)/2)[:2]
+    v12 = (p2 - p1)
+    p_te_new = p_te-center_of_airfoil
 
-    p3 = ((p1+p2)/2)[:2]
-    p12vec = (p2 - p1)
-    p3_new = p3-center_of_airfoil
+    # Initializing Laplaze solver
     fd_mesh = meshio_to_fd(mesh)
-    model = PoissonSolver(fd_mesh, P)
-    model.impose_NBC(kwargs.get("V_inf", fd.Constant(1.0)), kwargs.get("inlet", 1))
-    model.impose_NBC(kwargs.get("V_inf", fd.Constant(1.0)), kwargs.get("outlet", 2))
-    model.solve()
+    model = PoissonSolver(fd_mesh, P=P)
+    V_inf = kwargs.get("V_inf", 1.0)
+    model.impose_NBC(fd.Constant(-V_inf), kwargs.get("inlet", 1))
+    model.impose_NBC(fd.Constant(V_inf), kwargs.get("outlet", 2))
+    model.solve(solver_params={"ksp_type": "preonly", "pc_type": "lu"})
+
     u0 = model.u_sol
+    u0 -= model.u_sol.dat.data.min()
     velocity = fd.Function(model.W, name="initial velocity")
     velocity.project(fd.grad(u0))
+
     if write:
         outfile = fd.VTKFile("output.pvd")
         outfile.write(velocity)
@@ -67,32 +75,30 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, write : bool = True, *
         print(f"Iteration {it}")
         it += 1
 
-        v1 = velocity.at(p1)
-        print(f"\t{v1}")
-        v2 = velocity.at(p2)
-        v3 = velocity.at(p3)
-        print(f"\t{v2}")
-        tev = (v1 + v2)/2
-        print(f"\t old trailing edge velocity is {tev}")
-        print(f"\t old trailing edge velocity at p3 is {v3}")
+        v_te = velocity.at(p_te)
+        print(f"\t old trailing edge velocity is {v_te}")
+        
         # Trust me bro function
-        Gamma = (p12vec[0]*tev[0] - p12vec[1]*tev[1])*2*np.pi*(p3_new[0]**2 + p3_new[1]**2)/(p12vec[1]*p3_new[0] - p12vec[0]*p3_new[1])/8
+        Gamma = - (v12[0]*v_te[0] + v12[1]*v_te[1]) * 2*np.pi*(p_te_new[0]**2 + p_te_new[1]**2) / (v12[1]*p_te_new[0] - v12[0]*p_te_new[1])/7
         # Check for convergence or divergence
-        if (np.abs(Gamma - Gamma_old) < 10**(-3) or np.abs(Gamma - Gamma_old) > 10**(4)) and it != 1:
+        if (np.abs(Gamma - Gamma_old) < 10**(-7) or np.abs(Gamma - Gamma_old) > 10**(4)) and it != 1:
             converged = True
+            
         # Creating vortex function
         vortex = fd.Function(model.W)
         # Recentering coordinates around center of airfoil
-        x_new = model.x-center_of_airfoil[0]
-        y_new = model.y-center_of_airfoil[1]
-        vortex.project(fd.as_vector([-Gamma/2*np.pi*(y_new)/(x_new**2 + y_new**2), Gamma/2*np.pi*(x_new)/(x_new**2 + y_new**2)]))
+        x_new = (model.x-center_of_airfoil[0])
+        y_new = (model.y-center_of_airfoil[1])
+        vortex.project(fd.as_vector([-Gamma/(2*np.pi)*(y_new)/(x_new**2 + y_new**2), Gamma/(2*np.pi)*(x_new)/(x_new**2 + y_new**2)]))
         vortex_sum += vortex
         velocity += vortex
+
+
+        vortex_te_goal = np.array([-Gamma/(2*np.pi)*(p_te_new[1])/(p_te_new[0]**2+p_te_new[1]**2), Gamma/(2*np.pi)*(p_te_new[0])/(p_te_new[0]**2+p_te_new[1]**2)])
+        vortex_te = vortex.at(p_te)
         # Calculating new velocity at trailing edge, to see wether the vortex alone helped
-        tev_new = velocity.at(p3)
-        print(f"\t vortex: {vortex.at(p3)}\n")
-        print(f"\t v3 + vortex {v3+ vortex.at(p3)}")
-        print(f"\t dot product {np.dot(p12vec, v3 + vortex.at(p3))}")
+        v_te_new = velocity.at(p_te)
+        print(f"\t dot product {np.dot(v12, vortex_te + v_te)}")
         
         # Creating the function 
         model = PoissonSolver(fd_mesh, P)
@@ -101,7 +107,7 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, write : bool = True, *
         model.impose_NBC( -vortex, kwargs.get("bed", 3))
         model.impose_NBC( -vortex, kwargs.get("fs", 4))
         model.impose_NBC( -vortex, kwargs.get("naca", 5))
-        model.solve()
+        model.solve(solver_params={"ksp_type": "preonly", "pc_type": "lu"})
         u0 = model.u_sol
         velocityBC = fd.Function(model.W)
         velocityBC.project(fd.grad(u0))
@@ -117,7 +123,7 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, write : bool = True, *
         print(f"\t Itteration time: {time()-t1}")
         print(f"\t dGamma: {Gamma - Gamma_old}")
         print(f"\t Gamma: {Gamma}")
-        print(f"\t new trailing edge velocity is {tev_new}")
+        print(f"\t new trailing edge velocity is {v_te_new}\n")
 
         Gamma_old = Gamma
         
@@ -126,10 +132,17 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, write : bool = True, *
 
 
 
-    if write:
-        outfile.write(velocityBC_sum)
-        outfile.write(vortex_sum)
+    # if write:
+        # outfile.write(velocityBC_sum)
+        # outfile.write(vortex_sum)
     return None
 
 
-            
+######################################
+# TESTING THE POTENTIAL FLOW SOLVER #
+######################################
+
+if __name__ == "__main__":
+    print(os.getcwd())
+    #mesh = naca_mesh("0012", alpha=20)
+    #potential_flow_solver(mesh, P = 3)
