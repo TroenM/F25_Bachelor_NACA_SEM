@@ -147,7 +147,7 @@ class PotentialFlowSolver:
                 break
 
             # Compute the vortex
-            vortex = self.compute_vortex(Gamma/7, model, center_of_vortex, vortex) # TO BE IMPLEMENTED
+            vortex = self.compute_vortex(Gamma/100, model, center_of_vortex, vortex) # TO BE IMPLEMENTED
             velocity += vortex
             vortex_sum += vortex
 

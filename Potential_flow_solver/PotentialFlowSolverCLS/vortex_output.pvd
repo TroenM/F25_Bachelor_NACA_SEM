@@ -14,5 +14,12 @@
 <DataSet timestep="10" file="vortex_output/vortex_output_10.vtu" />
 <DataSet timestep="11" file="vortex_output/vortex_output_11.vtu" />
 <DataSet timestep="12" file="vortex_output/vortex_output_12.vtu" />
+<DataSet timestep="13" file="vortex_output/vortex_output_13.vtu" />
+<DataSet timestep="14" file="vortex_output/vortex_output_14.vtu" />
+<DataSet timestep="15" file="vortex_output/vortex_output_15.vtu" />
+<DataSet timestep="16" file="vortex_output/vortex_output_16.vtu" />
+<DataSet timestep="17" file="vortex_output/vortex_output_17.vtu" />
+<DataSet timestep="18" file="vortex_output/vortex_output_18.vtu" />
+<DataSet timestep="19" file="vortex_output/vortex_output_19.vtu" />
 </Collection>
 </VTKFile>
