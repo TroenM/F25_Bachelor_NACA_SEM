@@ -313,7 +313,7 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
 
     # ==================== Handling the airfoil ====================
     n_airfoil = kwargs.get('n_airfoil', 60)
-    coords = naca_4digit(airfoil, n = n_airfoil, alpha=alpha)
+    coords = naca_4digit(airfoil, n = n_airfoil, alpha=alpha, position_of_center=kwargs.get("center_of_airfoil",np.array([0.5,0])))
 
 
     points = []

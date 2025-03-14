@@ -2,28 +2,5 @@
 <VTKFile type="Collection" version="0.1" byte_order="LittleEndian">
 <Collection>
 <DataSet timestep="0" file="output/output_0.vtu" />
-<DataSet timestep="1" file="output/output_1.vtu" />
-<DataSet timestep="2" file="output/output_2.vtu" />
-<DataSet timestep="3" file="output/output_3.vtu" />
-<DataSet timestep="4" file="output/output_4.vtu" />
-<DataSet timestep="5" file="output/output_5.vtu" />
-<DataSet timestep="6" file="output/output_6.vtu" />
-<DataSet timestep="7" file="output/output_7.vtu" />
-<DataSet timestep="8" file="output/output_8.vtu" />
-<DataSet timestep="9" file="output/output_9.vtu" />
-<DataSet timestep="10" file="output/output_10.vtu" />
-<DataSet timestep="11" file="output/output_11.vtu" />
-<DataSet timestep="12" file="output/output_12.vtu" />
-<DataSet timestep="13" file="output/output_13.vtu" />
-<DataSet timestep="14" file="output/output_14.vtu" />
-<DataSet timestep="15" file="output/output_15.vtu" />
-<DataSet timestep="16" file="output/output_16.vtu" />
-<DataSet timestep="17" file="output/output_17.vtu" />
-<DataSet timestep="18" file="output/output_18.vtu" />
-<DataSet timestep="19" file="output/output_19.vtu" />
-<DataSet timestep="20" file="output/output_20.vtu" />
-<DataSet timestep="21" file="output/output_21.vtu" />
-<DataSet timestep="22" file="output/output_22.vtu" />
-<DataSet timestep="23" file="output/output_23.vtu" />
 </Collection>
 </VTKFile>

@@ -58,12 +58,13 @@ class PotentialFlowSolver:
         self.V_inf = V_inf
         self.kwargs = kwargs
         self.alpha = alpha
+        self.center_of_airfoil = self.kwargs.get("center_of_airfoil", np.array([0.5,0]))
 
         # Setting up the mesh
         self.xlim = self.kwargs.get("xlim", [-7, 13])
         self.ylim = self.kwargs.get("ylim", [-2, 1])
 
-        self.mesh = naca_mesh(self.airfoil, self.alpha, self.xlim, self.ylim)
+        self.mesh = naca_mesh(self.airfoil, self.alpha, self.xlim, self.ylim, center_of_airfoil=self.center_of_airfoil)
         self.fd_mesh = meshio_to_fd(self.mesh)
 
         # Handeling output files
@@ -78,10 +79,11 @@ class PotentialFlowSolver:
 
 
     def solve(self):
-        
+        center_of_vortex = self.kwargs.get("center_of_vortex", self.center_of_airfoil)
         # Identify trailing edge and leading edge
-        p1, p2, p_te, p_leading_edge = self.get_edge_info()
+        p1, p2, p_te, p_leading_edge= self.get_edge_info()
         v12 = (p2 - p1)
+        p_te_new = (p_te-center_of_vortex)*1.1 + center_of_vortex
 
 
 
@@ -116,7 +118,8 @@ class PotentialFlowSolver:
             print(f"Starting iteration {it}")
 
             # Computing the vortex strength
-            Gamma = self.compute_vortex_strength() # TO BE IMPLEMENTED
+            vte = velocity.at(p_te_new)
+            Gamma = self.compute_vortex_strength(v12, vte, p_te_new) # TO BE IMPLEMENTED
 
             # Checking for convergence
             if np.abs(Gamma - old_Gamma) < 1e-6:
@@ -135,7 +138,7 @@ class PotentialFlowSolver:
                 break
 
             # Compute the vortex
-            vortex = self.compute_vortex(Gamma) # TO BE IMPLEMENTED
+            vortex = self.compute_vortex(Gamma, model, center_of_vortex) # TO BE IMPLEMENTED
             velocity += vortex
             vortex_sum += vortex
 
@@ -167,24 +170,37 @@ class PotentialFlowSolver:
 
         p1 = mesh.points[np.min(naca_points)][:2]
         p2 = mesh.points[np.max(naca_points)][:2]
-        p_te = ((p1+p2)/2)[:2]
+        p_te = ((p1+p2)/2)[:2] # Shift off boundary
 
         p_leading_edge = mesh.points[np.min(naca_points) + (np.max(naca_points) - np.min(naca_points))//2][:2]
         return p1, p2, p_te, p_leading_edge
 
-    def compute_vortex_strength(self) -> float:
+    def compute_vortex_strength(self, v12, vte, p_te_new) -> float:
         """
         Computes the vortex strength for the given iteration
         """
-        ####### TO BE IMPLEMENTED #######
-        return 0
+        a = self.kwargs.get("a", 1)
+        b = self.kwargs.get("b", int(self.airfoil[2:])/100)
+        x = p_te_new[0]
+        y = p_te_new[1]
+        alpha = self.alpha
+        Gamma = -(v12[0]*vte[0] + v12[1]*vte[1])*2*np.pi*(a**2*x**2 + b**2*y**2) / (v12[0]*(-b**2*y*np.cos(alpha) + a**2*x*np.sin(alpha)) + v12[1]*(b**2*y*np.sin(alpha) + a**2*x*np.cos(alpha)))
+        return Gamma
 
-    def compute_vortex(self, Gamma) -> fd.Function:
+    def compute_vortex(self, Gamma, model, center_of_vortex) -> fd.Function:
         """
         Computes the vortex field for the given vortex strength
         """
-        ####### TO BE IMPLEMENTED #######
-        return None
+        rot_mat = np.array([
+            [np.cos(self.alpha), -np.sin(self.alpha)],
+            [np.sin(self.alpha), np.cos(self.alpha)]
+        ])
+        a = self.kwargs.get("a", 1)
+        b = self.kwargs.get("b", int(self.airfoil[2:])/100)
+        x_new = model.x - center_of_vortex[0]
+        y_new = model.y - center_of_vortex[1]
+        eliptic_vortex = np.array([-Gamma/(2*np.pi) * b**2*y_new/(a**2*x_new**2 + b**2*y_new**2) , Gamma/(2*np.pi) * a**2*x_new/(a**2*x_new**2 + b**2*y_new**2)])
+        return (eliptic_vortex.T@rot_mat).T
 
     def compute_boundary_correction(self, vortex) -> fd.Function:
         """

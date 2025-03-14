@@ -52,9 +52,9 @@ def potential_flow_solver(mesh : meshio.Mesh, P: int = 1, write : bool = True, *
     fd_mesh = meshio_to_fd(mesh)
     model = PoissonSolver(fd_mesh, P=P)
     V_inf = kwargs.get("V_inf", 1.0)
-    model.impose_NBC(fd.Constant(-V_inf), kwargs.get("inlet", 1))
+    model.impose_DBC(fd.Constant(-V_inf), kwargs.get("inlet", 1))
     model.impose_NBC(fd.Constant(V_inf), kwargs.get("outlet", 2))
-    model.solve(solver_params={"ksp_type": "preonly", "pc_type": "lu"})
+    model.solve(solver_params=kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"}))
 
     u0 = model.u_sol
     u0 -= model.u_sol.dat.data.min()
