@@ -60,6 +60,8 @@ class PotentialFlowSolver:
         self.alpha = alpha
         self.center_of_airfoil = self.kwargs.get("center_of_airfoil", np.array([0.5,0]))
 
+        self.write = self.kwargs.get("write", True)
+
         # Setting up the mesh
         self.xlim = self.kwargs.get("xlim", [-7, 13])
         self.ylim = self.kwargs.get("ylim", [-2, 1])
@@ -68,14 +70,22 @@ class PotentialFlowSolver:
         self.fd_mesh = meshio_to_fd(self.mesh)
 
         # Handeling output files
-        if self.kwargs.get("write", True):
-            if os.path.exists("./output"):
-                shutil.rmtree("./output")
+        if self.write:
+            if os.path.exists("./velocity_output"):
+                shutil.rmtree("./velocity_output")
+            if os.path.exists("./vortex_output"):
+                shutil.rmtree("./vortex_output")
             try:
-                os.remove("./output.pvd")
-                self.output = fd.VTKFile("output.pvd")
+                os.remove("./velocity_output.pvd")
             except:
                 pass
+            try:
+                os.remove("./vortex_output.pvd")
+            except:
+                pass
+            
+            self.velocity_output = fd.VTKFile("velocity_output.pvd")
+            self.vortex_output = fd.VTKFile("vortex_output.pvd")
 
 
     def solve(self):
@@ -100,11 +110,10 @@ class PotentialFlowSolver:
         # Computing the velocity field
         velocity = fd.Function(model.W, name="velocity")
         velocity.project(fd.grad(velocityPotential))
-
-        self.write = self.kwargs.get("write", True)
+        vortex = fd.Function(model.W, name="vortex")
 
         if self.write:
-            self.output.write(velocity)
+            self.velocity_output.write(velocity)
 
         # Initializing main loop
         old_Gamma = 0
@@ -113,7 +122,7 @@ class PotentialFlowSolver:
         time_total = time()
 
         # Main loop
-        for it, _ in range(self.kwargs.get("max_iter", 20)):
+        for it, _ in enumerate(range(self.kwargs.get("max_iter", 20))):
             time_it = time()
             print(f"Starting iteration {it}")
 
@@ -138,7 +147,7 @@ class PotentialFlowSolver:
                 break
 
             # Compute the vortex
-            vortex = self.compute_vortex(Gamma, model, center_of_vortex) # TO BE IMPLEMENTED
+            vortex = self.compute_vortex(Gamma/7, model, center_of_vortex, vortex) # TO BE IMPLEMENTED
             velocity += vortex
             vortex_sum += vortex
 
@@ -154,9 +163,10 @@ class PotentialFlowSolver:
 
             # Write to file
             if self.write:
-                self.output.write(velocity)
+                self.velocity_output.write(velocity)
+                self.vortex_output.write(vortex)
 
-            print(f"\Iteration time: {time() - time_it} seconds\n")
+            print(f"\t Iteration time: {time() - time_it} seconds\n")
 
     
     def get_edge_info(self):
@@ -164,15 +174,15 @@ class PotentialFlowSolver:
         Returns the coordinates of the leading edge, trailing edge and the point at the trailing edge
         """
         # fetching points on the NACA airfoil
-        naca_lines = mesh.cells_dict["line"][np.where(
+        naca_lines = self.mesh.cells_dict["line"][np.where(
             np.concatenate(self.mesh.cell_data["gmsh:physical"]) == self.kwargs.get("naca", 5))[0]]
         naca_points = np.unique(naca_lines)
 
-        p1 = mesh.points[np.min(naca_points)][:2]
-        p2 = mesh.points[np.max(naca_points)][:2]
+        p1 = self.mesh.points[np.min(naca_points)][:2]
+        p2 = self.mesh.points[np.max(naca_points)][:2]
         p_te = ((p1+p2)/2)[:2] # Shift off boundary
 
-        p_leading_edge = mesh.points[np.min(naca_points) + (np.max(naca_points) - np.min(naca_points))//2][:2]
+        p_leading_edge = self.mesh.points[np.min(naca_points) + (np.max(naca_points) - np.min(naca_points))//2][:2]
         return p1, p2, p_te, p_leading_edge
 
     def compute_vortex_strength(self, v12, vte, p_te_new) -> float:
@@ -187,7 +197,7 @@ class PotentialFlowSolver:
         Gamma = -(v12[0]*vte[0] + v12[1]*vte[1])*2*np.pi*(a**2*x**2 + b**2*y**2) / (v12[0]*(-b**2*y*np.cos(alpha) + a**2*x*np.sin(alpha)) + v12[1]*(b**2*y*np.sin(alpha) + a**2*x*np.cos(alpha)))
         return Gamma
 
-    def compute_vortex(self, Gamma, model, center_of_vortex) -> fd.Function:
+    def compute_vortex(self, Gamma, model, center_of_vortex, vortex) -> fd.Function:
         """
         Computes the vortex field for the given vortex strength
         """
@@ -200,7 +210,11 @@ class PotentialFlowSolver:
         x_new = model.x - center_of_vortex[0]
         y_new = model.y - center_of_vortex[1]
         eliptic_vortex = np.array([-Gamma/(2*np.pi) * b**2*y_new/(a**2*x_new**2 + b**2*y_new**2) , Gamma/(2*np.pi) * a**2*x_new/(a**2*x_new**2 + b**2*y_new**2)])
-        return (eliptic_vortex.T@rot_mat).T
+        eliptic_vortex = (eliptic_vortex.T@rot_mat).T
+
+        # Convert to Firedrake before returning
+        vortex.project(fd.as_vector(eliptic_vortex))
+        return vortex
 
     def compute_boundary_correction(self, vortex) -> fd.Function:
         """
