@@ -75,11 +75,9 @@ class PotentialFlowSolver:
                 self.output = fd.VTKFile("output.pvd")
             except:
                 pass
-        
-        
 
 
-    def solve(self, **kwargs):
+    def solve(self):
         
         # Identify trailing edge and leading edge
         p1, p2, p_te, p_leading_edge = self.get_edge_info()
