@@ -189,30 +189,27 @@ class PotentialFlowSolver:
         """
         Computes the vortex strength for the given iteration
         """
-        a = self.kwargs.get("a", 1)
-        b = self.kwargs.get("b", int(self.airfoil[2:])/100)
+        a = 1/self.kwargs.get("a", 1)
+        b = 1/self.kwargs.get("b", int(self.airfoil[2:])/100)
         x = p_te_new[0]
         y = p_te_new[1]
-        alpha = self.alpha
-        Gamma = -(v12[0]*vte[0] + v12[1]*vte[1])*2*np.pi*(a**2*x**2 + b**2*y**2) / (v12[0]*(-b**2*y*np.cos(alpha) + a**2*x*np.sin(alpha)) + v12[1]*(b**2*y*np.sin(alpha) + a**2*x*np.cos(alpha)))
+        alpha = np.deg2rad(self.alpha)
+        Gamma = -(v12[0]*vte[0] + v12[1]*vte[1])*2*np.pi*(a**2*x**2 + b**2*y**2) / (v12[0]*(-b*y*np.cos(alpha) + a*x*np.sin(alpha)) + v12[1]*(b*y*np.sin(alpha) + a*x*np.cos(alpha)))
         return Gamma
 
     def compute_vortex(self, Gamma, model, center_of_vortex, vortex) -> fd.Function:
         """
         Computes the vortex field for the given vortex strength
         """
-        rot_mat = np.array([
-            [np.cos(self.alpha), -np.sin(self.alpha)],
-            [np.sin(self.alpha), np.cos(self.alpha)]
-        ])
-        a = self.kwargs.get("a", 1)
-        b = self.kwargs.get("b", int(self.airfoil[2:])/100)
-        x_new = model.x - center_of_vortex[0]
-        y_new = model.y - center_of_vortex[1]
-        eliptic_vortex = np.array([-Gamma/(2*np.pi) * b**2*y_new/(a**2*x_new**2 + b**2*y_new**2) , Gamma/(2*np.pi) * a**2*x_new/(a**2*x_new**2 + b**2*y_new**2)])
-        eliptic_vortex = (eliptic_vortex.T@rot_mat).T
-
-        # Convert to Firedrake before returning
+        alpha = np.deg2rad(self.alpha)
+        alpha = fd.Constant(alpha)
+        a = 1/self.kwargs.get("a", 1)
+        b = 1/self.kwargs.get("b", int(self.airfoil[2:])/100)
+        x_new = (model.x - center_of_vortex[0])*a
+        y_new = (model.y - center_of_vortex[1])*b
+        x_rot = x_new * fd.cos(alpha) - y_new * fd.sin(alpha)
+        y_rot = x_new * fd.sin(alpha) + y_new * fd.cos(alpha)
+        eliptic_vortex = np.array([-Gamma/(2*np.pi) * y_rot/(x_rot**2 + y_rot**2) , Gamma/(2*np.pi) * x_rot/(x_rot**2 + y_rot**2)])
         vortex.project(fd.as_vector(eliptic_vortex))
         return vortex
 
