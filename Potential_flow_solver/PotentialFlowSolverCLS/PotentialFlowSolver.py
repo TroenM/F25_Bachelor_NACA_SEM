@@ -131,8 +131,8 @@ class PotentialFlowSolver:
             Gamma = self.compute_vortex_strength(v12, vte, p_te_new) # TO BE IMPLEMENTED
 
             # Checking for convergence
-            if np.abs(Gamma - old_Gamma) < 1e-6:
-                print(f"Solver converged in {it} iterations")
+            if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
+                print(f"Solver converged in {it-1} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
                 print(f"\n")
@@ -147,7 +147,7 @@ class PotentialFlowSolver:
                 break
 
             # Compute the vortex
-            vortex = self.compute_vortex(Gamma/100, model, center_of_vortex, vortex) # TO BE IMPLEMENTED
+            vortex = self.compute_vortex(Gamma/10, model, center_of_vortex, vortex) # TO BE IMPLEMENTED
             velocity += vortex
             vortex_sum += vortex
 
@@ -167,6 +167,12 @@ class PotentialFlowSolver:
                 self.vortex_output.write(vortex)
 
             print(f"\t Iteration time: {time() - time_it} seconds\n")
+
+        if it == self.kwargs.get("max_iter", 20) - 1:
+            print(f"Solver did not converge in {it} iterations")
+            print(f"\t Total time: {time() - time_total}")
+            print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
+            print(f"\n")
 
     
     def get_edge_info(self):
@@ -201,16 +207,37 @@ class PotentialFlowSolver:
         """
         Computes the vortex field for the given vortex strength
         """
-        alpha = np.deg2rad(self.alpha)
+
+        alpha = np.deg2rad(self.alpha)  # Convert angle of attack to radians
         alpha = fd.Constant(alpha)
-        a = 1/self.kwargs.get("a", 1)
-        b = 1/self.kwargs.get("b", int(self.airfoil[2:])/100)
-        x_new = (model.x - center_of_vortex[0])*a
-        y_new = (model.y - center_of_vortex[1])*b
-        x_rot = x_new * fd.cos(alpha) - y_new * fd.sin(alpha)
-        y_rot = x_new * fd.sin(alpha) + y_new * fd.cos(alpha)
-        eliptic_vortex = np.array([-Gamma/(2*np.pi) * y_rot/(x_rot**2 + y_rot**2) , Gamma/(2*np.pi) * x_rot/(x_rot**2 + y_rot**2)])
-        vortex.project(fd.as_vector(eliptic_vortex))
+
+        # Extract airfoil scaling parameters
+        a = self.kwargs.get("a", 1)  # Major axis scaling
+        b = self.kwargs.get("b", int(self.airfoil[2:]) / 100)  # Minor axis scaling
+
+        # Translate coordinates to vortex-centered frame
+        x_shifted = model.x - center_of_vortex[0]
+        y_shifted = model.y - center_of_vortex[1]
+
+        # Rotate global coordinates to align with airfoil
+        x_rot = x_shifted * fd.cos(alpha) - y_shifted * fd.sin(alpha)
+        y_rot = x_shifted * fd.sin(alpha) + y_shifted * fd.cos(alpha)
+
+        # Apply elliptical scaling (stretch along x or y)
+        x_scaled = x_rot / a
+        y_scaled = y_rot / b
+
+        # Compute the unrotated vortex velocity field
+        u_x = -Gamma / (2 * np.pi) * y_scaled / (x_scaled**2 + y_scaled**2)
+        u_y = Gamma / (2 * np.pi) * x_scaled / (x_scaled**2 + y_scaled**2)
+
+        # Rotate velocity field back to original coordinates
+        u_x_final = u_x * fd.cos(alpha) + u_y * fd.sin(alpha)
+        u_y_final = u_x * fd.sin(alpha) - u_y * fd.cos(alpha)
+
+        # Convert to firedrake vector function
+        vortex.project(fd.as_vector([u_x_final, u_y_final]))
+
         return vortex
 
     def compute_boundary_correction(self, vortex) -> fd.Function:
@@ -240,3 +267,6 @@ class PotentialFlowSolver:
 
 
 
+if __name__ == "__main__":
+    solver = PotentialFlowSolver(airfoil="0012", P=1, alpha = 10, max_iter = 6)
+    solver.solve()
