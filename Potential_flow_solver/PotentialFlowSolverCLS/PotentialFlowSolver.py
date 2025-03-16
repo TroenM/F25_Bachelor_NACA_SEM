@@ -157,7 +157,7 @@ class PotentialFlowSolver:
 
             # Compute the vortex
             #vortex = self.compute_circular_vortex(Gamma/20, model, center_of_vortex, vortex)
-            vortex = self.compute_vortex(Gamma/20, model, center_of_vortex, vortex)
+            vortex = self.compute_vortex(Gamma/4.6, model, center_of_vortex, vortex)
             print(f"\t dot product: {np.dot(v12, vte + vortex.at(p_te_new))}")
 
             velocity += vortex
@@ -236,8 +236,8 @@ class PotentialFlowSolver:
         Wy = x_s / (x_s**2 + y_s**2)
 
         # Rotating back to global coordinates
-        Wx_rot = Wx * np.cos(alpha) + Wy * np.sin(alpha)
-        Wy_rot = Wx * np.sin(alpha) - Wy * np.cos(alpha)
+        Wx_rot = Wx * np.cos(alpha) - Wy * np.sin(alpha)
+        Wy_rot = Wx * np.sin(alpha) + Wy * np.cos(alpha)
 
         # Computing the vortex strength
         Gamma = -2*np.pi*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
@@ -272,12 +272,8 @@ class PotentialFlowSolver:
         u_x = -Gamma / (2 * np.pi) * y_scaled / (x_scaled**2 + y_scaled**2)
         u_y = Gamma / (2 * np.pi) * x_scaled / (x_scaled**2 + y_scaled**2)
 
-        # Rotate velocity field back to original coordinates
-        u_x_final = u_x * fd.cos(alpha) + u_y * fd.sin(alpha)
-        u_y_final = u_x * fd.sin(alpha) - u_y * fd.cos(alpha)
-
         # Convert to firedrake vector function
-        vortex.project(fd.as_vector([u_x_final, u_y_final]))
+        vortex.project(fd.as_vector([u_x, u_y]))
 
         return vortex
 

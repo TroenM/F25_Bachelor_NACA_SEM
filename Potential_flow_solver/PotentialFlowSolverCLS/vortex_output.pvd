@@ -6,5 +6,16 @@
 <DataSet timestep="2" file="vortex_output/vortex_output_2.vtu" />
 <DataSet timestep="3" file="vortex_output/vortex_output_3.vtu" />
 <DataSet timestep="4" file="vortex_output/vortex_output_4.vtu" />
+<DataSet timestep="5" file="vortex_output/vortex_output_5.vtu" />
+<DataSet timestep="6" file="vortex_output/vortex_output_6.vtu" />
+<DataSet timestep="7" file="vortex_output/vortex_output_7.vtu" />
+<DataSet timestep="8" file="vortex_output/vortex_output_8.vtu" />
+<DataSet timestep="9" file="vortex_output/vortex_output_9.vtu" />
+<DataSet timestep="10" file="vortex_output/vortex_output_10.vtu" />
+<DataSet timestep="11" file="vortex_output/vortex_output_11.vtu" />
+<DataSet timestep="12" file="vortex_output/vortex_output_12.vtu" />
+<DataSet timestep="13" file="vortex_output/vortex_output_13.vtu" />
+<DataSet timestep="14" file="vortex_output/vortex_output_14.vtu" />
+<DataSet timestep="15" file="vortex_output/vortex_output_15.vtu" />
 </Collection>
 </VTKFile>
