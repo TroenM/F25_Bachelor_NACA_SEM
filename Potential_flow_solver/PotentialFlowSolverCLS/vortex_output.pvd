@@ -6,6 +6,5 @@
 <DataSet timestep="2" file="vortex_output/vortex_output_2.vtu" />
 <DataSet timestep="3" file="vortex_output/vortex_output_3.vtu" />
 <DataSet timestep="4" file="vortex_output/vortex_output_4.vtu" />
-<DataSet timestep="5" file="vortex_output/vortex_output_5.vtu" />
 </Collection>
 </VTKFile>

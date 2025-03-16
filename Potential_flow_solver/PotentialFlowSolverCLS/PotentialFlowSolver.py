@@ -7,10 +7,18 @@ from time import time
 
 #### Running from F25_Bachelor_NACA_SEM ####
 sys.path.append(os.getcwd())
-from PoissonSolver.PoissonCLS.poisson_solver import PoissonSolver
-from Meshing.mesh_library import *
+try:
+    from PoissonSolver.PoissonCLS.poisson_solver import PoissonSolver
+    from Meshing.mesh_library import *
+    os.chdir("./Potential_flow_solver/PotentialFlowSolverCLS")
+except:
+    from poisson_test import PoissonSolver
+    from mesh_test import*
+    
 
-os.chdir("./Potential_flow_solver/PotentialFlowSolverCLS")
+
+
+
 
 class PotentialFlowSolver:
     """
@@ -93,7 +101,7 @@ class PotentialFlowSolver:
         # Identify trailing edge and leading edge
         p1, p2, p_te, p_leading_edge= self.get_edge_info()
         v12 = (p2 - p1)
-        p_te_new = (p_te-center_of_vortex)*1.1 + center_of_vortex
+        p_te_new = (p_te-center_of_vortex)*1.01 + center_of_vortex
 
 
 
@@ -128,7 +136,8 @@ class PotentialFlowSolver:
 
             # Computing the vortex strength
             vte = velocity.at(p_te_new)
-            Gamma = self.compute_vortex_strength(v12, vte, p_te_new) # TO BE IMPLEMENTED
+            #Gamma = self.compute_circular_vortex_strength(v12, vte, p_te_new, center_of_vortex) # TO BE IMPLEMENTED
+            Gamma = self.compute_vortex_strength(v12, vte, p_te_new)
 
             # Checking for convergence
             if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
@@ -147,7 +156,10 @@ class PotentialFlowSolver:
                 break
 
             # Compute the vortex
-            vortex = self.compute_vortex(Gamma/10, model, center_of_vortex, vortex) # TO BE IMPLEMENTED
+            #vortex = self.compute_circular_vortex(Gamma/20, model, center_of_vortex, vortex)
+            vortex = self.compute_vortex(Gamma/20, model, center_of_vortex, vortex)
+            print(f"\t dot product: {np.dot(v12, vte + vortex.at(p_te_new))}")
+
             velocity += vortex
             vortex_sum += vortex
 
@@ -184,23 +196,52 @@ class PotentialFlowSolver:
             np.concatenate(self.mesh.cell_data["gmsh:physical"]) == self.kwargs.get("naca", 5))[0]]
         naca_points = np.unique(naca_lines)
 
-        p1 = self.mesh.points[np.min(naca_points)][:2]
-        p2 = self.mesh.points[np.max(naca_points)][:2]
+        p1 = self.mesh.points[np.min(naca_points)][:2] # Lower point at trailing edge
+        p2 = self.mesh.points[np.max(naca_points)][:2] # Upper point at trailing edge
         p_te = ((p1+p2)/2)[:2] # Shift off boundary
 
-        p_leading_edge = self.mesh.points[np.min(naca_points) + (np.max(naca_points) - np.min(naca_points))//2][:2]
+        #p_leading_edge = self.mesh.points[np.min(naca_points) + (np.max(naca_points) - np.min(naca_points))//2][:2]
+
+        # Assuming the leading edge is at (0,0) before rotation
+        alpha = np.deg2rad(self.alpha)
+        p_leading_edge = np.array([[np.cos(alpha), np.sin(alpha)], [-np.sin(alpha), np.cos(alpha)]]) @ np.array([-1, 0]) + np.array([1, 0])
         return p1, p2, p_te, p_leading_edge
 
     def compute_vortex_strength(self, v12, vte, p_te_new) -> float:
         """
         Computes the vortex strength for the given iteration
         """
-        a = 1/self.kwargs.get("a", 1)
-        b = 1/self.kwargs.get("b", int(self.airfoil[2:])/100)
-        x = p_te_new[0]
-        y = p_te_new[1]
+        a = self.kwargs.get("a", 1)
+        b = self.kwargs.get("b", int(self.airfoil[2:])/100)
         alpha = np.deg2rad(self.alpha)
-        Gamma = -(v12[0]*vte[0] + v12[1]*vte[1])*2*np.pi*(a**2*x**2 + b**2*y**2) / (v12[0]*(-b*y*np.cos(alpha) + a*x*np.sin(alpha)) + v12[1]*(b*y*np.sin(alpha) + a*x*np.cos(alpha)))
+
+        # Get the coordinates of the trailing edge
+        p_x = p_te_new[0]
+        p_y = p_te_new[1]
+
+        # Translating to center of airfoil
+        x_t = p_x - self.center_of_airfoil[0]
+        y_t = p_y - self.center_of_airfoil[1]
+
+        # Rotating to align with airfoil
+        x_rot = x_t * np.cos(alpha) - y_t * np.sin(alpha)
+        y_rot = x_t * np.sin(alpha) + y_t * np.cos(alpha)
+
+        # Scaling to unit circle
+        x_s = x_rot / a
+        y_s = y_rot / b
+
+        # Computing vortex at trailing edge without Gamma/2pi
+        Wx = -y_s / (x_s**2 + y_s**2)
+        Wy = x_s / (x_s**2 + y_s**2)
+
+        # Rotating back to global coordinates
+        Wx_rot = Wx * np.cos(alpha) + Wy * np.sin(alpha)
+        Wy_rot = Wx * np.sin(alpha) - Wy * np.cos(alpha)
+
+        # Computing the vortex strength
+        Gamma = -2*np.pi*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
+
         return Gamma
 
     def compute_vortex(self, Gamma, model, center_of_vortex, vortex) -> fd.Function:
@@ -240,6 +281,40 @@ class PotentialFlowSolver:
 
         return vortex
 
+    def compute_circular_vortex(self, Gamma, model, center_of_vortex, vortex) -> fd.Function:
+        """
+        Computes the vortex field for the given vortex strength
+        """
+
+        # Translate coordinates to vortex-centered frame
+        x_shifted = model.x - center_of_vortex[0]
+        y_shifted = model.y - center_of_vortex[1]
+
+        # Compute the unrotated vortex velocity field
+        u_x = -Gamma / (2 * np.pi) * y_shifted / (x_shifted**2 + y_shifted**2)
+        u_y = Gamma / (2 * np.pi) * x_shifted / (x_shifted**2 + y_shifted**2)
+
+        # Convert to firedrake vector function
+        vortex.project(fd.as_vector([u_x, u_y]))
+
+        return vortex
+    
+    def compute_circular_vortex_strength(self, v12, vte, p_te_new, center_of_vortex) -> float:
+        """
+        Computes the vortex strength for the given iteration
+        """
+        # Get the coordinates of the trailing edge
+        p_x = p_te_new[0] - center_of_vortex[0]
+        p_y = p_te_new[1] - center_of_vortex[1]
+
+        Wx = -p_y / (p_x**2 + p_y**2)
+        Wy = p_x / (p_x**2 + p_y**2)
+
+        # Computing the vortex strength
+        Gamma = -2*np.pi*(v12[0]*vte[0] + v12[1]*vte[1])/(v12[0]*Wx + v12[1]*Wy)
+        return Gamma
+        
+
     def compute_boundary_correction(self, vortex) -> fd.Function:
         """
         Computes the boundary correction for the velocity field
@@ -268,5 +343,5 @@ class PotentialFlowSolver:
 
 
 if __name__ == "__main__":
-    solver = PotentialFlowSolver(airfoil="0012", P=1, alpha = 10, max_iter = 6)
+    solver = PotentialFlowSolver(airfoil="0012", P=1, alpha = 20, max_iter = 5)
     solver.solve()
