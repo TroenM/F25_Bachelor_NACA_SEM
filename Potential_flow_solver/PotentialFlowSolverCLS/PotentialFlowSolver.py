@@ -67,7 +67,7 @@ class PotentialFlowSolver:
         self.kwargs = kwargs
         self.alpha = alpha
         self.center_of_airfoil = self.kwargs.get("center_of_airfoil", np.array([0.5,0]))
-
+        self.Gamma = 0
         self.write = self.kwargs.get("write", True)
 
         # Setting up the mesh
@@ -128,7 +128,7 @@ class PotentialFlowSolver:
         vortex_sum = fd.Function(model.W, name="vortex")
         velocityBC_sum = fd.Function(model.W, name="Boundary correction")
         time_total = time()
-
+        self.Gamma = 0
         # Main loop
         for it, _ in enumerate(range(self.kwargs.get("max_iter", 20))):
             time_it = time()
@@ -137,8 +137,8 @@ class PotentialFlowSolver:
             # Computing the vortex strength
             vte = velocity.at(p_te_new)
             #Gamma = self.compute_circular_vortex_strength(v12, vte, p_te_new, center_of_vortex) # TO BE IMPLEMENTED
-            Gamma = self.compute_vortex_strength(v12, vte, p_te_new)
-
+            Gamma = self.compute_vortex_strength(v12, vte, p_te_new)/4.6
+            self.Gamma += Gamma
             # Checking for convergence
             if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
                 print(f"Solver converged in {it-1} iterations")
@@ -157,8 +157,7 @@ class PotentialFlowSolver:
 
             # Compute the vortex
             #vortex = self.compute_circular_vortex(Gamma/20, model, center_of_vortex, vortex)
-            vortex = self.compute_vortex(Gamma/4.6, model, center_of_vortex, vortex)
-            print(f"\t dot product: {np.dot(v12, vte + vortex.at(p_te_new))}")
+            vortex = self.compute_vortex(Gamma, model, center_of_vortex, vortex)
 
             velocity += vortex
             vortex_sum += vortex
