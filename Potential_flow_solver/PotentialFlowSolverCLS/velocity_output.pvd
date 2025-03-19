@@ -2,5 +2,16 @@
 <VTKFile type="Collection" version="0.1" byte_order="LittleEndian">
 <Collection>
 <DataSet timestep="0" file="velocity_output/velocity_output_0.vtu" />
+<DataSet timestep="1" file="velocity_output/velocity_output_1.vtu" />
+<DataSet timestep="2" file="velocity_output/velocity_output_2.vtu" />
+<DataSet timestep="3" file="velocity_output/velocity_output_3.vtu" />
+<DataSet timestep="4" file="velocity_output/velocity_output_4.vtu" />
+<DataSet timestep="5" file="velocity_output/velocity_output_5.vtu" />
+<DataSet timestep="6" file="velocity_output/velocity_output_6.vtu" />
+<DataSet timestep="7" file="velocity_output/velocity_output_7.vtu" />
+<DataSet timestep="8" file="velocity_output/velocity_output_8.vtu" />
+<DataSet timestep="9" file="velocity_output/velocity_output_9.vtu" />
+<DataSet timestep="10" file="velocity_output/velocity_output_10.vtu" />
+<DataSet timestep="11" file="velocity_output/velocity_output_11.vtu" />
 </Collection>
 </VTKFile>

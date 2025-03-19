@@ -86,7 +86,13 @@ class PotentialFlowSolver:
         self.xlim = self.kwargs.get("xlim", [-7, 13])
         self.ylim = self.kwargs.get("ylim", [-2, 1])
 
-        self.mesh = naca_mesh(self.airfoil, self.alpha, self.xlim, self.ylim, center_of_airfoil=self.center_of_airfoil)
+        self.mesh = naca_mesh(self.airfoil, self.alpha, self.xlim, self.ylim, 
+                              center_of_airfoil=self.center_of_airfoil,
+                              n_airfoil = self.kwargs.get("n_airfoil"),
+                              n_fs = self.kwargs.get("n_fs"),
+                              n_bed = self.kwargs.get("n_bed"),
+                              n_inlet = self.kwargs.get("n_inlet"),
+                              n_outlet = self.kwargs.get("n_outlet"))
         self.fd_mesh = meshio_to_fd(self.mesh)
 
         self.a = self.kwargs.get("a", 1)
@@ -101,12 +107,19 @@ class PotentialFlowSolver:
                 shutil.rmtree("./velocity_output")
             if os.path.exists("./vortex_output"):
                 shutil.rmtree("./vortex_output")
+            if os.path.exists("./pressure_output"):
+                shutil.rmtree("./pressure_output")
+
             try:
                 os.remove("./velocity_output.pvd")
             except:
                 pass
             try:
                 os.remove("./vortex_output.pvd")
+            except:
+                pass
+            try:
+                os.remove("./pressure_output.pvd")
             except:
                 pass
             
@@ -202,6 +215,8 @@ class PotentialFlowSolver:
         
         self.lift = -self.Gamma * self.V_inf * self.kwargs.get("rho", 1.225)
         self.lift_coeff = self.lift / (1/2 * self.kwargs.get("rho", 1.225) * self.V_inf**2)
+
+        self.__compute_pressure_coefficients(velocity, model)
 
         if it == self.kwargs.get("max_iter", 20) - 1:
             print(f"Solver did not converge in {it} iterations")
@@ -361,6 +376,16 @@ class PotentialFlowSolver:
         velocityBC.project(fd.grad(velocityPotential))
 
         return velocityBC
+    
+    def __compute_pressure_coefficients(self, velocity, model):
+        pressure = fd.Function(model.V, name = "Pressure_coeff")
+
+        pressure.interpolate(1 - (fd.sqrt(fd.dot(velocity, velocity))/self.V_inf) ** 2)
+        self.pressure_coeff = pressure
+        if self.write:
+            pressure_output = fd.VTKFile("pressure_output.pvd")
+            pressure_output.write(self.pressure_coeff)
+        return None
 
 
 
