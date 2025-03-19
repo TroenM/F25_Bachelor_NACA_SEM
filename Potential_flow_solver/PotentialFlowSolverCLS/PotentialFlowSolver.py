@@ -60,22 +60,40 @@ class PotentialFlowSolver:
     """
 
     ########### Constructor ###########
-    def __init__(self, airfoil : str = "0012", P : int = 1, alpha : float = 0, V_inf : float = 1.0, **kwargs):
+    def __init__(self, airfoil : str = "0012", P : int = 1, alpha : float = 0, **kwargs):
         self.airfoil = airfoil
         self.P = P
-        self.V_inf = V_inf
-        self.kwargs = kwargs
+
+        try:
+            self.kwargs = kwargs["kwargs"]
+        except:
+            self.kwargs = kwargs
+        self.V_inf = self.kwargs.get("V_inf", 1.0)
         self.alpha = alpha
         self.center_of_airfoil = self.kwargs.get("center_of_airfoil", np.array([0.5,0]))
         self.Gamma = 0
-        self.write = self.kwargs.get("write", True)
 
+        self.write = self.kwargs.get("write", True)
+        self.rot_mat = np.array([
+            [np.cos(self.alpha), -np.sin(self.alpha)],
+            [np.sin(self.alpha), np.cos(self.alpha)]
+        ])
+        self.inv_rot_mat = np.array([
+            [np.cos(-self.alpha), -np.sin(-self.alpha)],
+            [np.sin(-self.alpha), np.cos(-self.alpha)]
+        ])
         # Setting up the mesh
         self.xlim = self.kwargs.get("xlim", [-7, 13])
         self.ylim = self.kwargs.get("ylim", [-2, 1])
 
         self.mesh = naca_mesh(self.airfoil, self.alpha, self.xlim, self.ylim, center_of_airfoil=self.center_of_airfoil)
         self.fd_mesh = meshio_to_fd(self.mesh)
+
+        self.a = self.kwargs.get("a", 1)
+        self.b = self.kwargs.get("b", int(self.airfoil[2:])/50)
+        a_b_norm = np.sqrt(self.a**2 + self.b**2)
+        self.a *= np.sqrt(2)/a_b_norm
+        self.b *= np.sqrt(2)/a_b_norm
 
         # Handeling output files
         if self.write:
@@ -99,10 +117,11 @@ class PotentialFlowSolver:
     def solve(self):
         center_of_vortex = self.kwargs.get("center_of_vortex", self.center_of_airfoil)
         # Identify trailing edge and leading edge
-        p1, p2, p_te, p_leading_edge= self.get_edge_info()
-        v12 = (p2 - p1)
+        p1, p2, p_te, p_leading_edge, pn, pnm1= self.get_edge_info()
+        v12 = (pn - p1)
         p_te_new = (p_te-center_of_vortex)*1.01 + center_of_vortex
-
+        p2new = ((p2 - self.center_of_airfoil)@self.rot_mat -0.01)@self.inv_rot_mat + self.center_of_airfoil
+        pnm1new = ((pnm1 - self.center_of_airfoil)@self.rot_mat +0.01)@self.inv_rot_mat + self.center_of_airfoil
 
 
         # Initializing Laplaze solver
@@ -135,12 +154,14 @@ class PotentialFlowSolver:
             print(f"Starting iteration {it}")
 
             # Computing the vortex strength
-            vte = velocity.at(p_te_new)
+            #vte = velocity.at(p_te_new)
+            vte = velocity.at(p2new) + velocity.at(pnm1new)
             #Gamma = self.compute_circular_vortex_strength(v12, vte, p_te_new, center_of_vortex) # TO BE IMPLEMENTED
-            Gamma = self.compute_vortex_strength(v12, vte, p_te_new)/4.6
+            Gamma = self.compute_vortex_strength(v12, vte, p_te_new)/ self.kwargs.get("g_div", 7)
             self.Gamma += Gamma
             # Checking for convergence
             if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
+
                 print(f"Solver converged in {it-1} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
@@ -178,6 +199,9 @@ class PotentialFlowSolver:
                 self.vortex_output.write(vortex)
 
             print(f"\t Iteration time: {time() - time_it} seconds\n")
+        
+        self.lift = -self.Gamma * self.V_inf * self.kwargs.get("rho", 1.225)
+        self.lift_coeff = self.lift / (1/2 * self.kwargs.get("rho", 1.225) * self.V_inf**2)
 
         if it == self.kwargs.get("max_iter", 20) - 1:
             print(f"Solver did not converge in {it} iterations")
@@ -196,7 +220,10 @@ class PotentialFlowSolver:
         naca_points = np.unique(naca_lines)
 
         p1 = self.mesh.points[np.min(naca_points)][:2] # Lower point at trailing edge
-        p2 = self.mesh.points[np.max(naca_points)][:2] # Upper point at trailing edge
+        p2 = self.mesh.points[np.min(naca_points)+1][:2] # Second lower point at trailing edge
+
+        pn = self.mesh.points[np.max(naca_points)][:2] # Upper point at trailing edge
+        pnm1 = self.mesh.points[np.max(naca_points)-1][:2] # Second upper point at trailing edge
         p_te = ((p1+p2)/2)[:2] # Shift off boundary
 
         #p_leading_edge = self.mesh.points[np.min(naca_points) + (np.max(naca_points) - np.min(naca_points))//2][:2]
@@ -204,14 +231,14 @@ class PotentialFlowSolver:
         # Assuming the leading edge is at (0,0) before rotation
         alpha = np.deg2rad(self.alpha)
         p_leading_edge = np.array([[np.cos(alpha), np.sin(alpha)], [-np.sin(alpha), np.cos(alpha)]]) @ np.array([-1, 0]) + np.array([1, 0])
-        return p1, p2, p_te, p_leading_edge
+        return p1, pn, p_te, p_leading_edge, pn, pnm1
 
     def compute_vortex_strength(self, v12, vte, p_te_new) -> float:
         """
         Computes the vortex strength for the given iteration
         """
-        a = self.kwargs.get("a", 1)
-        b = self.kwargs.get("b", int(self.airfoil[2:])/100)
+        a = self.a
+        b = self.b
         alpha = np.deg2rad(self.alpha)
 
         # Get the coordinates of the trailing edge
@@ -252,8 +279,8 @@ class PotentialFlowSolver:
         alpha = fd.Constant(alpha)
 
         # Extract airfoil scaling parameters
-        a = self.kwargs.get("a", 1)  # Major axis scaling
-        b = self.kwargs.get("b", int(self.airfoil[2:]) / 100)  # Minor axis scaling
+        a = self.a
+        b = self.b
 
         # Translate coordinates to vortex-centered frame
         x_shifted = model.x - center_of_vortex[0]
