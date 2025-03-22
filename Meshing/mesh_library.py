@@ -3,6 +3,7 @@ import meshio
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 import os
+from scipy.interpolate import interp1d
 
 try:
     import gmsh
@@ -420,6 +421,9 @@ def meshio_to_fd(mesh: meshio.Mesh):
     os.system("rm temp.msh")
 
     return fd_mesh
+
+
+
 
 if __name__ == "__main__":
     mesh = naca_mesh("0012", write = True, o = "test", n_in = 70, n_out = 70, n_bed = 70, n_fs = 300)

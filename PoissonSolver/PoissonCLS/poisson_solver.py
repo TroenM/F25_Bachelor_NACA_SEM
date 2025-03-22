@@ -3,6 +3,12 @@ import firedrake as fd
 from firedrake.__future__ import interpolate
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
+import os
+sys.path.append(os.getcwd())
+
+
+from Meshing.mesh_library import *
 print("Libraries fetched!\n")
 
 
@@ -36,9 +42,8 @@ class PoissonSolver:
 
 
     ########## SETUP METHODS ##########
-    def __init__(self, mesh: fd.Mesh, P = 1):
+    def __init__(self, mesh: meshio.Mesh, P = 1):
         """Initializing solver befor BC are given"""
-
         self.mesh = mesh
         self.P = P
 

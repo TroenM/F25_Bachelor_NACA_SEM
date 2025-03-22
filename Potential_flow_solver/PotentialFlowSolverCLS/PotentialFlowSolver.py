@@ -7,13 +7,10 @@ from time import time
 
 #### Running from F25_Bachelor_NACA_SEM ####
 sys.path.append(os.getcwd())
-try:
-    from PoissonSolver.PoissonCLS.poisson_solver import PoissonSolver
-    from Meshing.mesh_library import *
-    os.chdir("./Potential_flow_solver/PotentialFlowSolverCLS")
-except:
-    from poisson_test import PoissonSolver
-    from mesh_test import*
+
+from PoissonSolver.PoissonCLS.poisson_solver import PoissonSolver
+from Meshing.mesh_library import *
+os.chdir("./Potential_flow_solver/PotentialFlowSolverCLS")
     
 
 
@@ -96,10 +93,7 @@ class PotentialFlowSolver:
         self.fd_mesh = meshio_to_fd(self.mesh)
 
         self.a = self.kwargs.get("a", 1)
-        self.b = self.kwargs.get("b", int(self.airfoil[2:])/50)
-        a_b_norm = np.sqrt(self.a**2 + self.b**2)
-        self.a *= np.sqrt(2)/a_b_norm
-        self.b *= np.sqrt(2)/a_b_norm
+        self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
 
         # Handeling output files
         if self.write:
@@ -141,6 +135,12 @@ class PotentialFlowSolver:
         model = PoissonSolver(self.fd_mesh, P=self.P)
         model.impose_NBC(fd.Constant(-self.V_inf), self.kwargs.get("inlet", 1))
         model.impose_NBC(fd.Constant(self.V_inf), self.kwargs.get("outlet", 2))
+        if self.kwargs.get("fs_DBC", np.array([0])).any():
+            fs_indicator = self.mesh.cell_data_dict["gmsh:physical"]["line"] == 4
+            fs_points = np.unique(self.mesh.cells_dict["line"][fs_indicator])
+            xs = (self.mesh.points[fs_points])[:,0]
+            ys = self.kwargs.get("fs_DBC")
+            model.impose_DBC(interp1d(xs,ys), self.kwargs.get("fs", 4), "only_x")
         model.solve(solver_params=self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"}))
 
         # Standardizing the velocity potential to avoid overflow
@@ -280,8 +280,10 @@ class PotentialFlowSolver:
         Wx_rot = Wx * np.cos(alpha) - Wy * np.sin(alpha)
         Wy_rot = Wx * np.sin(alpha) + Wy * np.cos(alpha)
 
+        elipse_circumference = np.pi*(3*(a+b)-np.sqrt((3*a+b)*(a+3*b)))
+
         # Computing the vortex strength
-        Gamma = -2*np.pi*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
+        Gamma = -elipse_circumference*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
 
         return Gamma
 
@@ -309,9 +311,11 @@ class PotentialFlowSolver:
         x_scaled = x_rot / a
         y_scaled = y_rot / b
 
+        elipse_circumference = np.pi*(3*(a+b)-np.sqrt((3*a+b)*(a+3*b)))
+
         # Compute the unrotated vortex velocity field
-        u_x = -Gamma / (2 * np.pi) * y_scaled / (x_scaled**2 + y_scaled**2)
-        u_y = Gamma / (2 * np.pi) * x_scaled / (x_scaled**2 + y_scaled**2)
+        u_x = -Gamma / elipse_circumference * y_scaled / (x_scaled**2 + y_scaled**2)
+        u_y = Gamma / elipse_circumference * x_scaled / (x_scaled**2 + y_scaled**2)
 
         # Convert to firedrake vector function
         vortex.project(fd.as_vector([u_x, u_y]))
