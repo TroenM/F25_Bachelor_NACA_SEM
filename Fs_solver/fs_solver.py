@@ -7,7 +7,6 @@ from time import time
 
 #### Running from F25_Bachelor_NACA_SEM ####
 sys.path.append(os.getcwd())
-
 from Potential_flow_solver.PotentialFlowSolverCLS.PotentialFlowSolver import *
 
 os.chdir("../../Fs_solver")
@@ -99,6 +98,7 @@ class FsSolver:
         self.V = fd.FunctionSpace(self.fd_mesh, "CG", self.P)
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
         fs_indecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
+        print(len((fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)))
         self.fs_points = (fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)[fs_indecies,:]
         self.fs_xs = self.fs_points[:,0]
 
@@ -125,8 +125,10 @@ class FsSolver:
 
 
     def solve(self) -> None:
-        kwargs_for_Kutta_kondition = self.kwargs
+        kwargs_for_Kutta_kondition = (self.kwargs).copy()
         kwargs_for_Kutta_kondition["write"] = False
+        kwargs_for_Kutta_kondition["mesh"] = self.mesh
+        kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
         model = PotentialFlowSolver(self.airfoil , self.alpha, self.P, kwargs=kwargs_for_Kutta_kondition)
         model.solve()
         print("initialization done")
@@ -146,10 +148,10 @@ class FsSolver:
                 break
 
             # Update dirichlet boundary condition
-            kwargs_for_Kutta_kondition["fs_DBC"] = self.__compute_phi_tilde()
+            kwargs_for_Kutta_kondition["fs_DBC"] = self.__compute_phi_tilde(model)
 
             # Update mesh
-            new_mesh = shift_surface(mesh, interp1d(self.fs_xs, old_eta), interp1d(self.fs_xs, new_eta))
+            new_mesh = shift_surface(self.mesh, interp1d(self.fs_xs, old_eta), interp1d(self.fs_xs, new_eta))
             self.__update_mesh_data(new_mesh)
             kwargs_for_Kutta_kondition["mesh"] = self.mesh
 
@@ -160,16 +162,18 @@ class FsSolver:
             old_eta = new_eta
         
         self.velocity = model.velocity
+
         if self.write:
-            velocity = fd.Function(model.W, name="velocity")
+            self.velocity_output.write(self.velocity)
         return None
 
             
 
     def __compute_eta(self, model : PotentialFlowSolver) -> np.ndarray:
         x = self.fs_points[:,0]
-        velocity_at_fs = model.velocity.at(self.fs_points)[:,:2]
-        u, w = velocity_at_fs
+        velocity_at_fs = np.array(model.velocity.at(self.fs_points))[:,:2]
+        u = velocity_at_fs[:,0]
+        w = velocity_at_fs[:,1]
         eta_x = (u - np.sqrt(u**2 - 4*w**2)) / (2*w)
             
         eta = np.zeros_like(eta_x)
@@ -186,8 +190,8 @@ class FsSolver:
     def __update_mesh_data(self, new_mesh : meshio.Mesh) -> None:
         self.mesh = new_mesh
         self.fd_mesh = meshio_to_fd(self.mesh)
-        self.V = fd.FuncitonSpace(self.fd_mesh, self.P)
-        self.W = fd.FuncitonVectorSpace(self.fd_mesh, "CG", self.P)
+        self.V = fd.FunctionSpace(self.fd_mesh, "CG", self.P)
+        self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
         fs_indecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
         self.fs_points = (fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)[fs_indecies,:]
         self.fs_xs = self.fs_points[:,0]
@@ -195,8 +199,8 @@ class FsSolver:
     
     def __compute_phi_tilde(self, model) -> np.ndarray:
         x = self.fs_points[:,0]
-        velocity_at_fs = model.velocity.at(self.fs_points)[:,:2]
-        u, w = velocity_at_fs
+        velocity_at_fs = np.array(model.velocity.at(self.fs_points))[:,:2]
+        u = velocity_at_fs[:,0]
             
         phi_tilde = np.zeros_like(u)
 
@@ -206,3 +210,17 @@ class FsSolver:
             phi_tilde[i] = trapezoid(u[i: i+2], x[i:i+2]) + phi_tilde[i-1]
         
         return phi_tilde
+    
+
+
+
+
+if __name__ == "__main__":
+    kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 5, "write":True,
+           "n_airfoil": 20,
+           "n_fs": 10,
+           "n_bed": 10,
+           "n_inlet": 5,
+           "n_outlet": 5}
+    model = FsSolver("0012" , alpha=10, P=2, kwargs = kwargs)
+    model.solve()

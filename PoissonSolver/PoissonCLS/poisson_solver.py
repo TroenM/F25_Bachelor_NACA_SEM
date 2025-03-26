@@ -42,7 +42,7 @@ class PoissonSolver:
 
 
     ########## SETUP METHODS ##########
-    def __init__(self, mesh: meshio.Mesh, P = 1):
+    def __init__(self, mesh: fd.Mesh, P = 1):
         """Initializing solver befor BC are given"""
         self.mesh = mesh
         self.P = P
@@ -66,6 +66,10 @@ class PoissonSolver:
         self.u_sol = fd.Function(self.V)
         self.true_sol = None
 
+        fs_indecies = self.V.boundary_nodes(4)
+        print(len((fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)))
+        self.fs_points = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[fs_indecies,:]
+        self.fs_xs = self.fs_points[:,0]
         
         if __name__ == "__main__":
             print("PoissonSolver initialized!")

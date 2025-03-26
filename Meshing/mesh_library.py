@@ -313,7 +313,7 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     boundary_loop = gmsh.model.geo.addCurveLoop([inlet, fs, -outlet, -bed], tag=1)
 
     # ==================== Handling the airfoil ====================
-    n_airfoil = kwargs.get('n_airfoil', 60)
+    n_airfoil = kwargs.get('n_airfoil') if kwargs.get('n_airfoil') else 60
     coords = naca_4digit(airfoil, n = n_airfoil, alpha=alpha, position_of_center=kwargs.get("center_of_airfoil",np.array([0.5,0])))
 
 
@@ -367,22 +367,22 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     gmsh.model.setPhysicalName(2, 6, 'domain')
     # ==================== Transfinte curves ====================
     # Inlet
-    n_in = kwargs.get('n_in', 10*7)
+    n_in = kwargs.get('n_in') if kwargs.get('n_in') else 70
     prog_in = kwargs.get('prog_in', 0.99)
     gmsh.model.mesh.setTransfiniteCurve(tag = inlet, numNodes=n_in, coef=prog_in)
 
     # Outlet
-    n_out = kwargs.get('n_out', 10*7)
+    n_out = kwargs.get('n_out') if kwargs.get('n_out') else 70
     prog_out = kwargs.get('prog_out', 0.99)
     gmsh.model.mesh.setTransfiniteCurve(tag = outlet, numNodes=n_out, coef=prog_out)
 
     # Bed
-    n_bed = kwargs.get('n_bed', 200)
+    n_bed = kwargs.get('n_bed') if kwargs.get('n_bed') else 200
     prog_bed = kwargs.get('prog_bed', 1)
     gmsh.model.mesh.setTransfiniteCurve(tag = bed, numNodes=n_bed, coef=prog_bed)
 
     # Free surface
-    n_fs = kwargs.get('n_fs', 200)
+    n_fs = kwargs.get('n_fs') if kwargs.get('n_fs') else 200
     prog_fs = kwargs.get('prog_fs', 1)
     gmsh.model.mesh.setTransfiniteCurve(tag = fs, numNodes=n_fs, coef=prog_fs)
 

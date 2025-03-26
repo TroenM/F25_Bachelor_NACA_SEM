@@ -94,7 +94,7 @@ class PotentialFlowSolver:
                               n_bed = self.kwargs.get("n_bed"),
                               n_inlet = self.kwargs.get("n_inlet"),
                               n_outlet = self.kwargs.get("n_outlet")))
-        self.fd_mesh = meshio_to_fd(self.mesh)
+        self.fd_mesh = self.kwargs.get("fd_mesh", meshio_to_fd(self.mesh))
 
         self.a = self.kwargs.get("a", 1)
         self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
@@ -141,8 +141,11 @@ class PotentialFlowSolver:
         model.impose_NBC(fd.Constant(self.V_inf), self.kwargs.get("outlet", 2))
         if self.kwargs.get("fs_DBC", np.array([0])).any():
             boundary_indecies = model.V.boundary_nodes(self.kwargs.get("fs", 4))
+            print(len((fd.Function(model.W).interpolate(model.mesh.coordinates).dat.data)[:,0]))
             xs = (fd.Function(model.W).interpolate(model.mesh.coordinates).dat.data)[boundary_indecies,0]
             ys = self.kwargs.get("fs_DBC")
+            print(len(xs))
+            print(len(ys))
             model.impose_DBC(interp1d(xs,ys), self.kwargs.get("fs", 4), "only_x")
         model.solve(solver_params=self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"}))
 
