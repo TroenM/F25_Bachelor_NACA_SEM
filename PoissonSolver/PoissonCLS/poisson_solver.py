@@ -142,6 +142,24 @@ class PoissonSolver:
             bc.interpolate(bc_func(self.x, self.y))
             self.DirBCs.append(fd.DirichletBC(self.V, bc,bc_idx))
         
+        elif func_type == "only_x":
+            bc = fd.Function(self.V)
+            bc.interpolate(bc_idx)
+            coords = fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data
+            
+            # find boundary coords
+            boundary_indecies = self.V.boundary_nodes(bc_idx)
+            boundary_coords = coords[boundary_indecies,:]
+            
+            # Interpolate using x-coordinate
+            x_vals = boundary_coords[:, 0]
+            bc.dat.data[boundary_indecies] = bc_func(x_vals)
+
+            self.DirBCs.append(fd.DirichletBC(self.V, bc, bc_idx))
+            
+
+
+        
         else:
             raise ValueError("Boundary condition must be a firedrake.function.Function or a callable object")
 

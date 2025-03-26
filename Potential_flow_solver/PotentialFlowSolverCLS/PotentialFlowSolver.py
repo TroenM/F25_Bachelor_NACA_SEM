@@ -49,11 +49,15 @@ class PotentialFlowSolver:
         - Index for inlet boundary
     outlet : int, Default: 2
         - Index for outlet boundary
-    fs : int, Default: 3
+    bed : int, Default 3
+        - Index for the seabed
+    fs : int, Default: 4
         - Index for free surface boundary
     naca : int, Default: 5
-        - Index for NACA airfoil boundary    
+        - Index for NACA airfoil boundary   
 
+ 
+    mesh : meshio.Mesh, Default: naca_mesh filled with kwargs
     """
 
     ########### Constructor ###########
@@ -83,13 +87,13 @@ class PotentialFlowSolver:
         self.xlim = self.kwargs.get("xlim", [-7, 13])
         self.ylim = self.kwargs.get("ylim", [-2, 1])
 
-        self.mesh = naca_mesh(self.airfoil, self.alpha, self.xlim, self.ylim, 
+        self.mesh = self.kwargs.get("mesh", naca_mesh(self.airfoil, self.alpha, self.xlim, self.ylim, 
                               center_of_airfoil=self.center_of_airfoil,
                               n_airfoil = self.kwargs.get("n_airfoil"),
                               n_fs = self.kwargs.get("n_fs"),
                               n_bed = self.kwargs.get("n_bed"),
                               n_inlet = self.kwargs.get("n_inlet"),
-                              n_outlet = self.kwargs.get("n_outlet"))
+                              n_outlet = self.kwargs.get("n_outlet")))
         self.fd_mesh = meshio_to_fd(self.mesh)
 
         self.a = self.kwargs.get("a", 1)
@@ -136,9 +140,8 @@ class PotentialFlowSolver:
         model.impose_NBC(fd.Constant(-self.V_inf), self.kwargs.get("inlet", 1))
         model.impose_NBC(fd.Constant(self.V_inf), self.kwargs.get("outlet", 2))
         if self.kwargs.get("fs_DBC", np.array([0])).any():
-            fs_indicator = self.mesh.cell_data_dict["gmsh:physical"]["line"] == 4
-            fs_points = np.unique(self.mesh.cells_dict["line"][fs_indicator])
-            xs = (self.mesh.points[fs_points])[:,0]
+            boundary_indecies = model.V.boundary_nodes(self.kwargs.get("fs", 4))
+            xs = (fd.Function(model.W).interpolate(model.mesh.coordinates).dat.data)[boundary_indecies,0]
             ys = self.kwargs.get("fs_DBC")
             model.impose_DBC(interp1d(xs,ys), self.kwargs.get("fs", 4), "only_x")
         model.solve(solver_params=self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"}))
@@ -218,6 +221,8 @@ class PotentialFlowSolver:
 
         self.__compute_pressure_coefficients(velocity, model)
 
+        self.velocity = velocity
+
         if it == self.kwargs.get("max_iter", 20) - 1:
             print(f"Solver did not converge in {it} iterations")
             print(f"\t Total time: {time() - time_total}")
@@ -276,6 +281,7 @@ class PotentialFlowSolver:
         Wx = -y_s / (x_s**2 + y_s**2)
         Wy = x_s / (x_s**2 + y_s**2)
 
+        
         # Rotating back to global coordinates
         Wx_rot = Wx * np.cos(alpha) - Wy * np.sin(alpha)
         Wy_rot = Wx * np.sin(alpha) + Wy * np.cos(alpha)
