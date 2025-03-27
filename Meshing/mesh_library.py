@@ -92,7 +92,7 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
         raise ValueError("That is not a valid gridtype, it should either be triangle or quad")
 
 
-def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], legend : bool=False, dpi=300) -> None:
+def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], legend : bool=False, dpi=300, show=True) -> None:
     # Extract points and cells
     points = mesh.points[:, :2]  # Only take x, y for 2D
     cell_dict = mesh.cells_dict.keys()
@@ -198,7 +198,8 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.title("2D Mesh Visualization")
-    plt.show()
+    if show:
+        plt.show()
     return None
 
 
