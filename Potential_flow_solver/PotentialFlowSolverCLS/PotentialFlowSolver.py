@@ -128,11 +128,11 @@ class PotentialFlowSolver:
     def solve(self):
         center_of_vortex = self.kwargs.get("center_of_vortex", self.center_of_airfoil)
         # Identify trailing edge and leading edge
-        p1, p2, p_te, p_leading_edge, pn, pnm1= self.get_edge_info()
+        p1, p_te, p_leading_edge, pn= self.get_edge_info()
         v12 = (pn - p1)
         p_te_new = (p_te-center_of_vortex)*1.01 + center_of_vortex
-        p2new = p2 + (p2 - pnm1) #0.5
-        pnm1new = pnm1 + (pnm1 - p2) #0.5
+        p2new = p1 - v12 #0.5
+        pnm1new = pn + v12 #0.5
 
 
         # Initializing Laplaze solver
@@ -245,7 +245,6 @@ class PotentialFlowSolver:
             return self.g_div
         return self.kwargs.get("g_div", 7)
 
-
     def get_edge_info(self):
         """
         Returns the coordinates of the leading edge, trailing edge and the point at the trailing edge
@@ -255,19 +254,15 @@ class PotentialFlowSolver:
             np.concatenate(self.mesh.cell_data["gmsh:physical"]) == self.kwargs.get("naca", 5))[0]]
         naca_points = np.unique(naca_lines)
 
-        p1 = self.mesh.points[np.min(naca_points)][:2] # Lower point at trailing edge
-        p2 = self.mesh.points[np.min(naca_points)+1][:2] # Second lower point at trailing edge
+        p_te = self.mesh.points[np.min(naca_points)][:2] # Lower point at trailing edge
+        p1 = self.mesh.points[np.min(naca_points)+1][:2] # Second lower point at trailing edge
 
         pn = self.mesh.points[np.max(naca_points)][:2] # Upper point at trailing edge
-        pnm1 = self.mesh.points[np.max(naca_points)-1][:2] # Second upper point at trailing edge
-        p_te = ((p1+p2)/2)[:2] # Shift off boundary
-
-        #p_leading_edge = self.mesh.points[np.min(naca_points) + (np.max(naca_points) - np.min(naca_points))//2][:2]
 
         # Assuming the leading edge is at (0,0) before rotation
-        alpha = np.deg2rad(self.alpha)
+        alpha = self.alpha
         p_leading_edge = np.array([[np.cos(alpha), np.sin(alpha)], [-np.sin(alpha), np.cos(alpha)]]) @ np.array([-1, 0]) + np.array([1, 0])
-        return p1, p2, p_te, p_leading_edge, pn, pnm1
+        return p1, p_te, p_leading_edge, pn
 
     def compute_vortex_strength(self, v12, vte, p_te_new) -> float:
         """
@@ -341,7 +336,7 @@ class PotentialFlowSolver:
         # Compute the unrotated vortex velocity field
         u_x = -Gamma / elipse_circumference * y_scaled / (x_scaled**2 + y_scaled**2)
         u_y = Gamma / elipse_circumference * x_scaled / (x_scaled**2 + y_scaled**2)
-        
+
         u_x = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
         u_y = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
 
@@ -349,41 +344,7 @@ class PotentialFlowSolver:
         vortex.project(fd.as_vector([u_x, u_y]))
 
         return vortex
-
-    def compute_circular_vortex(self, Gamma, model, center_of_vortex, vortex) -> fd.Function:
-        """
-        Computes the vortex field for the given vortex strength
-        """
-
-        # Translate coordinates to vortex-centered frame
-        x_shifted = model.x - center_of_vortex[0]
-        y_shifted = model.y - center_of_vortex[1]
-
-        # Compute the unrotated vortex velocity field
-        u_x = -Gamma / (2 * np.pi) * y_shifted / (x_shifted**2 + y_shifted**2)
-        u_y = Gamma / (2 * np.pi) * x_shifted / (x_shifted**2 + y_shifted**2)
-
-        # Convert to firedrake vector function
-        vortex.project(fd.as_vector([u_x, u_y]))
-
-        return vortex
-    
-    def compute_circular_vortex_strength(self, v12, vte, p_te_new, center_of_vortex) -> float:
-        """
-        Computes the vortex strength for the given iteration
-        """
-        # Get the coordinates of the trailing edge
-        p_x = p_te_new[0] - center_of_vortex[0]
-        p_y = p_te_new[1] - center_of_vortex[1]
-
-        Wx = -p_y / (p_x**2 + p_y**2)
-        Wy = p_x / (p_x**2 + p_y**2)
-
-        # Computing the vortex strength
-        Gamma = -2*np.pi*(v12[0]*vte[0] + v12[1]*vte[1])/(v12[0]*Wx + v12[1]*Wy)
-        return Gamma
         
-
     def compute_boundary_correction(self, vortex) -> fd.Function:
         """
         Computes the boundary correction for the velocity field
@@ -478,5 +439,5 @@ if __name__ == "__main__":
         circular_model.solve()
         circular_data[i,1] = circular_model.lift_coeff
         print(f"{i}/{len(nasa_data[:,0])}")
-    np.savetxt("../../Visualisation/circular_cl.txt",circular_data)
-    np.savetxt("../../Visualisation/eliptic_cl.txt",eliptic_data)
+    # np.savetxt("../../Visualisation/circular_cl.txt",circular_data)
+    # np.savetxt("../../Visualisation/eliptic_cl.txt",eliptic_data)

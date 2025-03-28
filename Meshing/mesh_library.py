@@ -243,19 +243,27 @@ def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : n
     m = int(string[0])/100
     p = int(string[1])/10 if string[1] != "0" else 0.1
     t = int(string[2] + string[3])/100
-    beta = np.linspace(0,np.pi,(n//2)+1)
-    x = (1-np.cos(beta))/2
-    yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
-    yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
-    lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1]
-    if (n//2)*2 != n:
-        upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:]
-    else:
-        beta = np.linspace(0,np.pi,(n//2))
+
+    if (n//2)*2 == n:
+
+        beta = np.linspace(0,np.pi,(n//2)+1)
         x = (1-np.cos(beta))/2
-        yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1015 * x**4)
+        yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4)
         yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
-        upper = ((np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))))[1:]
+        lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1][:-1]
+        upper = np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))[:-1]
+    elif (n//2)*2 != n:
+        beta = np.linspace(0,np.pi,(n//2)+2)
+        x = (1-np.cos(beta))/2
+        yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4)
+        yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
+        lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1][:-1]
+
+        beta = np.linspace(0,np.pi,(n//2)+1)
+        x = (1-np.cos(beta))/2
+        yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4)
+        yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
+        upper = np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))[:-1]
     points = np.vstack((lower, upper))
 
     # rotatig the airfoil
