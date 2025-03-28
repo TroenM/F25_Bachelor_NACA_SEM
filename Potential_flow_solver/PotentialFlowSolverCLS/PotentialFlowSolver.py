@@ -299,8 +299,8 @@ class PotentialFlowSolver:
 
         
         # Rotating back to global coordinates
-        Wx_rot = Wx * np.cos(alpha) - Wy * np.sin(alpha)
-        Wy_rot = Wx * np.sin(alpha) + Wy * np.cos(alpha)
+        Wx_rot = Wx * np.cos(-alpha) - Wy * np.sin(-alpha)
+        Wy_rot = Wx * np.sin(-alpha) + Wy * np.cos(-alpha)
 
         elipse_circumference = np.pi*(3*(a+b)-np.sqrt((3*a+b)*(a+3*b)))
 
@@ -325,19 +325,25 @@ class PotentialFlowSolver:
         x_shifted = model.x - center_of_vortex[0]
         y_shifted = model.y - center_of_vortex[1]
 
-        # Rotate global coordinates to align with airfoil
         x_rot = x_shifted * fd.cos(alpha) - y_shifted * fd.sin(alpha)
         y_rot = x_shifted * fd.sin(alpha) + y_shifted * fd.cos(alpha)
 
-        # Apply elliptical scaling (stretch along x or y)
         x_scaled = x_rot / a
         y_scaled = y_rot / b
+        # Rotate global coordinates to align with airfoil
+        
+
+        # Apply elliptical scaling (stretch along x or y)
+        
 
         elipse_circumference = np.pi*(3*(a+b)-np.sqrt((3*a+b)*(a+3*b)))
 
         # Compute the unrotated vortex velocity field
         u_x = -Gamma / elipse_circumference * y_scaled / (x_scaled**2 + y_scaled**2)
         u_y = Gamma / elipse_circumference * x_scaled / (x_scaled**2 + y_scaled**2)
+        
+        u_x = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
+        u_y = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
 
         # Convert to firedrake vector function
         vortex.project(fd.as_vector([u_x, u_y]))

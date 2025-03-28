@@ -9,8 +9,5 @@
 <DataSet timestep="5" file="velocity_output/velocity_output_5.vtu" />
 <DataSet timestep="6" file="velocity_output/velocity_output_6.vtu" />
 <DataSet timestep="7" file="velocity_output/velocity_output_7.vtu" />
-<DataSet timestep="8" file="velocity_output/velocity_output_8.vtu" />
-<DataSet timestep="9" file="velocity_output/velocity_output_9.vtu" />
-<DataSet timestep="10" file="velocity_output/velocity_output_10.vtu" />
 </Collection>
 </VTKFile>
