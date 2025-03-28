@@ -131,8 +131,10 @@ class PotentialFlowSolver:
         p1, p_te, p_leading_edge, pn= self.get_edge_info()
         v12 = (pn - p1)
         p_te_new = (p_te-center_of_vortex)*1.01 + center_of_vortex
-        p2new = p1 - v12 #0.5
-        pnm1new = pn + v12 #0.5
+        p1new = p1 - v12 #0.5
+        pnnew = pn + v12 #0.5
+        print(p1new)
+        print(pnnew)
 
 
         # Initializing Laplaze solver
@@ -175,7 +177,7 @@ class PotentialFlowSolver:
 
             # Computing the vortex strength
             #vte = velocity.at(p_te_new)
-            vte = velocity.at(p2new) + velocity.at(pnm1new)
+            vte = velocity.at(p1new) + velocity.at(pnnew)
             #Gamma = self.compute_circular_vortex_strength(v12, vte, p_te_new, center_of_vortex) # TO BE IMPLEMENTED
             Gamma = self.compute_vortex_strength(v12, vte, p_te_new)
             Gammas.append(Gamma)

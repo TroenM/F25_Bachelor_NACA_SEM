@@ -18,9 +18,5 @@
 <DataSet timestep="14" file="velocity_output/velocity_output_14.vtu" />
 <DataSet timestep="15" file="velocity_output/velocity_output_15.vtu" />
 <DataSet timestep="16" file="velocity_output/velocity_output_16.vtu" />
-<DataSet timestep="17" file="velocity_output/velocity_output_17.vtu" />
-<DataSet timestep="18" file="velocity_output/velocity_output_18.vtu" />
-<DataSet timestep="19" file="velocity_output/velocity_output_19.vtu" />
-<DataSet timestep="20" file="velocity_output/velocity_output_20.vtu" />
 </Collection>
 </VTKFile>
