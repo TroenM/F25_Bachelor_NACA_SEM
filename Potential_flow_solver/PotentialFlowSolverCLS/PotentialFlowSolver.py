@@ -6,6 +6,11 @@ import sys
 from time import time
 
 #### Running from F25_Bachelor_NACA_SEM ####
+try:
+    os.chdir("./F25_Bachelor_NACA_SEM/")
+except:
+    pass
+
 sys.path.append(os.getcwd())
 
 from PoissonSolver.PoissonCLS.poisson_solver import PoissonSolver
@@ -123,6 +128,7 @@ class PotentialFlowSolver:
             
             self.velocity_output = fd.VTKFile("velocity_output.pvd")
             self.vortex_output = fd.VTKFile("vortex_output.pvd")
+            self.BC_output = fd.VTKFile("velocityBC.pvd")
 
 
     def solve(self):
@@ -130,17 +136,20 @@ class PotentialFlowSolver:
         # Identify trailing edge and leading edge
         p1, p_te, p_leading_edge, pn= self.get_edge_info()
         v12 = (pn - p1)
-        p_te_new = (p_te-center_of_vortex)*1.01 + center_of_vortex
-        p1new = p1 - v12 #0.5
-        pnnew = pn + v12 #0.5
+        p_te_new = (p_te-center_of_vortex)*(1 + 1e-2) + center_of_vortex
+        p1new = p1 - v12 * 0.4 
+        pnnew = pn + v12 * 0.4
         print(p1new)
         print(pnnew)
+        print(p_te_new)
 
 
         # Initializing Laplaze solver
         model = PoissonSolver(self.fd_mesh, P=self.P)
         model.impose_NBC(fd.Constant(-self.V_inf), self.kwargs.get("inlet", 1))
         model.impose_NBC(fd.Constant(self.V_inf), self.kwargs.get("outlet", 2))
+
+        # Free surface boundary condition
         if self.kwargs.get("fs_DBC", np.array([0])).any():
             boundary_indecies = model.V.boundary_nodes(self.kwargs.get("fs", 4))
             print(len((fd.Function(model.W).interpolate(model.mesh.coordinates).dat.data)[:,0]))
@@ -149,6 +158,7 @@ class PotentialFlowSolver:
             print(len(xs))
             print(len(ys))
             model.impose_DBC(interp1d(xs,ys), self.kwargs.get("fs", 4), "only_x")
+
         model.solve(solver_params=self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"}))
 
         # Standardizing the velocity potential to avoid overflow
@@ -169,37 +179,23 @@ class PotentialFlowSolver:
         velocityBC_sum = fd.Function(model.W, name="Boundary correction")
         time_total = time()
         self.Gamma = 0
-        # Main loop
         Gammas = [0]
-        for it, _ in enumerate(range(self.kwargs.get("max_iter", 20))):
+        
+        # Main loop
+        for it, _ in enumerate(range(self.kwargs.get("max_iter", 20) + 1)):
             time_it = time()
             print(f"Starting iteration {it}")
 
             # Computing the vortex strength
-            #vte = velocity.at(p_te_new)
-            vte = velocity.at(p1new) + velocity.at(pnnew)
+            vte = velocity.at(p_te_new)
+            #vte = velocity.at(p1new) + velocity.at(pnnew)
             #Gamma = self.compute_circular_vortex_strength(v12, vte, p_te_new, center_of_vortex) # TO BE IMPLEMENTED
             Gamma = self.compute_vortex_strength(v12, vte, p_te_new)
             Gammas.append(Gamma)
             Gamma /= self.__compute_Gamma_div(Gammas)
+            
             Gammas[-1] = Gamma
             self.Gamma += Gamma
-            # Checking for convergence
-            if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
-
-                print(f"Solver converged in {it-1} iterations")
-                print(f"\t Total time: {time() - time_total}")
-                print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
-                print(f"\n")
-                break
-
-            # Checking for divergence
-            if np.abs(Gamma - old_Gamma) > 1e4:
-                print(f"Solver diverged in {it} iterations")
-                print(f"\t Total time: {time() - time_total}")
-                print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
-                print(f"\n")
-                break
 
             # Compute the vortex
             #vortex = self.compute_circular_vortex(Gamma/20, model, center_of_vortex, vortex)
@@ -213,18 +209,50 @@ class PotentialFlowSolver:
             velocity += velocityBC
             velocityBC_sum += velocityBC
             
-            
+            # Check for convergence
+            if np.dot(v12, vte) < self.kwargs.get("dot_tol", 1e-6):
+                print(f"Solver converged in {it} iterations")
+                print(f"\t Total time: {time() - time_total}")
+                print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
+                print(f"\t dot product: {np.dot(v12, vte)}")
+                print(f"\n")
+                break
+
+            # Checking for Stagnation
+            if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
+
+                print(f"Solver stagnated in {it-1} iterations")
+                print(f"\t Total time: {time() - time_total}")
+                print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
+                print(f"\t dot product: {np.dot(v12, vte)}")
+                print(f"\n")
+                break
+
+            # Checking for divergence
+            if np.abs(Gamma - old_Gamma) > 1e4:
+                print(f"Solver diverged in {it} iterations")
+                print(f"\t Total time: {time() - time_total}")
+                print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
+                print(f"\t dot product: {np.dot(v12, vte)}")
+                print(f"\n")
+                break
+
             # Updating the vortex strength
             print(f"\t dGamma: {Gamma - old_Gamma}")
+            print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
             old_Gamma = Gamma
 
             # Write to file
             if self.write:
                 self.velocity_output.write(velocity)
                 self.vortex_output.write(vortex)
+                vortex += velocityBC
+                self.BC_output.write(vortex)
 
             print(f"\t Iteration time: {time() - time_it} seconds\n")
-        
+
+            # END OF MAIN LOOP
+
         self.lift = -self.Gamma * self.V_inf * self.kwargs.get("rho", 1.225)
         self.lift_coeff = self.lift / (1/2 * self.kwargs.get("rho", 1.225) * self.V_inf**2)
 
@@ -232,7 +260,7 @@ class PotentialFlowSolver:
 
         self.velocity = velocity
 
-        if it == self.kwargs.get("max_iter", 20) - 1:
+        if it == self.kwargs.get("max_iter", 20):
             print(f"Solver did not converge in {it} iterations")
             print(f"\t Total time: {time() - time_total}")
             print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
@@ -272,7 +300,11 @@ class PotentialFlowSolver:
         """
         a = self.a
         b = self.b
-        alpha = self.alpha
+
+        ##################################################
+        ###### ALPHA IS SET TO ZERO FOR NOW ##############
+        ##################################################
+        alpha = 0 #self.alpha
 
         # Get the coordinates of the trailing edge
         p_x = p_te_new[0]
@@ -311,7 +343,11 @@ class PotentialFlowSolver:
         Computes the vortex field for the given vortex strength
         """
 
-        alpha = self.alpha  # Convert angle of attack to radians
+        ##################################################
+        ###### ALPHA IS SET TO ZERO FOR NOW ##############
+        ##################################################
+
+        alpha = 0#self.alpha  # Convert angle of attack to radians
         alpha = fd.Constant(alpha)
 
         # Extract airfoil scaling parameters
@@ -362,7 +398,7 @@ class PotentialFlowSolver:
         correction_model.impose_NBC( -vortex, self.kwargs.get("naca", 5))
 
         # Solving the correction model
-        correction_model.solve(solver_params={"ksp_type": "preonly", "pc_type": "lu"})
+        correction_model.solve(solver_params=self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"}))
         velocityPotential = correction_model.u_sol
         velocityPotential -= correction_model.u_sol.dat.data.min()
 
@@ -385,61 +421,66 @@ class PotentialFlowSolver:
 
 
 if __name__ == "__main__":
-    nasa_data = np.array([
-        [-17.2794,-1.25323],
-        [-16.2296,-1.34704],
-        [-15.8616,-1.54416],
-        [-15.1713,-1.51805],
-        [-14.3133,-1.44038],
-        [-13.2811,-1.3712],
-        [-12.2535,-1.25912],
-        [-11.2222,-1.18135],
-        [-10.1947,-1.06927],
-        [-8.14138,-0.827958],
-        [-6.25579,-0.638207],
-        [-5.22822,-0.526128],
-        [-4.19972,-0.422627],
-        [-1.96944,-0.215533],
-        [0, 0],
-        [0.940006,0.120611],
-        [1.96944,0.215533],
-        [2.99515,0.34477],
-        [3.85131,0.439599],
-        [4.87888,0.551678],
-        [5.90831,0.6466],
-        [7.96346,0.870758],
-        [10.1891,1.12074],
-        [11.0471,1.19842],
-        [13.1088,1.36252],
-        [16.3759,1.59591],
-        [16.5678,1.42443],
-        [17.2971,1.09024]])
-    eliptic_data = np.empty_like(nasa_data)
-    eliptic_data[:,0] = nasa_data[:,0]
-    circular_data = np.empty_like(nasa_data)
-    circular_data[:,0] = nasa_data[:,0]
-    kwargs_eliptic = {"ylim":[-4,4], "V_inf": 10, "g_div": 7.5, "write":False,
-           "n_airfoil": 2000,
-           "n_fs": 50,
-           "n_bed": 50,
-           "n_inlet": 20,
-           "n_outlet": 20}
-    kwargs_circular = {"ylim":[-4,4], "V_inf": 10, "g_div": 5, "write":False,
-           "n_airfoil": 2000,
-           "n_fs": 50,
-           "n_bed": 50,
-           "n_inlet": 20,
-           "n_outlet": 20,
-           "a": 1,
-           "b": 1}
+
+    task = input("""
+    1: Compute lift coefficient for NACA airfoil
+    2: Compute simple model
+    Choose task: """)
+
+    if task == "1":
+        """Example for NACA 0012 airfoil
+        NASA data from https://turbmodels.larc.nasa.gov/naca0012_val.html
+           - Digitized Abbott and von Doenhoff CL data
+        Data is in the form of [alpha, cl]
+        NASA data is in degrees"""
+
+        nasa_data = np.loadtxt("0012.abbottdata.cl.txt")
+        eliptic_data = np.empty_like(nasa_data)
+        eliptic_data[:,0] = nasa_data[:,0]
+        circular_data = np.empty_like(nasa_data)
+        circular_data[:,0] = nasa_data[:,0]
+        kwargs_eliptic = {"ylim":[-4,4], "V_inf": 10, "g_div": 7.5, "write":False,
+               "n_airfoil": 2000,
+               "n_fs": 50,
+               "n_bed": 50,
+               "n_inlet": 20,
+               "n_outlet": 20}
+        kwargs_circular = {"ylim":[-4,4], "V_inf": 10, "g_div": 5, "write":False,
+               "n_airfoil": 2000,
+               "n_fs": 50,
+               "n_bed": 50,
+               "n_inlet": 20,
+               "n_outlet": 20,
+               "a": 1,
+               "b": 1}
+
+        for i,val in enumerate(nasa_data[:,0]):
+            eliptic_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_eliptic)
+            eliptic_model.solve()
+            eliptic_data[i,1] = eliptic_model.lift_coeff
+            circular_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_circular)
+            circular_model.solve()
+            circular_data[i,1] = circular_model.lift_coeff
+            print(f"{i}/{len(nasa_data[:,0])}")
+        
+        save_results = input("Save results? (y/n) \n This will overwrite the existing files")
+        if save_results == "n":
+            np.savetxt("../../Visualisation/circular_cl.txt",circular_data)
+            np.savetxt("../../Visualisation/eliptic_cl.txt",eliptic_data)
     
-    for i,val in enumerate(nasa_data[:,0]):
-        eliptic_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_eliptic)
-        eliptic_model.solve()
-        eliptic_data[i,1] = eliptic_model.lift_coeff
-        circular_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_circular)
-        circular_model.solve()
-        circular_data[i,1] = circular_model.lift_coeff
-        print(f"{i}/{len(nasa_data[:,0])}")
-    # np.savetxt("../../Visualisation/circular_cl.txt",circular_data)
-    # np.savetxt("../../Visualisation/eliptic_cl.txt",eliptic_data)
+    elif task == "2":
+        kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 1, "write":True,
+               "n_airfoil": 1000,
+               "n_fs": 30,
+               "n_bed": 30,
+               "n_inlet": 10,
+               "n_outlet": 10,
+               "g_div": 20, 
+               "a": 1,
+               "b": 1,
+               "center_of_airfoil": (0,0),
+               "solver_params": {"ksp_type": "gmres", "pc_type": "hypre", "ksp_rtol": 1e-14}}
+
+        model = PotentialFlowSolver("0012", P = 3, alpha = 20, kwargs=kwargs)
+        model.solve()
+        

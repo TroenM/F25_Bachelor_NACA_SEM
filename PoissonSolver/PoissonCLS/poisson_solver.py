@@ -268,85 +268,119 @@ class PoissonSolver:
 
 if __name__ == "__main__":
 
-    from time import time
-
-    print("Computing h-convergence...\n")
-
-    # Meshes resolutions (3 time h = 4 to reset cache for accurate time measurements)
-    hs = [4, 4, 4, 5, 10, 100, 200, 300, 500, 1000]#np.array([10, 50, 100, 200, 300, 400, 500])
-    error_h = []
-
-    true_sol = lambda x,y: fd.sin(x)*fd.sin(y)
-    rhs = lambda x,y: -2*fd.sin(x)*fd.sin(y)
-    NBC3 = lambda x,y: -fd.sin(x)*fd.cos(y)
-    NBC4 = lambda x,y: fd.sin(x)*fd.cos(y)
+    task = input("""
+    1: Generate Convergence data
+    2: Simple test
     
-    for h in hs:
-        print(f"Computing for h = {h}...")
-        t1 = time()
-        # Mesh
-        mesh = fd.UnitSquareMesh(h, h)
+    Choose task: """)
 
-        # Solver
-        model = PoissonSolver(mesh, P = 1)
+    if task == "1":
+        from time import time
+        print("Computing h-convergence...\n")
 
-        # Imposing true solution
-        model.MMS(true_sol, DBCs=[1, 2], func_type="callable")
-        model.impose_rhs(rhs, func_type="callable")
-        model.impose_NBC(NBC3, 3, func_type="callable")
-        model.impose_NBC(NBC4, 4, func_type="callable")
+        # Meshes resolutions (3 time h = 4 to reset cache for accurate time measurements)
+        hs = [4, 4, 4, 5, 10, 100, 200, 300, 500, 1000]#np.array([10, 50, 100, 200, 300, 400, 500])
+        error_h = []
 
-        # Solve
-        model.solve()
+        true_sol = lambda x,y: fd.sin(x)*fd.sin(y)
+        rhs = lambda x,y: -2*fd.sin(x)*fd.sin(y)
+        NBC3 = lambda x,y: -fd.sin(x)*fd.cos(y)
+        NBC4 = lambda x,y: fd.sin(x)*fd.cos(y)
 
-        time_taken = time() - t1
+        for h in hs:
+            print(f"Computing for h = {h}...")
+            t1 = time()
+            # Mesh
+            mesh = fd.UnitSquareMesh(h, h)
 
-        if h != 4:
-            print(f"\t\t Time elapsed: {time_taken:.2f} s")
+            # Solver
+            model = PoissonSolver(mesh, P = 1)
+
+            # Imposing true solution
+            model.MMS(true_sol, DBCs=[1, 2], func_type="callable")
+            model.impose_rhs(rhs, func_type="callable")
+            model.impose_NBC(NBC3, 3, func_type="callable")
+            model.impose_NBC(NBC4, 4, func_type="callable")
+
+            # Solve
+            model.solve()
+
+            time_taken = time() - t1
+
+            if h != 4:
+                print(f"\t\t Time elapsed: {time_taken:.2f} s")
+                err = fd.errornorm(model.true_sol, model.u_sol, norm_type="L2")
+                print(f"\t\t Error: {err}\n")
+                # Compute error
+                error_h.append(np.array([h, err, time_taken]))
+
+        print(error_h, "\n")   
+
+        print("Computing p-convergence...\n")
+
+        # Setup
+        Ps = np.arange(1, 10)
+        error_p = []
+
+        for P in Ps:
+            print(f"\t Computing for P = {P}...")
+            t1 = time()
+
+            # Mesh
+            mesh = fd.UnitSquareMesh(5, 5)
+
+            # Solver
+            model = PoissonSolver(mesh, P = int(P))
+
+            # Imposing true solution
+            model.MMS(true_sol, DBCs=[1, 2], func_type="callable")
+            model.impose_rhs(rhs, func_type="callable")
+            model.impose_NBC(NBC3, 3, func_type="callable")
+            model.impose_NBC(NBC4, 4, func_type="callable")
+
+            # Solve
+            model.solve()
+
+            time_taken = time() - t1
             err = fd.errornorm(model.true_sol, model.u_sol, norm_type="L2")
-            print(f"\t\t Error: {err}\n")
+            print(f"\t\t Time elapsed: {time_taken:.2f} s")
+            print(f"\t\t Error: {err} \n")
+
             # Compute error
-            error_h.append(np.array([h, err, time_taken]))
-    
-    print(error_h, "\n")   
+            error_p.append(np.array([P, err, time_taken]))
+        print(error_p, "\n")
 
-    print("Computing p-convergence...\n")
+        error_h = np.array(error_h)
+        error_p = np.array(error_p)
 
-    # Setup
-    Ps = np.arange(1, 10)
-    error_p = []
+        save_data = input("Save new results? (y/n): ")
+        if save_data == "y":
+            np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonCLS/PoissonError_h.txt", error_h)
+            np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonCLS/PoissonError_p.txt", error_p)
+        else:
+            print("Results not saved")
+        
+    elif task == "2":
+        mesh_kwargs = {
+            "n_in": 20,
+            "n_out": 20,
+            "n_bed": 50,
+            "n_fs": 50, 
+            "n_airfoil" : 100
+        }
+        mesh = naca_mesh("0012", alpha = 10, ylim = (-4, 4), kwargs = mesh_kwargs)
+        fd_mesh = meshio_to_fd(mesh)
 
-    for P in Ps:
-        print(f"\t Computing for P = {P}...")
-        t1 = time()
+        V_inf = fd.Constant(10)
+        model = PoissonSolver(fd_mesh, P = 1)
 
-        # Mesh
-        mesh = fd.UnitSquareMesh(5, 5)
+        model.impose_NBC(-V_inf, 1, func_type="fd")
+        model.impose_NBC(V_inf, 2, func_type="fd")
 
-        # Solver
-        model = PoissonSolver(mesh, P = int(P))
+        model.solve(solver_params={"ksp_type": "cg", "pc_type": "sor"})
+        outfile = fd.VTKFile("./PoissonSolver/PoissonCLS/Poisson_solution.pvd")
+        outfile.write(model.u_sol)
 
-        # Imposing true solution
-        model.MMS(true_sol, DBCs=[1, 2], func_type="callable")
-        model.impose_rhs(rhs, func_type="callable")
-        model.impose_NBC(NBC3, 3, func_type="callable")
-        model.impose_NBC(NBC4, 4, func_type="callable")
-
-        # Solve
-        model.solve()
-
-        time_taken = time() - t1
-        err = fd.errornorm(model.true_sol, model.u_sol, norm_type="L2")
-        print(f"\t\t Time elapsed: {time_taken:.2f} s")
-        print(f"\t\t Error: {err} \n")
-
-        # Compute error
-        error_p.append(np.array([P, err, time_taken]))
-    print(error_p, "\n")
-
-    error_h = np.array(error_h)
-    error_p = np.array(error_p)
-
-    #np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonCLS/PoissonError_h.txt", error_h)
-    #np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonCLS/PoissonError_p.txt", error_p)
+        
+        
     
