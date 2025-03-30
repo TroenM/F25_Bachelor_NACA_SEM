@@ -104,6 +104,8 @@ class PotentialFlowSolver:
         self.a = self.kwargs.get("a", 1)
         self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
 
+        self.solver_params = self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"})
+
         # Handeling output files
         if self.write:
             if os.path.exists("./velocity_output"):
@@ -139,9 +141,9 @@ class PotentialFlowSolver:
         p_te_new = (p_te-center_of_vortex)*(1 + 1e-2) + center_of_vortex
         p1new = p1 - v12 * 0.4 
         pnnew = pn + v12 * 0.4
-        print(p1new)
-        print(pnnew)
-        print(p_te_new)
+        # print(p1new)
+        # print(pnnew)
+        # print(p_te_new)
 
 
         # Initializing Laplaze solver
@@ -158,8 +160,17 @@ class PotentialFlowSolver:
             print(len(xs))
             print(len(ys))
             model.impose_DBC(interp1d(xs,ys), self.kwargs.get("fs", 4), "only_x")
+        
+        converged = False
+        while not converged:
+            try:
+                model.solve(self.solver_params)
+                self.solver_params["ksp_rtol"] = self.kwargs.get("min_rtol", 1e-14)
+                converged = True
+            except:
+                self.solver_params["ksp_rtol"] *= 10
+                print(f"Solver did not converge, increasing ksp_rtol to {self.solver_params['ksp_rtol']}")
 
-        model.solve(solver_params=self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"}))
 
         # Standardizing the velocity potential to avoid overflow
         velocityPotential = model.u_sol
@@ -210,7 +221,7 @@ class PotentialFlowSolver:
             velocityBC_sum += velocityBC
             
             # Check for convergence
-            if np.dot(v12, vte) < self.kwargs.get("dot_tol", 1e-6):
+            if np.abs(np.dot(v12, vte)) < self.kwargs.get("dot_tol", 1e-6):
                 print(f"Solver converged in {it} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
@@ -304,7 +315,7 @@ class PotentialFlowSolver:
         ##################################################
         ###### ALPHA IS SET TO ZERO FOR NOW ##############
         ##################################################
-        alpha = 0 #self.alpha
+        alpha = self.alpha
 
         # Get the coordinates of the trailing edge
         p_x = p_te_new[0]
@@ -347,7 +358,7 @@ class PotentialFlowSolver:
         ###### ALPHA IS SET TO ZERO FOR NOW ##############
         ##################################################
 
-        alpha = 0#self.alpha  # Convert angle of attack to radians
+        alpha = self.alpha  # Convert angle of attack to radians
         alpha = fd.Constant(alpha)
 
         # Extract airfoil scaling parameters
@@ -398,7 +409,16 @@ class PotentialFlowSolver:
         correction_model.impose_NBC( -vortex, self.kwargs.get("naca", 5))
 
         # Solving the correction model
-        correction_model.solve(solver_params=self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"}))
+        converged = False
+        while not converged:
+            try:
+                correction_model.solve(self.solver_params)
+                self.solver_params["ksp_rtol"] = self.kwargs.get("min_rtol", 1e-14)
+                converged = True
+            except:
+                self.solver_params["ksp_rtol"] *= 10
+                print(f"Solver did not converge, increasing ksp_rtol to {self.solver_params['ksp_rtol']}")
+        
         velocityPotential = correction_model.u_sol
         velocityPotential -= correction_model.u_sol.dat.data.min()
 
@@ -444,7 +464,8 @@ if __name__ == "__main__":
                "n_fs": 50,
                "n_bed": 50,
                "n_inlet": 20,
-               "n_outlet": 20}
+               "n_outlet": 20,
+               "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
         kwargs_circular = {"ylim":[-4,4], "V_inf": 10, "g_div": 5, "write":False,
                "n_airfoil": 2000,
                "n_fs": 50,
@@ -452,21 +473,28 @@ if __name__ == "__main__":
                "n_inlet": 20,
                "n_outlet": 20,
                "a": 1,
-               "b": 1}
+               "b": 1,
+               "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
 
         for i,val in enumerate(nasa_data[:,0]):
+            print(f"{i}/{len(nasa_data[:,0])}")
+            print("Elliptic model")
             eliptic_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_eliptic)
             eliptic_model.solve()
             eliptic_data[i,1] = eliptic_model.lift_coeff
+            del(eliptic_model)
+
+            print("Circular Model")
             circular_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_circular)
             circular_model.solve()
             circular_data[i,1] = circular_model.lift_coeff
-            print(f"{i}/{len(nasa_data[:,0])}")
+            del(circular_model)
+            
         
         save_results = input("Save results? (y/n) \n This will overwrite the existing files")
         if save_results == "n":
-            np.savetxt("../../Visualisation/circular_cl.txt",circular_data)
-            np.savetxt("../../Visualisation/eliptic_cl.txt",eliptic_data)
+            np.savetxt("../../Visualisation/PotentialFLowCL/circular_cl_point.txt",circular_data)
+            np.savetxt("../../Visualisation/PotentialFLowCL/eliptic_cl_point.txt",eliptic_data)
     
     elif task == "2":
         kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 1, "write":True,
@@ -479,7 +507,8 @@ if __name__ == "__main__":
                "a": 1,
                "b": 1,
                "center_of_airfoil": (0,0),
-               "solver_params": {"ksp_type": "gmres", "pc_type": "hypre", "ksp_rtol": 1e-14}}
+               "min_tol": 1e-14,
+               "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14}}
 
         model = PotentialFlowSolver("0012", P = 3, alpha = 20, kwargs=kwargs)
         model.solve()
