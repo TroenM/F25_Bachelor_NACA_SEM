@@ -7,7 +7,5 @@
 <DataSet timestep="3" file="velocity_output/velocity_output_3.vtu" />
 <DataSet timestep="4" file="velocity_output/velocity_output_4.vtu" />
 <DataSet timestep="5" file="velocity_output/velocity_output_5.vtu" />
-<DataSet timestep="6" file="velocity_output/velocity_output_6.vtu" />
-<DataSet timestep="7" file="velocity_output/velocity_output_7.vtu" />
 </Collection>
 </VTKFile>

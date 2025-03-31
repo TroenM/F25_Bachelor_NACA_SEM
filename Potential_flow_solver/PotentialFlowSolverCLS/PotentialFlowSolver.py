@@ -138,7 +138,7 @@ class PotentialFlowSolver:
         # Identify trailing edge and leading edge
         p1, p_te, p_leading_edge, pn= self.get_edge_info()
         v12 = (pn - p1)
-        p_te_new = (p_te-center_of_vortex)*(1 + 1e-2) + center_of_vortex
+        p_te_new = p_te#(p_te-center_of_vortex)*(1 + 5e-3) + center_of_vortex
         p1new = p1 - v12 * 0.4 
         pnnew = pn + v12 * 0.4
         # print(p1new)
@@ -200,7 +200,6 @@ class PotentialFlowSolver:
             # Computing the vortex strength
             vte = velocity.at(p_te_new)
             #vte = velocity.at(p1new) + velocity.at(pnnew)
-            #Gamma = self.compute_circular_vortex_strength(v12, vte, p_te_new, center_of_vortex) # TO BE IMPLEMENTED
             Gamma = self.compute_vortex_strength(v12, vte, p_te_new)
             Gammas.append(Gamma)
             Gamma /= self.__compute_Gamma_div(Gammas)
@@ -459,14 +458,14 @@ if __name__ == "__main__":
         eliptic_data[:,0] = nasa_data[:,0]
         circular_data = np.empty_like(nasa_data)
         circular_data[:,0] = nasa_data[:,0]
-        kwargs_eliptic = {"ylim":[-4,4], "V_inf": 10, "g_div": 7.5, "write":False,
+        kwargs_eliptic = {"ylim":[-4,4], "V_inf": 10, "g_div": 100, "write":False,
                "n_airfoil": 2000,
                "n_fs": 50,
                "n_bed": 50,
                "n_inlet": 20,
                "n_outlet": 20,
                "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
-        kwargs_circular = {"ylim":[-4,4], "V_inf": 10, "g_div": 5, "write":False,
+        kwargs_circular = {"ylim":[-4,4], "V_inf": 10, "g_div": 100, "write":False,
                "n_airfoil": 2000,
                "n_fs": 50,
                "n_bed": 50,
@@ -477,7 +476,7 @@ if __name__ == "__main__":
                "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
 
         for i,val in enumerate(nasa_data[:,0]):
-            print(f"{i}/{len(nasa_data[:,0])}")
+            print(f"{i+1}/{len(nasa_data[:,0])}")
             print("Elliptic model")
             eliptic_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_eliptic)
             eliptic_model.solve()
@@ -491,10 +490,18 @@ if __name__ == "__main__":
             del(circular_model)
             
         
-        save_results = input("Save results? (y/n) \n This will overwrite the existing files")
-        if save_results == "n":
-            np.savetxt("../../Visualisation/PotentialFLowCL/circular_cl_point.txt",circular_data)
-            np.savetxt("../../Visualisation/PotentialFLowCL/eliptic_cl_point.txt",eliptic_data)
+        while True:
+            save_results = input("Save results? (y/n) \n This will overwrite the existing files: ").lower()
+            if save_results not in ["y" , "y " , " y", "n", " n", "n "]:
+                print(f"\t '{save_results}' is not a valid answer")
+                continue
+            else:
+                break
+        
+        if save_results.lower() in ["y" , "y " , " y"]:
+            print(os.getcwd())
+            np.savetxt("../../Visualisation/PotentialFlowCL/circular_cl_point.txt",circular_data)
+            np.savetxt("../../Visualisation/PotentialFlowCL/eliptic_cl_point.txt",eliptic_data)
     
     elif task == "2":
         kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 1, "write":True,
