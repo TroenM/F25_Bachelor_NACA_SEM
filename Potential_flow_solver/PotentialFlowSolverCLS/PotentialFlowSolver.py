@@ -100,50 +100,56 @@ class PotentialFlowSolver:
                               n_inlet = self.kwargs.get("n_inlet"),
                               n_outlet = self.kwargs.get("n_outlet")))
         self.fd_mesh = self.kwargs.get("fd_mesh", meshio_to_fd(self.mesh))
+        self.V = fd.FunctionSpace(self.fd_mesh, "CG", self.P)
+        self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
 
         self.a = self.kwargs.get("a", 1)
         self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
 
         self.solver_params = self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"})
 
+        self.VisualisationPath = "../../Visualisation/PotentialFlowCL/"
         # Handeling output files
         if self.write:
-            if os.path.exists("./velocity_output"):
-                shutil.rmtree("./velocity_output")
-            if os.path.exists("./vortex_output"):
-                shutil.rmtree("./vortex_output")
-            if os.path.exists("./pressure_output"):
-                shutil.rmtree("./pressure_output")
+            if os.path.exists(self.VisualisationPath + "velocity_output"):
+                shutil.rmtree(self.VisualisationPath + "velocity_output")
+            if os.path.exists(self.VisualisationPath + "vortex_output"):
+                shutil.rmtree(self.VisualisationPath + "vortex_output")
+            if os.path.exists(self.VisualisationPath + "pressure_output"):
+                shutil.rmtree(self.VisualisationPath + "pressure_output")
 
             try:
-                os.remove("./velocity_output.pvd")
+                os.remove(self.VisualisationPath + "velocity_output.pvd")
             except:
                 pass
             try:
-                os.remove("./vortex_output.pvd")
+                os.remove(self.VisualisationPath + "vortex_output.pvd")
             except:
                 pass
             try:
-                os.remove("./pressure_output.pvd")
+                os.remove(self.VisualisationPath + "pressure_output.pvd")
             except:
                 pass
             
-            self.velocity_output = fd.VTKFile("velocity_output.pvd")
-            self.vortex_output = fd.VTKFile("vortex_output.pvd")
-            self.BC_output = fd.VTKFile("velocityBC.pvd")
+            self.velocity_output = fd.VTKFile(self.VisualisationPath + "velocity_output.pvd")
+            self.vortex_output = fd.VTKFile(self.VisualisationPath + "vortex_output.pvd")
+            self.BC_output = fd.VTKFile(self.VisualisationPath + "velocityBC.pvd")
+
+            print(len((fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)))
 
 
     def solve(self):
         center_of_vortex = self.kwargs.get("center_of_vortex", self.center_of_airfoil)
         # Identify trailing edge and leading edge
         p1, p_te, p_leading_edge, pn= self.get_edge_info()
-        v12 = (pn - p1)
-        p_te_new = p_te#(p_te-center_of_vortex)*(1 + 5e-3) + center_of_vortex
+        vn = pn - p_te
+        vn /= np.linalg.norm(vn)
+        v1 = p1 - p_te
+        v1 /= np.linalg.norm(v1)
+        v12 = (vn - v1)
+        p_te_new = p_te + np.array([v12[1], -v12[0]])/20
         p1new = p1 - v12 * 0.4 
         pnnew = pn + v12 * 0.4
-        # print(p1new)
-        # print(pnnew)
-        # print(p_te_new)
 
 
         # Initializing Laplaze solver
@@ -154,11 +160,8 @@ class PotentialFlowSolver:
         # Free surface boundary condition
         if self.kwargs.get("fs_DBC", np.array([0])).any():
             boundary_indecies = model.V.boundary_nodes(self.kwargs.get("fs", 4))
-            print(len((fd.Function(model.W).interpolate(model.mesh.coordinates).dat.data)[:,0]))
             xs = (fd.Function(model.W).interpolate(model.mesh.coordinates).dat.data)[boundary_indecies,0]
             ys = self.kwargs.get("fs_DBC")
-            print(len(xs))
-            print(len(ys))
             model.impose_DBC(interp1d(xs,ys), self.kwargs.get("fs", 4), "only_x")
         
         converged = False
@@ -208,7 +211,6 @@ class PotentialFlowSolver:
             self.Gamma += Gamma
 
             # Compute the vortex
-            #vortex = self.compute_circular_vortex(Gamma/20, model, center_of_vortex, vortex)
             vortex = self.compute_vortex(Gamma, model, center_of_vortex, vortex)
 
             velocity += vortex
@@ -221,6 +223,8 @@ class PotentialFlowSolver:
             
             # Check for convergence
             if np.abs(np.dot(v12, vte)) < self.kwargs.get("dot_tol", 1e-6):
+                print(v12)
+                print(vte)
                 print(f"Solver converged in {it} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
@@ -230,7 +234,8 @@ class PotentialFlowSolver:
 
             # Checking for Stagnation
             if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
-
+                print(v12)
+                print(vte)
                 print(f"Solver stagnated in {it-1} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
@@ -433,7 +438,7 @@ class PotentialFlowSolver:
         pressure.interpolate(1 - (fd.sqrt(fd.dot(velocity, velocity))/self.V_inf) ** 2)
         self.pressure_coeff = pressure
         if self.write:
-            pressure_output = fd.VTKFile("pressure_output.pvd")
+            pressure_output = fd.VTKFile(self.VisualisationPath + "pressure_output.pvd")
             pressure_output.write(self.pressure_coeff)
         return None
 
@@ -500,8 +505,8 @@ if __name__ == "__main__":
         
         if save_results.lower() in ["y" , "y " , " y"]:
             print(os.getcwd())
-            np.savetxt("../../Visualisation/PotentialFlowCL/circular_cl_point.txt",circular_data)
-            np.savetxt("../../Visualisation/PotentialFlowCL/eliptic_cl_point.txt",eliptic_data)
+            np.savetxt("../../Visualisation/LiftCoeffPlot/circular_cl_point.txt",circular_data)
+            np.savetxt("../../Visualisation/LiftCoeffPlot/eliptic_cl_point.txt",eliptic_data)
     
     elif task == "2":
         kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 1, "write":True,
