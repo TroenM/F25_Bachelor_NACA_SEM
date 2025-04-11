@@ -6,7 +6,12 @@ import sys
 from time import time
 
 #### Running from F25_Bachelor_NACA_SEM ####
+if os.getcwd().split("/")[-1] == "Projects":
+    os.chdir("./Bachelor/F25_Bachelor_NACA_SEM")
+
+print(os.getcwd())
 sys.path.append(os.getcwd())
+
 from Potential_flow_solver.PotentialFlowSolverCLS.PotentialFlowSolver import *
 
 os.chdir("../../Fs_solver")
@@ -95,11 +100,15 @@ class FsSolver:
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
         fs_indecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
         self.fs_points = (fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)[fs_indecies,:]
+        self.fs_points = self.fs_points[self.fs_points[:,0].argsort()]
         self.fs_xs = self.fs_points[:,0]
+        self.etas = []
 
         self.a = self.kwargs.get("a", 1)
         self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
-        
+
+        self.dt = self.kwargs.get("dt", 0.001)
+
         self.visualisationpath = "../Visualisation/FS/"
 
         
@@ -125,20 +134,31 @@ class FsSolver:
 
 
     def solve(self) -> None:
+        # Setting up kwargs for inner solver
         kwargs_for_Kutta_kondition = (self.kwargs).copy()
         kwargs_for_Kutta_kondition["write"] = False
         kwargs_for_Kutta_kondition["mesh"] = self.mesh
         kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
-        print(len((fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)))
-        model = PotentialFlowSolver(self.airfoil , self.alpha, self.P, kwargs=kwargs_for_Kutta_kondition)
+
+        # Doing the initializing solve
+        model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
         model.solve()
-        print("initialization done")
+
+        # Defining phi tilde
+        u = np.array(model.velocity.at(self.fs_points))[:,0]
+        from scipy.integrate import trapezoid
+        self.PhiTilde = np.zeros_like(self.fs_points[:,0])
+        for i in range(1,len(self.fs_points[:,0])):
+            self.PhiTilde[i] = trapezoid(u[:i+1],self.fs_points[:i+1,0]) - trapezoid(u[:i],self.fs_points[:i,0])
+
+        # Preparing for loop
         old_eta = self.fs_points[:,1]
+        print("initialization done")
         for i in range(self.kwargs.get("max_iter_fs", 10)):
             # Update free surface
             new_eta, residuals = self.__compute_eta(model)
 
-            if np.linalg.norm(residuals) < 10:
+            if np.linalg.norm(residuals) < 1e-5:
                 print("\t Fs converged")
                 print(f"\t residuals norm {np.linalg.norm(residuals)} after {i} iterations")
                 break
@@ -149,18 +169,20 @@ class FsSolver:
                 break
 
             # Update dirichlet boundary condition
-            kwargs_for_Kutta_kondition["fs_DBC"] = self.__compute_phi_tilde(model)
+            self.__compute_phi_tilde(model)
+            kwargs_for_Kutta_kondition["fs_DBC"] = self.PhiTilde
 
             # Update mesh
             new_mesh = shift_surface(self.mesh, interp1d(self.fs_xs, old_eta), interp1d(self.fs_xs, new_eta))
             self.__update_mesh_data(new_mesh)
             kwargs_for_Kutta_kondition["mesh"] = self.mesh
+            kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
 
             # Solve model and kutta kondition again
-            model = PotentialFlowSolver(self.airfoil , self.alpha, self.P, kwargs=kwargs_for_Kutta_kondition)
+            model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
             model.solve()
-
-            old_eta = new_eta
+            self.VelocityPotential = model.velocity
+            old_eta = new_eta.copy()
         
         self.velocity = model.velocity
 
@@ -172,21 +194,51 @@ class FsSolver:
 
     def __compute_eta(self, model : PotentialFlowSolver) -> np.ndarray:
         x = self.fs_points[:,0]
-        velocity_at_fs = np.array(model.velocity.at(self.fs_points))[:,:2]
-        u = velocity_at_fs[:,0]
-        w = velocity_at_fs[:,1]
-        eta_x = (u - np.sqrt(u**2 - 4*w**2)) / (2*w)
-            
-        eta = np.zeros_like(eta_x)
-        eta[0] = self.ylim[1] # Hight of domain
+        fs_velocity = np.array(model.velocity.at(self.fs_points))[1:,:2]
+        eta = self.fs_points[:, 1]
+        dt = self.dt
 
+        # Compute the x-distance between all nodes
+        dx = x[:-1] - x[1:] #dx = x_{i+1} - x_{i}
+
+        # First order x-stencil for eta_x
+        eta_x = (eta[:-1] - eta[1:])/dx
+
+        Un = fs_velocity[:, 0]
+        Wn = fs_velocity[:, 1]
+
+        # Compute eta pseudo-time step
+        eta_new = eta[1:] + dt*(-eta_x*Un + Wn*(1+ eta_x**2))
+
+        # Add the last point
         from scipy.integrate import trapezoid
-        # Integrate
-        for i in range(1, eta.shape[0]):
-            eta[i] = trapezoid(eta_x[i: i+2], x[i:i+2]) + eta[i-1]
+        first_eta_val = ((self.ylim[1]) * (self.xlim[1]-self.xlim[0]) - trapezoid(eta_new,x[1:])) * 2/(x[-1]-x[-2]) - eta_new[0]
+        print("The height at the beginning of the boundary is: ",first_eta_val)
+        eta_new = np.append(eta_new[::-1], first_eta_val)[::-1]
+        residual = np.linalg.norm(eta-eta_new, np.inf)
+        self.etas.append(eta_new)
+        return eta_new, residual
+    
+    def __compute_phi_tilde(self, model) -> None:
+        x = self.fs_points[:,0]
+        fs_velocity = np.array(model.velocity.at(self.fs_points))[1:,:2]
+        eta = self.fs_points[:, 1]
+        dt = self.dt
+
+        # Compute the x-distance between all nodes
+        dx = x[:-1] - x[1:] #dx = x_{i+1} - x_{i}
+
+        # First order x-stencil for eta_x
+        eta_x = (eta[:-1] - eta[1:])/dx
+
+        Un = fs_velocity[:, 0]
+        Wn = fs_velocity[:, 1]
         
-        residuals = -9.82 * eta - 1/2*(u**2 - w**2 - w**2*eta_x**2)
-        return eta, residuals
+
+        # Compute eta pseudo-time step
+        g = 9.81
+        self.PhiTilde[1:] = self.PhiTilde[1:] + dt*(-g*eta[1:] - 0.5*(Un**2 + Wn**2*(1 + eta_x**2)))
+        return None
     
     def __update_mesh_data(self, new_mesh : meshio.Mesh) -> None:
         self.mesh = new_mesh
@@ -195,33 +247,19 @@ class FsSolver:
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
         fs_indecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
         self.fs_points = (fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)[fs_indecies,:]
+        self.fs_points = self.fs_points[self.fs_points[:,0].argsort()]
         self.fs_xs = self.fs_points[:,0]
         return None
-    
-    def __compute_phi_tilde(self, model) -> np.ndarray:
-        x = self.fs_points[:,0]
-        velocity_at_fs = np.array(model.velocity.at(self.fs_points))[:,:2]
-        u = velocity_at_fs[:,0]
-            
-        phi_tilde = np.zeros_like(u)
-
-        from scipy.integrate import trapezoid
-        # Integrate
-        for i in range(1, phi_tilde.shape[0]):
-            phi_tilde[i] = trapezoid(u[i: i+2], x[i:i+2]) + phi_tilde[i-1]
-        
-        return phi_tilde
-    
 
 
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 5, "write":True,
-           "n_airfoil": 20,
-           "n_fs": 10,
-           "n_bed": 10,
-           "n_inlet": 5,
-           "n_outlet": 5}
+    kwargs = {"ylim":[-4,1], "V_inf": 10, "g_div": 5, "write":True,
+           "n_airfoil": 200,
+           "n_fs": 500,
+           "n_bed": 20,
+           "n_inlet": 15,
+           "n_outlet": 15, "a":1, "b":1}
     model = FsSolver("0012" , alpha=10, P=2, kwargs = kwargs)
     model.solve()

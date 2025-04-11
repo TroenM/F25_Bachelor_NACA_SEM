@@ -92,14 +92,22 @@ class PotentialFlowSolver:
         self.xlim = self.kwargs.get("xlim", [-7, 13])
         self.ylim = self.kwargs.get("ylim", [-2, 1])
 
-        self.mesh = self.kwargs.get("mesh", naca_mesh(self.airfoil, np.rad2deg(self.alpha), self.xlim, self.ylim, 
+        if "mesh" in self.kwargs:
+            self.mesh = self.kwargs["mesh"]
+        else:
+            self.mesh = naca_mesh(self.airfoil, np.rad2deg(self.alpha), self.xlim, self.ylim, 
                               center_of_airfoil=self.center_of_airfoil,
                               n_airfoil = self.kwargs.get("n_airfoil"),
                               n_fs = self.kwargs.get("n_fs"),
                               n_bed = self.kwargs.get("n_bed"),
                               n_inlet = self.kwargs.get("n_inlet"),
-                              n_outlet = self.kwargs.get("n_outlet")))
-        self.fd_mesh = self.kwargs.get("fd_mesh", meshio_to_fd(self.mesh))
+                              n_outlet = self.kwargs.get("n_outlet"))
+
+        if "fd_mesh" in self.kwargs:
+            self.fd_mesh = self.kwargs["fd_mesh"]
+        else:
+            self.fd_mesh = meshio_to_fd(self.mesh)
+
         self.V = fd.FunctionSpace(self.fd_mesh, "CG", self.P)
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
 
@@ -107,6 +115,9 @@ class PotentialFlowSolver:
         self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
 
         self.solver_params = self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"})
+
+        if "ksp_rtol" not in self.solver_params:
+            self.solver_params["ksp_rtol"] = 1e-14
 
         self.VisualisationPath = "../../Visualisation/PotentialFlowCL/"
         # Handeling output files
@@ -134,8 +145,6 @@ class PotentialFlowSolver:
             self.velocity_output = fd.VTKFile(self.VisualisationPath + "velocity_output.pvd")
             self.vortex_output = fd.VTKFile(self.VisualisationPath + "vortex_output.pvd")
             self.BC_output = fd.VTKFile(self.VisualisationPath + "velocityBC.pvd")
-
-            print(len((fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)))
 
 
     def solve(self):
@@ -173,6 +182,8 @@ class PotentialFlowSolver:
             except:
                 self.solver_params["ksp_rtol"] *= 10
                 print(f"Solver did not converge, increasing ksp_rtol to {self.solver_params['ksp_rtol']}")
+                if self.solver_params["ksp_rtol"] > 0.9:
+                    model.solve(self.solver_params)
 
 
         # Standardizing the velocity potential to avoid overflow
@@ -198,7 +209,8 @@ class PotentialFlowSolver:
         # Main loop
         for it, _ in enumerate(range(self.kwargs.get("max_iter", 20) + 1)):
             time_it = time()
-            print(f"Starting iteration {it}")
+            if __name__ == "__main__":
+                print(f"Starting iteration {it}")
 
             # Computing the vortex strength
             vte = velocity.at(p_te_new)
@@ -225,7 +237,7 @@ class PotentialFlowSolver:
             if np.abs(np.dot(v12, vte)) < self.kwargs.get("dot_tol", 1e-6):
                 print(v12)
                 print(vte)
-                print(f"Solver converged in {it} iterations")
+                print(f"PoissonSolver converged in {it} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
                 print(f"\t dot product: {np.dot(v12, vte)}")
@@ -236,7 +248,7 @@ class PotentialFlowSolver:
             if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
                 print(v12)
                 print(vte)
-                print(f"Solver stagnated in {it-1} iterations")
+                print(f"PoissonSolver stagnated in {it-1} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
                 print(f"\t dot product: {np.dot(v12, vte)}")
@@ -245,7 +257,7 @@ class PotentialFlowSolver:
 
             # Checking for divergence
             if np.abs(Gamma - old_Gamma) > 1e4:
-                print(f"Solver diverged in {it} iterations")
+                print(f"PoissonSolver diverged in {it} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
                 print(f"\t dot product: {np.dot(v12, vte)}")
@@ -253,8 +265,10 @@ class PotentialFlowSolver:
                 break
 
             # Updating the vortex strength
-            print(f"\t dGamma: {Gamma - old_Gamma}")
-            print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
+            if __name__ == "__main__":
+                print(f"\t dGamma: {Gamma - old_Gamma}")
+                print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
+                print(f"\t Iteration time: {time() - time_it} seconds\n")
             old_Gamma = Gamma
 
             # Write to file
@@ -263,8 +277,6 @@ class PotentialFlowSolver:
                 self.vortex_output.write(vortex)
                 vortex += velocityBC
                 self.BC_output.write(vortex)
-
-            print(f"\t Iteration time: {time() - time_it} seconds\n")
 
             # END OF MAIN LOOP
 
@@ -276,7 +288,7 @@ class PotentialFlowSolver:
         self.velocity = velocity
 
         if it == self.kwargs.get("max_iter", 20):
-            print(f"Solver did not converge in {it} iterations")
+            print(f"PoissonSolver did not converge in {it} iterations")
             print(f"\t Total time: {time() - time_total}")
             print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
             print(f"\n")
@@ -422,6 +434,8 @@ class PotentialFlowSolver:
             except:
                 self.solver_params["ksp_rtol"] *= 10
                 print(f"Solver did not converge, increasing ksp_rtol to {self.solver_params['ksp_rtol']}")
+                if self.solver_params["ksp_rtol"] > 1:
+                    correction_model.solve(self.solver_params)
         
         velocityPotential = correction_model.u_sol
         velocityPotential -= correction_model.u_sol.dat.data.min()
@@ -521,7 +535,14 @@ if __name__ == "__main__":
                "center_of_airfoil": (0,0),
                "min_tol": 1e-14,
                "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14}}
+        
+        kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 5, "write":True,
+           "n_airfoil": 200,
+           "n_fs": 50,
+           "n_bed": 50,
+           "n_inlet": 30,
+           "n_outlet": 30}
 
-        model = PotentialFlowSolver("0012", P = 3, alpha = 20, kwargs=kwargs)
+        model = PotentialFlowSolver("0012", P = 2, alpha = 10, kwargs=kwargs)
         model.solve()
         

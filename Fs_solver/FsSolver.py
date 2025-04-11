@@ -86,7 +86,6 @@ class FsSolver:
             "bed": 3,
             "fs": 4,
             "naca": 5,
-            "fs_DBC": None,
 
             # Solver
             "solver_params": {"ksp_type": "preonly", "pc_type": "lu"},
