@@ -67,7 +67,7 @@ class PoissonSolver:
         self.true_sol = None
 
         fs_indecies = self.V.boundary_nodes(4)
-        print(len((fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)))
+        print("amount of inner nodes", len((fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)))
         self.fs_points = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[fs_indecies,:]
         self.fs_xs = self.fs_points[:,0]
         

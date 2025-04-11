@@ -91,37 +91,37 @@ class FsSolver:
                               n_inlet = self.kwargs.get("n_inlet"),
                               n_outlet = self.kwargs.get("n_outlet"))
         self.fd_mesh = meshio_to_fd(self.mesh)
-
-        self.a = self.kwargs.get("a", 1)
-        self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
-
         self.V = fd.FunctionSpace(self.fd_mesh, "CG", self.P)
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
         fs_indecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
-        print(len((fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)))
         self.fs_points = (fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)[fs_indecies,:]
         self.fs_xs = self.fs_points[:,0]
+
+        self.a = self.kwargs.get("a", 1)
+        self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
+        
+        self.visualisationpath = "../Visualisation/FS/"
 
         
         # Handeling output files
         if self.write:
 
-            if os.path.exists("../Visualisation/velocity_output"):
-                shutil.rmtree("../Visualisation/velocity_output")
-            if os.path.exists("../Visualisation/pressure_output"):
-                shutil.rmtree("../Visualisation/pressure_output")
+            if os.path.exists(self.visualisationpath + "velocity_output"):
+                shutil.rmtree(self.visualisationpath + "velocity_output")
+            if os.path.exists(self.visualisationpath + "pressure_output"):
+                shutil.rmtree(self.visualisationpath + "pressure_output")
 
             try:
-                os.remove("../Visualisation/velocity_output.pvd")
+                os.remove(self.visualisationpath + "velocity_output.pvd")
             except:
                 pass
             try:
-                os.remove("../Visualisation/pressure_output.pvd")
+                os.remove(self.visualisationpath + "pressure_output.pvd")
             except:
                 pass
             
-            self.velocity_output = fd.VTKFile("../Visualisation/velocity_output.pvd")
-            self.pressure_output = fd.VTKFile("../Visualisation/pressure_output.pvd")
+            self.velocity_output = fd.VTKFile(self.visualisationpath + "velocity_output.pvd")
+            self.pressure_output = fd.VTKFile(self.visualisationpath + "pressure_output.pvd")
 
 
     def solve(self) -> None:
@@ -129,6 +129,7 @@ class FsSolver:
         kwargs_for_Kutta_kondition["write"] = False
         kwargs_for_Kutta_kondition["mesh"] = self.mesh
         kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
+        print(len((fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)))
         model = PotentialFlowSolver(self.airfoil , self.alpha, self.P, kwargs=kwargs_for_Kutta_kondition)
         model.solve()
         print("initialization done")
