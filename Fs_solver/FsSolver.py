@@ -33,6 +33,9 @@ class FsSolver:
         self.fd_mesh = meshio_to_fd(self.mesh)
         self.kwargs["fd_mesh"] = self.fd_mesh
 
+        self.test_output = fd.VTKFile("./Visualisation/FS/test_output.pvd")
+
+
         self.__set_kwargs__()
 
         return None
@@ -86,7 +89,6 @@ class FsSolver:
             "bed": 3,
             "fs": 4,
             "naca": 5,
-            "fs_DBC": None,
 
             # Solver
             "solver_params": {"ksp_type": "preonly", "pc_type": "lu"},
@@ -114,16 +116,13 @@ class FsSolver:
 
         # Updating the free surface and potential at the free surface
         free_surface_coords = self.__get_free_surface__()
-        self.new_free_surface_coords = free_surface_coords.copy()
-        self.new_free_surface_coords[:,1] = self.__update_free_surface__(PotentialFlow, free_surface_coords)
-        self.new_free_surface_func = lambda x: self.__linear_interpolation__(self.new_free_surface_coords)(x)
-        
+        self.eta = self.__compute_eta__(PotentialFlow, free_surface_coords)
+        self.__update_free_surface__()
 
-        self.mesh = shift_surface(self.mesh, lambda x: self.kwargs.get("ylim", [-4,1])[1], self.new_free_surface_func)
-        self.fd_mesh = meshio_to_fd(self.mesh)
-        self.kwargs["PFS_kwargs"]["fd_mesh"] = self.fd_mesh
+        self.phi = self.__initialize_phi__()
+        self.__update_free_surface_potential__()
 
-        new_free_surface_potential = self.__update_free_surface_potential__(PotentialFlow, free_surface_coords)
+
 
         # Main Loop
         solver_time = time()
@@ -132,31 +131,13 @@ class FsSolver:
             iter_time = time()
 
             # Potential flow
-            self.kwargs["PFS_kwargs"]["fs_DBC"] = new_free_surface_potential
             PotentialFlow = PotentialFlowSolver(airfoil=self.airfoil, P = self.P, alpha = self.alpha, kwargs = self.kwargs["PFS_kwargs"])
             PotentialFlow.solve()
 
-            # Updating the free surface and potential at the free surface
-            old_free_surface_coords = self.new_free_surface_coords
-
-            self.new_free_surface_coords = self.__get_free_surface__()
-            self.new_free_surface_coords[:,1] = self.__update_free_surface__(PotentialFlow, old_free_surface_coords)
-            free_surface_change = np.linalg.norm(self.new_free_surface_coords - old_free_surface_coords, np.inf)
-
-            if self.__check_convergence__(free_surface_change, iter, solver_time) == True:
-                break
             
-            self.old_free_surface_func = lambda x: self.new_free_surface_func(x)
-            self.new_free_surface_func = lambda x: self.__linear_interpolation__(self.new_free_surface_coords)(x)
-            self.mesh = shift_surface(self.mesh, self.old_free_surface_func, self.new_free_surface_func)
-            self.fd_mesh = meshio_to_fd(self.mesh)
-            self.kwargs["PFS_kwargs"]["fd_mesh"] = self.fd_mesh
-
-            # Updating the free surface potential
-            new_free_surface_potential = self.__update_free_surface_potential__(PotentialFlow, old_free_surface_coords)
 
             print(f"\t Iteration time: {time() - iter_time:.2f} s")
-            print(f"\t Free surface change: {free_surface_change:.2e}")
+
     
     def __get_free_surface__(self) -> np.ndarray:   
 
@@ -169,7 +150,7 @@ class FsSolver:
         return coords
 
 
-    def __update_free_surface__(self, PotentialFlow, free_surface_coords) -> np.ndarray:
+    def __compute_eta__(self, PotentialFlow, free_surface_coords) -> np.ndarray:
         """
         solve the free surface equation
             eta_t = -eta_x * u + w*[1 + (eta_x)^2]
@@ -184,24 +165,24 @@ class FsSolver:
         eta = free_surface_coords[:,1]
 
         # Compute eta_x stencil
-        dx = x[1:] - x[:-1] # dx = x_{i+1} - x_{i}
-        eta_x = eta_x = (eta[1:] - eta[:-1])/dx
+        dx = x[:-1] - x[1:] # dx = x_{i-1} - x_{i}
+        eta_x = eta_x = (eta[:-1] - eta[1:])/dx
 
         # Get the velocity at the free surface
-        velocity = np.array(PotentialFlow.velocity.at(free_surface_coords[:-1,:]))
+        velocity = np.array(PotentialFlow.velocity.at(free_surface_coords[1:,:]))
         u = velocity[:,0]
         w = velocity[:,1]
 
         # Compute the new free surface coordinates
-        new_eta = eta[:-1] + self.dt * (eta_x * u + w + w*eta_x**2) 
+        new_eta = eta[1:] + self.dt * (eta_x * u + w + w*eta_x**2) 
 
         # Handle the boundary condition 
-        #########################################################################
-        ########### MAYBE SWITCH TO BACKWARD EULER TO FLIP BOUNDARY #############
-        #########################################################################
-        new_eta = np.concatenate((new_eta, [new_eta[-1]])) # add the last point to the new eta
+        new_eta = np.concatenate(([new_eta[0]], new_eta)) # add the last point to the new eta
 
         return new_eta
+
+    def __update_free_surface__(self, PotentialFlow, free_surface_coords) -> None:
+        return None
     
     def __linear_interpolation__(self, new_free_surface_coords) -> fd.Function:
 
@@ -209,7 +190,7 @@ class FsSolver:
 
         return interpolation_func
 
-    def __update_free_surface_potential__(self, PotentialFlow, free_surface_coords) -> np.ndarray:
+    def __compute_phi__(self, PotentialFlow, free_surface_coords) -> np.ndarray:
         """
         Solves the free surface potential equation
             phi_t = -g*eta - 1/2 * [u^2 - w^2 * (1 + (eta_x)^2)]
@@ -221,11 +202,11 @@ class FsSolver:
         eta = free_surface_coords[:,1]
 
         # Compute eta_x stencil
-        dx = x[1:] - x[:-1]
-        eta_x = (eta[1:] - eta[:-1])/dx
+        dx = x[:-1] - x[1:]
+        eta_x = (eta[:-1] - eta[1:])/dx
 
         # Get the velocity at the free surface
-        velocity = np.array(PotentialFlow.velocity.at(free_surface_coords[:-1,:]))
+        velocity = np.array(PotentialFlow.velocity.at(free_surface_coords[1:,:]))
         u = velocity[:,0]
         w = velocity[:,1]
 
@@ -235,35 +216,40 @@ class FsSolver:
 
 
         # Handle the boundary condition 
-        #########################################################################
-        ########### MAYBE SWITCH TO BACKWARD EULER TO FLIP BOUNDARY #############
-        #########################################################################
         new_phi = np.concatenate((new_phi, [new_phi[-1]])) # add the last point to the new phi
 
         return new_phi
 
-    def __check_convergence__(self, free_surface_change, iter, solver_time):
+    def __update_free_surface_potential__(self, PotentialFlow, free_surface_coords) -> None:
+        return None
+
+    def __check_convergence__(self, free_surface_change, iter, solver_time) -> int:
 
         if free_surface_change < self.kwargs.get("tolerance", 1e-6):
             print(f"Converged after {iter} iterations.")
             print(f"\t Free surface change: {free_surface_change}")
             print(f"\t Solver time: {time() - solver_time:.2f} s")
-            return True
+            return 1
 
         elif free_surface_change > self.kwargs.get("divergence_tolerance", 1e+3):
             print(f"Did diverged after {iter} iterations.")
             print(f"\t Free surface change: {free_surface_change}")
-            return True
+            return -1
             
         elif iter == self.kwargs.get("max_iter", 20) - 1:
             print(f"Did not converge after {iter} iterations.")
             print(f"\t Free surface change: {free_surface_change}")
+            return -2
 
 if __name__ == "__main__":
     kwargs = {
-        "PFS_kwargs":{
+        "dt": 0.1,
+        "n_fs": 500,
+        
+        "PFS_kwargs": {
+            "g_div": 20,
             "a": 1,
-            "b": 1
+            "b":1,
         }
     }
 
