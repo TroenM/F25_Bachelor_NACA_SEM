@@ -209,7 +209,7 @@ class PotentialFlowSolver:
         # Main loop
         for it, _ in enumerate(range(self.kwargs.get("max_iter", 20) + 1)):
             time_it = time()
-            if __name__ == "__main__":
+            if __name__ == "__main__" or self.kwargs.get("print_iter", False):
                 print(f"Starting iteration {it}")
 
             # Computing the vortex strength
@@ -265,10 +265,11 @@ class PotentialFlowSolver:
                 break
 
             # Updating the vortex strength
-            if __name__ == "__main__":
+            if __name__ == "__main__" or self.kwargs.get("print_iter", False):
                 print(f"\t dGamma: {Gamma - old_Gamma}")
                 print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
                 print(f"\t Iteration time: {time() - time_it} seconds\n")
+            dgamma = np.abs(Gamma - old_Gamma)
             old_Gamma = Gamma
 
             # Write to file
@@ -289,8 +290,9 @@ class PotentialFlowSolver:
 
         if it == self.kwargs.get("max_iter", 20):
             print(f"PoissonSolver did not converge in {it} iterations")
+            print(f"\t dGamma: {dgamma}")
+            print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
             print(f"\t Total time: {time() - time_total}")
-            print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
             print(f"\n")
 
     def __compute_Gamma_div(self, Gammas : list) -> float:

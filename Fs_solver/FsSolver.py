@@ -6,6 +6,7 @@ elif os.getcwd() == "/root/MyProjects":
  
 import sys
 sys.path.append(os.getcwd())
+currdir = os.getcwd()
 
 import firedrake as fd
 from Meshing.mesh_library import *
@@ -13,6 +14,8 @@ from Potential_flow_solver.PotentialFlowSolverCLS.PotentialFlowSolver import Pot
 from scipy.interpolate import interp1d
 import shutil
 from time import time
+
+os.chdir(currdir)
 
 class FsSolver:
     """
@@ -32,8 +35,13 @@ class FsSolver:
         self.mesh = naca_mesh(airfoil, alpha, kwargs = self.kwargs)
         self.fd_mesh = meshio_to_fd(self.mesh)
         self.kwargs["fd_mesh"] = self.fd_mesh
+        
+        self.meshes = [self.mesh]
+        self.fs = []
+        self.etas = []
 
-        self.test_output = fd.VTKFile("./Visualisation/FS/test_output.pvd")
+        if self.kwargs.get("write", True):
+            self.test_output = fd.VTKFile("./Visualisation/FS/test_output.pvd")
 
 
         self.__set_kwargs__()
@@ -111,21 +119,21 @@ class FsSolver:
         """
 
         # Initial potential flow
+        solver_time = time()
+        print("Solving initial potential flow...")
         PotentialFlow = PotentialFlowSolver(airfoil=self.airfoil, P = self.P, alpha = self.alpha, kwargs = self.kwargs["PFS_kwargs"])
         PotentialFlow.solve()
 
+        if self.kwargs.get("write", True):
+            self.test_output.write(PotentialFlow.velocity)
+        
         # Updating the free surface and potential at the free surface
-        free_surface_coords = self.__get_free_surface__()
-        self.eta = self.__compute_eta__(PotentialFlow, free_surface_coords)
-        self.__update_free_surface__()
-
-        self.phi = self.__initialize_phi__()
-        self.__update_free_surface_potential__()
-
+        self.old_free_surface_coords = self.__get_free_surface__()
+        self.eta = self.old_free_surface_coords[:,1]
+        self.__update_free_surface__(model = PotentialFlow)
 
 
         # Main Loop
-        solver_time = time()
         for iter in range(self.kwargs.get("max_iter", 20)):
             print(f"Iteration {iter+1}/{self.kwargs.get('max_iter', 20)}")
             iter_time = time()
@@ -133,12 +141,45 @@ class FsSolver:
             # Potential flow
             PotentialFlow = PotentialFlowSolver(airfoil=self.airfoil, P = self.P, alpha = self.alpha, kwargs = self.kwargs["PFS_kwargs"])
             PotentialFlow.solve()
+            self.__update_free_surface__(model = PotentialFlow)
 
-            
+            if self.kwargs.get("write", True):
+                self.test_output.write(PotentialFlow.velocity)
 
-            print(f"\t Iteration time: {time() - iter_time:.2f} s")
-
+            if self.__check_convergence__(np.max(np.abs(self.eta - self.old_eta)), iter, iter_time, solver_time):
+                break
     
+    def __update_free_surface__(self, model: PotentialFlowSolver) -> None:
+        """
+        Updates and sets all variables for the free surface.
+
+        Updates
+        ---
+        - old_free_surface_coords: coordinates of the current free surface
+        - free_surface_coords: coordinates of the free surface after the update
+        - free_surface_potential: potential at the free surface
+        - mesh: mesh of the entire domain
+        - fd_mesh: mesh of the entire domain in firedrake
+        """
+
+        fs_coords = self.__get_free_surface__()
+        self.old_eta = self.eta.copy()
+
+        self.eta = self.__compute_eta__(model, fs_coords)
+        self.phi = self.__compute_phi__(model, fs_coords)
+
+        new_mesh = shift_surface(self.mesh, self.__linear_interpolation__(fs_coords),
+                                  self.__linear_interpolation__(np.vstack((fs_coords[:,0], self.eta)).T))
+        #self.old_free_surface_coords = fs_coords.copy()
+        self.free_surface = fs_coords.copy()
+
+        self.mesh = new_mesh
+        self.meshes.append(new_mesh)
+        self.fd_mesh.coordinates.dat.data[:] = meshio_to_fd(new_mesh).coordinates.dat.data
+        self.kwargs["PFS_kwargs"]["fd_mesh"].coordinates.dat.data[:] = self.fd_mesh.coordinates.dat.data
+        self.kwargs["PFS_kwargs"]["mesh"] = new_mesh
+        self.kwargs["PFS_kwargs"]["fs_DBC"] = self.phi
+
     def __get_free_surface__(self) -> np.ndarray:   
 
         W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
@@ -146,6 +187,7 @@ class FsSolver:
         coords = fd.Function(W).interpolate(self.kwargs["fd_mesh"].coordinates).dat.data_ro[fs_nodes]
 
         coords = coords[coords[:,0].argsort()] # ensure fs_coords = [[x_0, y_0], [x_1, y_1], ...]
+        self.fs.append(coords)
 
         return coords
 
@@ -163,30 +205,31 @@ class FsSolver:
 
         x = free_surface_coords[:,0]
         eta = free_surface_coords[:,1]
+        eta[0] = self.kwargs["ylim"][1] # set the first point to the top of the domain
 
         # Compute eta_x stencil
-        dx = x[:-1] - x[1:] # dx = x_{i-1} - x_{i}
-        eta_x = eta_x = (eta[:-1] - eta[1:])/dx
+        dx = x[1:] - x[:-1] # dx = x_{i} - x_{i-1}
+        eta_x = (eta[1:] - eta[:-1])/dx # back wind 1-order FDM stencil
 
         # Get the velocity at the free surface
         velocity = np.array(PotentialFlow.velocity.at(free_surface_coords[1:,:]))
         u = velocity[:,0]
         w = velocity[:,1]
 
+        nablaPhi = u + w*eta_x
+
         # Compute the new free surface coordinates
-        new_eta = eta[1:] + self.dt * (eta_x * u + w + w*eta_x**2) 
+        new_eta = eta[1:] + self.dt * (w*(1 + eta_x**2) - eta_x*nablaPhi) # forward Euler method in pseudo time
 
         # Handle the boundary condition 
-        new_eta = np.concatenate(([new_eta[0]], new_eta)) # add the last point to the new eta
+        new_eta = np.concatenate(([eta[0]], new_eta)) # Set the first point to the top of the domain
+        self.etas.append(new_eta)
 
         return new_eta
-
-    def __update_free_surface__(self, PotentialFlow, free_surface_coords) -> None:
-        return None
     
     def __linear_interpolation__(self, new_free_surface_coords) -> fd.Function:
 
-        interpolation_func = interp1d(new_free_surface_coords[:,0], new_free_surface_coords[:,1], kind='linear', fill_value="extrapolate")
+        interpolation_func = interp1d(new_free_surface_coords[:,0], new_free_surface_coords[:,1]) #, kind='linear', fill_value="extrapolate")
 
         return interpolation_func
 
@@ -203,27 +246,26 @@ class FsSolver:
 
         # Compute eta_x stencil
         dx = x[:-1] - x[1:]
-        eta_x = (eta[:-1] - eta[1:])/dx
+        eta_x = (eta[1:] - eta[:-1])/dx
 
         # Get the velocity at the free surface
         velocity = np.array(PotentialFlow.velocity.at(free_surface_coords[1:,:]))
         u = velocity[:,0]
         w = velocity[:,1]
 
+        nablaPhi = u + w*eta_x
+
         # Get the potential at the free surface
         g = 9.81
-        new_phi = -g*eta[:-1] - 1/2 * (u**2 - w**2 * (1 + eta_x**2))
+        new_phi = -g*eta[1:] - 0.5* (nablaPhi**2 - w**2 * (1 + eta_x**2)) # forward Euler method in pseudo time
 
 
         # Handle the boundary condition 
-        new_phi = np.concatenate((new_phi, [new_phi[-1]])) # add the last point to the new phi
+        new_phi = np.concatenate(([new_phi[0]], new_phi)) # add the last point to the new phi
 
         return new_phi
 
-    def __update_free_surface_potential__(self, PotentialFlow, free_surface_coords) -> None:
-        return None
-
-    def __check_convergence__(self, free_surface_change, iter, solver_time) -> int:
+    def __check_convergence__(self, free_surface_change, iter, iter_time, solver_time) -> int:
 
         if free_surface_change < self.kwargs.get("tolerance", 1e-6):
             print(f"Converged after {iter} iterations.")
@@ -234,17 +276,25 @@ class FsSolver:
         elif free_surface_change > self.kwargs.get("divergence_tolerance", 1e+3):
             print(f"Did diverged after {iter} iterations.")
             print(f"\t Free surface change: {free_surface_change}")
+            print(f"\t Solver time: {time() - solver_time:.2f} s")
             return -1
             
         elif iter == self.kwargs.get("max_iter", 20) - 1:
-            print(f"Did not converge after {iter} iterations.")
+            print(f"Did not converge after {iter+1} iterations.")
             print(f"\t Free surface change: {free_surface_change}")
+            print(f"\t Solver time: {time() - solver_time:.2f} s")
             return -2
+        
+        else:
+            print(f"\t Free surface change: {free_surface_change:.2e}")
+            print(f"\t Iteration time: {time() - iter_time:.2f} s")
+            return 0
 
 if __name__ == "__main__":
     kwargs = {
         "dt": 0.1,
         "n_fs": 500,
+        "max_iter": 3,
         
         "PFS_kwargs": {
             "g_div": 20,
@@ -253,5 +303,5 @@ if __name__ == "__main__":
         }
     }
 
-    FsModel = FsSolver(airfoil = "0012", P = 2, alpha = 10, kwargs = kwargs)
+    FsModel = FsSolver(airfoil = "0012", P = 1, alpha = 10, kwargs = kwargs)
     FsModel.solve()
