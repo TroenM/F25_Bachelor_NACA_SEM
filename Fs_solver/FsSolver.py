@@ -201,17 +201,18 @@ class FsSolver:
         ylim_in = self.kwargs["ylim"]
         yrange_in = ylim_in[1] - ylim_in[0]
 
-        flux_in = self.kwargs["V_inf"] * self.kwargs["n_in"] * yrange_in
+        flux_in = self.kwargs["V_inf"] * yrange_in
 
         # Get the height of the outlet
         outlet_mask = self.fd_mesh.coordinates.dat.data_ro[:,0] == self.kwargs["xlim"][1]
         outlet_coords = self.fd_mesh.coordinates.dat.data_ro[outlet_mask]
         outlet_top = np.max(outlet_coords[:,1])
         outlet_bottom = np.min(outlet_coords[:,1])
+
         yrange_out = outlet_top - outlet_bottom
 
         # Compute the velocity at the outlet
-        V_out = flux_in / (self.kwargs["n_out"] * yrange_out)
+        V_out = flux_in / yrange_out
 
         return V_out
 

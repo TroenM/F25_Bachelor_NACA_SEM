@@ -163,28 +163,9 @@ class PotentialFlowSolver:
 
         # Initializing Laplaze solver
         model = PoissonSolver(self.fd_mesh, P=self.P)
-<<<<<<< HEAD
-        model.impose_NBC(fd.Constant(-self.V_inf), self.kwargs.get("inlet", 1))
-
-        V_out = self.kwargs.get("V_out", self.V_inf)
-        model.impose_NBC(fd.Constant(V_out), self.kwargs.get("outlet", 2))
-
-=======
-        # Find the length of the vectors that ensures that the ingoing and outgoind flux is v_inf * avg height of domain
-        avg_height_of_domain = self.ylim[1] - self.ylim[0]
-        # Defining the coords in the fd_mesh
-        coords = fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data
-        # For inlet
-        boundary_indecies = self.V.boundary_nodes(self.kwargs.get("inlet", 1))
-        boundary_coords = coords[boundary_indecies,:]
-        v_in = avg_height_of_domain * self.V_inf / (np.max(boundary_coords,1) - np.min(boundary_coords,1))
+        v_in, v_out = self.__get_bcflux__()
         model.impose_NBC(fd.Constant(-v_in), self.kwargs.get("inlet", 1))
-        # For outlet
-        boundary_indecies = self.V.boundary_nodes(self.kwargs.get("outlet", 2))
-        boundary_coords = coords[boundary_indecies,:]
-        v_out = avg_height_of_domain * self.V_inf / (np.max(boundary_coords,1) - np.min(boundary_coords,1))
         model.impose_NBC(fd.Constant(v_out), self.kwargs.get("outlet", 2))
->>>>>>> 182790130bdb0ecd2b02cd5f574c41fb6cefe373
 
         # Free surface boundary condition
         if self.kwargs.get("fs_DBC", np.array([0])).any():
@@ -318,6 +299,22 @@ class PotentialFlowSolver:
             print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
             print(f"\t Total time: {time() - time_total}")
             print(f"\n")
+        
+    def __get_bcflux__(self):
+        # Find the length of the vectors that ensures that the ingoing and outgoind flux is v_inf * avg height of domain
+        avg_height_of_domain = self.ylim[1] - self.ylim[0]
+        # Defining the coords in the fd_mesh
+        coords = fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data
+        # For inlet
+        boundary_indecies = self.V.boundary_nodes(self.kwargs.get("inlet", 1))
+        boundary_coords = coords[boundary_indecies,:]
+        v_in = avg_height_of_domain * self.V_inf / (np.max(boundary_coords,1) - np.min(boundary_coords,1))
+
+        # For outlet
+        boundary_indecies = self.V.boundary_nodes(self.kwargs.get("outlet", 2))
+        boundary_coords = coords[boundary_indecies,:]
+        v_out = avg_height_of_domain * self.V_inf / (np.max(boundary_coords,1) - np.min(boundary_coords,1))
+        return v_in, v_out
 
     def __compute_Gamma_div(self, Gammas : list) -> float:
         if len(Gammas) <4:
