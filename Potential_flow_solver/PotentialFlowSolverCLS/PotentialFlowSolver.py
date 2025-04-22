@@ -191,6 +191,9 @@ class PotentialFlowSolver:
         velocityPotential = model.u_sol
         velocityPotential -= model.u_sol.dat.data.min()
 
+        # For exposing initial velocity potential for fs solver
+        self.init_phi = velocityPotential.copy()
+
         # Computing the velocity field
         velocity = fd.Function(model.W, name="velocity")
         velocity.project(fd.grad(velocityPotential))
@@ -304,16 +307,16 @@ class PotentialFlowSolver:
         # Find the length of the vectors that ensures that the ingoing and outgoind flux is v_inf * avg height of domain
         avg_height_of_domain = self.ylim[1] - self.ylim[0]
         # Defining the coords in the fd_mesh
-        coords = fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data
+        coords = fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data
         # For inlet
         boundary_indecies = self.V.boundary_nodes(self.kwargs.get("inlet", 1))
         boundary_coords = coords[boundary_indecies,:]
-        v_in = avg_height_of_domain * self.V_inf / (np.max(boundary_coords,1) - np.min(boundary_coords,1))
+        v_in = avg_height_of_domain * self.V_inf / (np.max(boundary_coords[:,1]) - np.min(boundary_coords[:,1]))
 
         # For outlet
         boundary_indecies = self.V.boundary_nodes(self.kwargs.get("outlet", 2))
         boundary_coords = coords[boundary_indecies,:]
-        v_out = avg_height_of_domain * self.V_inf / (np.max(boundary_coords,1) - np.min(boundary_coords,1))
+        v_out = avg_height_of_domain * self.V_inf / (np.max(boundary_coords[:,1]) - np.min(boundary_coords[:,1]))
         return v_in, v_out
 
     def __compute_Gamma_div(self, Gammas : list) -> float:
