@@ -27,12 +27,13 @@ class FsSolver:
         Initializes the FsSolver
         """
         self.kwargs = kwargs["kwargs"] if kwargs != None else {}
+        self.__set_kwargs__()
 
         self.airfoil = airfoil
         self.P = P
         self.alpha = alpha
         self.dt = kwargs.get("dt", 0.01)
-        self.mesh = naca_mesh(airfoil, alpha, kwargs = self.kwargs)
+        self.mesh = naca_mesh(airfoil, alpha, xlim = self.kwargs["xlim"], ylim = self.kwargs["ylim"], kwargs = self.kwargs)
         self.fd_mesh = meshio_to_fd(self.mesh)
         self.kwargs["fd_mesh"] = self.fd_mesh
         
@@ -40,11 +41,14 @@ class FsSolver:
         self.fs = []
         self.etas = []
 
+        visualisation_dir = "./Visualisation/FS/"
         if self.kwargs.get("write", True):
-            self.test_output = fd.VTKFile("./Visualisation/FS/test_output.pvd")
+            if os.path.exists(visualisation_dir + "velocity_output"):
+                shutil.rmtree(visualisation_dir + "velocity_output")
+            self.velocity_output = fd.VTKFile(visualisation_dir + "velocity.pvd")
+            self.vortex_output = fd.VTKFile(visualisation_dir + "vortex.pvd")
 
-
-        self.__set_kwargs__()
+        self.__set_PFS_kwargs__()
 
         return None
 
@@ -62,7 +66,9 @@ class FsSolver:
             "n_bed": 70,
             "n_fs": 100,
             "n_airfoil": 200,
-            "center_of_airfoil": [0, 0.5],
+            "center_of_airfoil": [0.5, 0],
+
+            "V_inf": 10,
 
 
             # Solver kwargs
@@ -75,6 +81,7 @@ class FsSolver:
         for key, value in default_kwargs.items():
             self.kwargs[key] = self.kwargs.get(key, value)
         
+    def __set_PFS_kwargs__(self):
         PFS_kwargs = {
             # Mesh
             "mesh": self.mesh,
@@ -97,6 +104,7 @@ class FsSolver:
             "bed": 3,
             "fs": 4,
             "naca": 5,
+            "V_inf": self.kwargs["V_inf"],
 
             # Solver
             "solver_params": {"ksp_type": "preonly", "pc_type": "lu"},
@@ -125,7 +133,8 @@ class FsSolver:
         PotentialFlow.solve()
 
         if self.kwargs.get("write", True):
-            self.test_output.write(PotentialFlow.velocity)
+            self.velocity_output.write(PotentialFlow.velocity)
+            self.vortex_output.write(PotentialFlow.vortex)
         
         # Updating the free surface and potential at the free surface
         self.old_free_surface_coords = self.__get_free_surface__()
@@ -144,7 +153,7 @@ class FsSolver:
             self.__update_free_surface__(model = PotentialFlow)
 
             if self.kwargs.get("write", True):
-                self.test_output.write(PotentialFlow.velocity)
+                self.velocity_output.write(PotentialFlow.velocity)
 
             if self.__check_convergence__(np.max(np.abs(self.eta - self.old_eta)), iter, iter_time, solver_time):
                 break
@@ -179,6 +188,32 @@ class FsSolver:
         self.kwargs["PFS_kwargs"]["fd_mesh"].coordinates.dat.data[:] = self.fd_mesh.coordinates.dat.data
         self.kwargs["PFS_kwargs"]["mesh"] = new_mesh
         self.kwargs["PFS_kwargs"]["fs_DBC"] = self.phi
+        self.kwargs["PFS_kwargs"]["V_out"] = self.__compute_outlet_velocity__()
+
+    def __compute_outlet_velocity__(self) -> float:
+        """
+        Computes the velocity at the outlet of the domain, using the flux in the inlet.
+
+        Assumes both inlet and outlet are vertical, and that the inlet is fixed height.
+        """
+
+        # Get the flux at the inlet
+        ylim_in = self.kwargs["ylim"]
+        yrange_in = ylim_in[1] - ylim_in[0]
+
+        flux_in = self.kwargs["V_inf"] * self.kwargs["n_in"] * yrange_in
+
+        # Get the height of the outlet
+        outlet_mask = self.fd_mesh.coordinates.dat.data_ro[:,0] == self.kwargs["xlim"][1]
+        outlet_coords = self.fd_mesh.coordinates.dat.data_ro[outlet_mask]
+        outlet_top = np.max(outlet_coords[:,1])
+        outlet_bottom = np.min(outlet_coords[:,1])
+        yrange_out = outlet_top - outlet_bottom
+
+        # Compute the velocity at the outlet
+        V_out = flux_in / (self.kwargs["n_out"] * yrange_out)
+
+        return V_out
 
     def __get_free_surface__(self) -> np.ndarray:   
 
@@ -219,7 +254,7 @@ class FsSolver:
         nablaPhi = u + w*eta_x
 
         # Compute the new free surface coordinates
-        new_eta = eta[1:] + self.dt * (w*(1 + eta_x**2) - eta_x*nablaPhi) # forward Euler method in pseudo time
+        new_eta = eta[1:] + self.kwargs["dt"] * (w*(1 + eta_x**2) - eta_x*nablaPhi) # forward Euler method in pseudo time
 
         # Handle the boundary condition 
         new_eta = np.concatenate(([eta[0]], new_eta)) # Set the first point to the top of the domain
@@ -268,19 +303,19 @@ class FsSolver:
     def __check_convergence__(self, free_surface_change, iter, iter_time, solver_time) -> int:
 
         if free_surface_change < self.kwargs.get("tolerance", 1e-6):
-            print(f"Converged after {iter} iterations.")
+            print(f"Free Surface Solver Converged after {iter} iterations.")
             print(f"\t Free surface change: {free_surface_change}")
             print(f"\t Solver time: {time() - solver_time:.2f} s")
             return 1
 
         elif free_surface_change > self.kwargs.get("divergence_tolerance", 1e+3):
-            print(f"Did diverged after {iter} iterations.")
+            print(f"Free Surface Solver diverged after {iter} iterations.")
             print(f"\t Free surface change: {free_surface_change}")
             print(f"\t Solver time: {time() - solver_time:.2f} s")
             return -1
             
         elif iter == self.kwargs.get("max_iter", 20) - 1:
-            print(f"Did not converge after {iter+1} iterations.")
+            print(f"Free Surface Solver not converge after {iter+1} iterations.")
             print(f"\t Free surface change: {free_surface_change}")
             print(f"\t Solver time: {time() - solver_time:.2f} s")
             return -2
@@ -292,9 +327,11 @@ class FsSolver:
 
 if __name__ == "__main__":
     kwargs = {
-        "dt": 0.1,
+        "dt": 1e-4,
         "n_fs": 500,
+        "n_airfoil": 50,
         "max_iter": 3,
+        "ylim": [-4, 1],
         
         "PFS_kwargs": {
             "g_div": 20,
@@ -303,5 +340,5 @@ if __name__ == "__main__":
         }
     }
 
-    FsModel = FsSolver(airfoil = "0012", P = 1, alpha = 10, kwargs = kwargs)
+    FsModel = FsSolver(airfoil = "0012", P = 3, alpha = 10, kwargs = kwargs)
     FsModel.solve()

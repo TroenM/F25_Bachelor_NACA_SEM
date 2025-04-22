@@ -164,7 +164,10 @@ class PotentialFlowSolver:
         # Initializing Laplaze solver
         model = PoissonSolver(self.fd_mesh, P=self.P)
         model.impose_NBC(fd.Constant(-self.V_inf), self.kwargs.get("inlet", 1))
-        model.impose_NBC(fd.Constant(self.V_inf), self.kwargs.get("outlet", 2))
+
+        V_out = self.kwargs.get("V_out", self.V_inf)
+        model.impose_NBC(fd.Constant(V_out), self.kwargs.get("outlet", 2))
+
 
         # Free surface boundary condition
         if self.kwargs.get("fs_DBC", np.array([0])).any():
@@ -224,6 +227,10 @@ class PotentialFlowSolver:
 
             # Compute the vortex
             vortex = self.compute_vortex(Gamma, model, center_of_vortex, vortex)
+
+            ######## REMOVE WHEN DONE TESTING ########
+            if it == 1:
+                self.vortex = vortex
 
             velocity += vortex
             vortex_sum += vortex

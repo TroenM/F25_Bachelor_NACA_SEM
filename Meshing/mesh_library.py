@@ -301,6 +301,11 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     """
 
     # ==================== Initializing the model ====================
+    try:
+        kwargs = kwargs["kwargs"]
+    except:
+        pass
+    
     gmsh.initialize()
     gmsh.option.setNumber("General.Verbosity", 0)
 
