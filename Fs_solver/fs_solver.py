@@ -124,7 +124,7 @@ class FsSolver:
         self.fs_rtol = kwargs.get("fs_rtol", 1e-5)
 
         self.visualisationpath = "../Visualisation/FS/"
-
+        self.damping = self.kwargs.get("damping", 1)
         
         # Handeling output files
         if self.write:
@@ -152,9 +152,10 @@ class FsSolver:
         model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
         model.solve()
         self.model = model
+        self.velocity = model.velocity
 
         if self.write:
-            self.velocity_output.write(model.velocity)
+            self.velocity_output.write(self.velocity)
 
         # Initialize phi tilde
         self.__init_PhiTilde__(model)
@@ -168,16 +169,16 @@ class FsSolver:
             iter_time = time()
             
             # Update free surface
-            #new_eta, residuals = self.__compute_eta(model)
+            new_eta, residuals = self.__compute_eta__(model)
 
             # Update dirichlet boundary condition
-            #self.__compute_phi_tilde(model)
+            self.__compute_phi_tilde__(model, new_eta)
 
-            new_eta, self.PhiTilde, residuals = self.__compute_fs_equations_weak1d(model)
+            #new_eta, self.PhiTilde, residuals = self.__compute_fs_equations_strong__()
             kwargs_for_Kutta_kondition["fs_DBC"] = self.PhiTilde
 
             # Update mesh
-            self.__update_mesh_data(old_eta, new_eta)
+            self.__update_mesh_data__(old_eta, new_eta)
             kwargs_for_Kutta_kondition["mesh"] = self.mesh
             kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
 
@@ -197,7 +198,7 @@ class FsSolver:
 
             
 
-    def __compute_eta(self, model : PotentialFlowSolver) -> np.ndarray:
+    def __compute_eta__(self, model : PotentialFlowSolver) -> np.ndarray:
         x = self.fs_points[:,0]
         fs_velocity = np.array(model.velocity.at(self.fs_points))[1:]
         eta = self.fs_points[:, 1]
@@ -209,35 +210,29 @@ class FsSolver:
         # First order x-stencil for eta_x
         eta_x = (eta[1:] - eta[:-1])/dx
 
-        Un = fs_velocity[:, 0]
         Wn = fs_velocity[:, 1]
 
-        grad_phi = Un + Wn * eta_x
+        grad_phi_tilde = (self.PhiTilde[1:] - self.PhiTilde[:-1])/dx
 
         # Compute eta pseudo-time step
-        eta_new = eta[1:] + dt*(-eta_x*grad_phi + Wn*(1+ eta_x**2))
-
+        eta_new = eta[1:] + dt*(-eta_x*grad_phi_tilde + Wn*(1 + eta_x**2)*self.damping)
+        
         # Add the last point
-        first_eta_val = 1#((self.ylim[1]) * (self.xlim[1]-self.xlim[0]) - (trapezoid(eta_new,x[1:]))) * 2/(x[0]-x[1]) - eta_new[0]
+        first_eta_val = self.ylim[1]#((self.ylim[1]) * (self.xlim[1]-self.xlim[0]) - (trapezoid(eta_new,x[1:]))) * 2/(x[0]-x[1]) - eta_new[0]
         print("The height at the beginning of the boundary is: ",first_eta_val)
-        eta_new = np.append(eta_new[::-1], first_eta_val)[::-1]
+        eta_new = np.hstack((first_eta_val, eta_new))
         residual = np.linalg.norm(eta-eta_new, np.inf)
         self.etas.append(eta_new)
         return eta_new, residual
     
 
     def __init_PhiTilde__(self, model) -> None:
-        # u = np.array(model.velocity.at(self.fs_points))[:,0]
-        # self.PhiTilde = np.zeros_like(self.fs_points[:,0])
-        # for i in range(1,len(self.fs_points[:,0])):
-        #     self.PhiTilde[i] = trapezoid(u[:i+1],self.fs_points[:i+1,0]) - trapezoid(u[:i],self.fs_points[:i,0])
         self.PhiTilde = np.array(model.init_phi.at(self.fs_points))
         return None
     
-    def __compute_phi_tilde(self, model) -> None:
+    def __compute_phi_tilde__(self, model, eta) -> None:
         x = self.fs_points[:,0]
         fs_velocity = np.array(model.velocity.at(self.fs_points))[1:,:2]
-        eta = self.fs_points[:, 1]
         dt = self.dt
 
         # Compute the x-distance between all nodes
@@ -246,18 +241,63 @@ class FsSolver:
         # First order x-stencil for eta_x
         eta_x = (eta[1:] - eta[:-1])/dx
 
-        Un = fs_velocity[:, 0]
         Wn = fs_velocity[:, 1]
 
-        grad_phi = Un + Wn * eta_x
+        grad_phi_tilde = (self.PhiTilde[1:] - self.PhiTilde[:-1])/dx
+        
         
 
         # Compute eta pseudo-time step
         g = 9.81
-        self.PhiTilde[1:] = self.PhiTilde[1:] + dt*(-g*eta[1:] - 0.5*(grad_phi**2 + Wn**2*(1 + eta_x**2)))
+        self.PhiTilde[1:] = self.PhiTilde[1:] + dt*(-g*eta[1:] - 0.5*(grad_phi_tilde**2*self.damping - Wn**2*(1 + eta_x**2)*self.damping))
         return None
     
-    def __compute_fs_equations_weak1d(self, model) -> None:
+    def __compute_fs_equations_strong__(self) -> tuple:
+        number_of_points = self.fs_points.shape[0]
+        fs_mesh = fd.IntervalMesh(number_of_points-1, self.xlim[0], self.xlim[1])
+        fs_mesh.coordinates.dat.data[:] = self.fs_points[:,0]
+        V_eta = fd.FunctionSpace(fs_mesh, "CG", 1)
+        V_phi_tilde = fd.FunctionSpace(fs_mesh, "CG", 1)
+        W = V_eta*V_phi_tilde
+
+        fs_vars = fd.Function(W)
+        eta_new, phi_tilde_new = fd.split(fs_vars)
+        v_eta = fd.TestFunction(V_eta)
+        v_phi_tilde = fd.TestFunction(V_phi_tilde)
+        #w_tilde = fd.Function(V_fs)
+
+        eta = fd.Function(V_eta)
+        eta.dat.data[:] = self.fs_points[:,1]
+        phi_tilde = fd.Function(V_phi_tilde)
+        phi_tilde.dat.data[:] = self.PhiTilde
+        w = fd.Function(V_eta)
+        w.dat.data[:] = np.array(self.velocity.at(self.fs_points))[:,1]
+        dt = self.dt
+        g = fd.Constant(9.82)
+
+        F_eta = (eta_new - eta)/dt + fd.dot(fd.grad(eta_new), fd.grad(phi_tilde_new)) - w*(fd.Constant(1) + fd.dot(fd.grad(eta_new), fd.grad(eta_new)))
+
+        F_phi_tilde = (phi_tilde_new - phi_tilde)/dt + g*eta_new + fd.Constant(0.5) * (fd.dot(fd.grad(phi_tilde_new), fd.grad(phi_tilde_new)) - w**2*(fd.Constant(1) + fd.dot(fd.grad(eta_new), fd.grad(eta_new))))
+
+        F = F_eta + F_phi_tilde
+
+
+
+        #problem = fd.NonlinearVariationalProblem(F, fs_vars)
+        #solver = fd.NonlinearVariationalSolver(problem)
+        #solver.solve()
+
+        eta_new = fs_vars.sub(0).dat.data[:]
+        phi_new = fs_vars.sub(1).dat.data[:]
+        old_eta = self.fs_points[:, 1]
+        residuals = np.linalg.norm(eta_new - old_eta, np.inf)
+
+        print(f"\t free surface equations done")
+
+        return eta_new, phi_new, residuals
+
+
+    def __compute_fs_equations_weak1d__(self, model) -> None:
         """
         Updates the free surface by solving the free surface equations using firedrake
         """
@@ -353,7 +393,7 @@ class FsSolver:
 
         
     
-    def __update_mesh_data(self, old_eta : np.ndarray, new_eta : np.ndarray) -> None:
+    def __update_mesh_data__(self, old_eta : np.ndarray, new_eta : np.ndarray) -> None:
         new_mesh = shift_surface(self.mesh, interp1d(self.fs_xs, old_eta), interp1d(self.fs_xs, new_eta))
         self.mesh = new_mesh
         self.fd_mesh.coordinates.dat.data[:] = meshio_to_fd(self.mesh).coordinates.dat.data
