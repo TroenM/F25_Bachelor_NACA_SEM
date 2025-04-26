@@ -196,7 +196,7 @@ class PotentialFlowSolver:
 
         # Computing the velocity field
         velocity = fd.Function(model.W, name="velocity")
-        velocity.project(fd.grad(velocityPotential))
+        velocity.project(fd.as_vector((velocityPotential.dx(0), velocityPotential.dx(1))))
         vortex = fd.Function(model.W, name="vortex")
 
         if self.write:
@@ -243,8 +243,6 @@ class PotentialFlowSolver:
             
             # Check for convergence
             if np.abs(np.dot(v12, vte)) < self.kwargs.get("dot_tol", 1e-6):
-                print(v12)
-                print(vte)
                 print(f"PoissonSolver converged in {it} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
@@ -468,7 +466,7 @@ class PotentialFlowSolver:
 
         # Computing the boundary correcting velocity field
         velocityBC = fd.Function(correction_model.W)
-        velocityBC.project(fd.grad(velocityPotential))
+        velocityBC.project(fd.as_vector((velocityPotential.dx(0), velocityPotential.dx(1))))
 
         return velocityBC
     
@@ -567,7 +565,8 @@ if __name__ == "__main__":
            "n_fs": 50,
            "n_bed": 50,
            "n_inlet": 30,
-           "n_outlet": 30}
+           "n_outlet": 30,
+           "dot_tol": 1e-4}
 
         model = PotentialFlowSolver("0012", P = 2, alpha = 10, kwargs=kwargs)
         model.solve()

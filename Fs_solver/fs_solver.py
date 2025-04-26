@@ -150,6 +150,9 @@ class FsSolver:
 
         # Doing the initializing solve
         model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
+        old_eta = self.fs_points[:,1]
+        new_eta = np.sin(self.fs_points[:,0]/2)/10 + self.ylim[1]
+        self.__update_mesh_data__(old_eta, new_eta)
         model.solve()
         self.model = model
         self.velocity = model.velocity
@@ -163,18 +166,18 @@ class FsSolver:
         
 
         # Preparing for loop
-        old_eta = self.fs_points[:,1]
+        
         print("initialization done")
         for i in range(self.kwargs.get("max_iter_fs", 10)):
             iter_time = time()
             
             # Update free surface
-            new_eta, residuals = self.__compute_eta__(model)
+            #new_eta, residuals = self.__compute_eta__(model)
 
             # Update dirichlet boundary condition
-            self.__compute_phi_tilde__(model, new_eta)
+            #self.__compute_phi_tilde__(model, new_eta)
 
-            #new_eta, self.PhiTilde, residuals = self.__compute_fs_equations_strong__()
+            new_eta, self.PhiTilde, residuals = self.__compute_fs_equations_weak1d__(model)
             kwargs_for_Kutta_kondition["fs_DBC"] = self.PhiTilde
 
             # Update mesh
@@ -311,35 +314,30 @@ class FsSolver:
         # Defining unknown functions
         W = V_eta * V_phi
         eta_phi = fd.Function(W)
-        eta_n1, phi = fd.split(eta_phi) #eta^{n+1}, phi^{n+1}
+        eta_n1, phi_n1 = fd.split(eta_phi) #eta^{n+1}, phi^{n+1}
         psi, zeta = fd.TestFunctions(W) 
 
         # Defining known functions
         eta_n = fd.Function(V_eta) # eta^{n}
         phi_n = fd.Function(V_phi) # phi^{n}
+        u_n = fd.Function(V_phi) # u^{n}
         w_n = fd.Function(V_phi) # w^{n}
         velocity = np.array(model.velocity.at(self.fs_points)) # velocity^{n}
 
         phi_n.dat.data[:] = self.PhiTilde
         eta_n.dat.data[:] = self.fs_points[:, 1]
+        u_n.dat.data[:] = velocity[:, 0]
         w_n.dat.data[:] = velocity[:, 1]
 
         g = fd.Constant(9.81)
         dt = fd.Constant(self.dt)
 
-        grad_eta_n1 = fd.grad(eta_n1)
-        grad_phi = fd.grad(phi) + w_n * fd.grad(eta_n1)
 
-        F1 = (fd.inner((eta_n1 - eta_n)/dt, psi) * fd.dx +
-              fd.inner(fd.dot(grad_eta_n1, grad_phi), psi) * fd.dx -
-              fd.inner(w_n * (fd.Constant(1) + fd.dot(grad_eta_n1, grad_eta_n1)), psi) * fd.dx
-              )
+        F1 = fd.inner(eta_n1 - eta_n, psi) * fd.dx + dt * (fd.inner(phi_n1.dx(0)*eta_n1.dx(0), psi)*fd.dx - fd.inner(w_n, psi) * fd.dx)
 
-        F2 = (fd.inner((phi - phi_n)/dt, zeta) * fd.dx +
-              fd.inner(g*eta_n1, zeta)* fd.dx +
-              fd.Constant(0.5) * fd.inner(fd.dot(grad_phi, grad_phi) - 
-                    w_n**2 * (fd.Constant(1) + fd.dot(grad_eta_n1, grad_eta_n1)), zeta) * fd.dx
-              )
+        F2 = fd.inner(phi_n1 -phi_n, zeta) * fd.dx + dt * (
+            g*fd.inner(eta_n1, zeta)*fd.dx + fd.Constant(0.5)*fd.inner(fd.dot(phi_n1.dx(0), phi_n1.dx(0)), zeta)*fd.dx
+            )
 
         F = F1 + F2
 
@@ -417,6 +415,3 @@ if __name__ == "__main__":
            "n_outlet": 15, "a":1, "b":1}
     model = FsSolver("0012" , alpha=10, P=2, kwargs = kwargs)
     model.solve()
-
-if __name__ == "__main__":
-    print("yay")
