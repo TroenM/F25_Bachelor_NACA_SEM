@@ -3,7 +3,7 @@ if os.getcwd().split("/")[-1] == "Fs_solver":
     os.chdir("../")
 elif os.getcwd() == "/root/MyProjects":
     os.chdir("./F25_Bachelor_NACA_SEM")
-elif os.getcwd() == "\home/firedrake/Projects":
+elif os.getcwd() == "/home/firedrake/Projects":
     os.chdir("./Bachelor/F25_Bachelor_NACA_SEM")
  
 import sys
@@ -149,10 +149,10 @@ class FsSolver:
         kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
 
         # Doing the initializing solve
-        model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
         old_eta = self.fs_points[:,1]
-        new_eta = np.sin(self.fs_points[:,0]/2)/10 + self.ylim[1]
+        new_eta = self.__init_mesh_guess__()
         self.__update_mesh_data__(old_eta, new_eta)
+        model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
         model.solve()
         self.model = model
         self.velocity = model.velocity
@@ -177,7 +177,7 @@ class FsSolver:
             # Update dirichlet boundary condition
             #self.__compute_phi_tilde__(model, new_eta)
 
-            new_eta, self.PhiTilde, residuals = self.__compute_fs_equations_weak1d__(model)
+            new_eta, self.PhiTilde, residuals = self.__compute_fs_equations_weak1d__()
             kwargs_for_Kutta_kondition["fs_DBC"] = self.PhiTilde
 
             # Update mesh
@@ -227,12 +227,23 @@ class FsSolver:
         residual = np.linalg.norm(eta-eta_new, np.inf)
         self.etas.append(eta_new)
         return eta_new, residual
-    
 
     def __init_PhiTilde__(self, model) -> None:
         self.PhiTilde = np.array(model.init_phi.at(self.fs_points))
         return None
     
+    def __init_mesh_guess__(self) -> np.ndarray:
+        """
+        Initialize the mesh guess for the free surface
+        """
+        x = self.fs_points[:,0]
+        eta = self.fs_points[:,1]
+        omega = 2*np.pi/(2)
+        mask = (x >= -1)*(x <= 1)
+        eta[mask] = np.sin(omega*(x[mask]))/5 + self.ylim[1]
+
+        return eta
+
     def __compute_phi_tilde__(self, model, eta) -> None:
         x = self.fs_points[:,0]
         fs_velocity = np.array(model.velocity.at(self.fs_points))[1:,:2]
@@ -255,7 +266,7 @@ class FsSolver:
         self.PhiTilde[1:] = self.PhiTilde[1:] + dt*(-g*eta[1:] - 0.5*(grad_phi_tilde**2*self.damping - Wn**2*(1 + eta_x**2)*self.damping))
         return None
     
-    def __compute_fs_equations_strong__(self) -> tuple:
+#    def __compute_fs_equations_strong__(self) -> tuple:
         number_of_points = self.fs_points.shape[0]
         fs_mesh = fd.IntervalMesh(number_of_points-1, self.xlim[0], self.xlim[1])
         fs_mesh.coordinates.dat.data[:] = self.fs_points[:,0]
@@ -300,14 +311,16 @@ class FsSolver:
         return eta_new, phi_new, residuals
 
 
-    def __compute_fs_equations_weak1d__(self, model) -> None:
+#    def __compute_fs_equations_weak1d__(self) -> None:
         """
         Updates the free surface by solving the free surface equations using firedrake
         """
-        print("\t Computing free surface equations")
+        print("\t Computing free surface equations using IE")
         # Mesh and function spaces
         number_of_points = self.fs_points.shape[0]
         fs_mesh = fd.IntervalMesh(number_of_points-1, self.xlim[0], self.xlim[1])
+        fs_mesh.coordinates.dat.data[:] = self.fs_points[:,0] # Setting coordinats to match actual points
+
         V_eta = fd.FunctionSpace(fs_mesh, "CG", 1)
         V_phi = fd.FunctionSpace(fs_mesh, "CG", 1)
 
@@ -322,7 +335,7 @@ class FsSolver:
         phi_n = fd.Function(V_phi) # phi^{n}
         u_n = fd.Function(V_phi) # u^{n}
         w_n = fd.Function(V_phi) # w^{n}
-        velocity = np.array(model.velocity.at(self.fs_points)) # velocity^{n}
+        velocity = np.array(self.velocity.at(self.fs_points)) # velocity at free surface points
 
         phi_n.dat.data[:] = self.PhiTilde
         eta_n.dat.data[:] = self.fs_points[:, 1]
@@ -335,7 +348,7 @@ class FsSolver:
 
         F1 = fd.inner(eta_n1 - eta_n, psi) * fd.dx + dt * (fd.inner(phi_n1.dx(0)*eta_n1.dx(0), psi)*fd.dx - fd.inner(w_n, psi) * fd.dx)
 
-        F2 = fd.inner(phi_n1 -phi_n, zeta) * fd.dx + dt * (
+        F2 = fd.inner(phi_n1 - phi_n, zeta) * fd.dx + dt * (
             g*fd.inner(eta_n1, zeta)*fd.dx + fd.Constant(0.5)*fd.inner(fd.dot(phi_n1.dx(0), phi_n1.dx(0)), zeta)*fd.dx
             )
 
@@ -365,7 +378,62 @@ class FsSolver:
 
         return eta_new, phi_new, residuals
 
+    def __compute_fs_equations_weak1d__(self) -> tuple:
+        """
+        Updates the free surface and corresponding dirichlet boundary condition
+        """
+        #print("\t Computing free surface equations using EE")
+        # Initialize mesh
+        number_of_points = self.fs_points.shape[0]
+        fs_mesh = fd.IntervalMesh(number_of_points-1, self.xlim[0], self.xlim[1])
 
+        # Ensure the mesh coordinates are spaced correctly
+        fs_mesh.coordinates.dat.data[:] = self.fs_points[:,0]
+        V_eta = fd.FunctionSpace(fs_mesh, "CG", 1)
+        V_phi = fd.FunctionSpace(fs_mesh, "CG", 1)
+
+        # Defining unknown functions
+        eta_n1 = fd.TrialFunction(V_eta)
+        phi_n1 = fd.TrialFunction(V_phi)
+
+        v_eta = fd.TestFunction(V_eta)
+        v_phi = fd.TestFunction(V_phi)
+
+        # Defining known functions
+        eta_n = fd.Function(V_eta)
+        eta_n.dat.data[:] = self.fs_points[:, 1]
+        phi_n = fd.Function(V_phi)
+        phi_n.dat.data[:] = self.PhiTilde
+        u_n = fd.Function(V_phi)
+        u_n.dat.data[:] = np.array(self.velocity.at(self.fs_points))[:, 0]
+        w_n = fd.Function(V_phi)
+        w_n.dat.data[:] = np.array(self.velocity.at(self.fs_points))[:, 1]
+        g = fd.Constant(9.82)
+        dt = fd.Constant(self.dt)
+
+        # Weak form EE schemes of the free surface equations
+        F_eta_lhs = fd.inner(eta_n1, v_eta)*fd.dx
+        F_eta_rhs = fd.inner(eta_n, v_eta)*fd.dx + dt * (fd.inner(w_n, v_eta)*fd.dx - fd.inner(u_n*eta_n.dx(0), v_eta)*fd.dx)
+        
+
+        F_phi_lhs = fd.inner(phi_n1, v_phi)*fd.dx
+        F_phi_rhs = fd.inner(phi_n, v_phi)*fd.dx + dt * (-fd.Constant(0.5)*fd.inner(u_n**2, v_phi)*fd.dx-g*fd.inner(eta_n, v_phi)*fd.dx)
+
+        # Dirichlet boundary conditions
+        dbc_eta = fd.DirichletBC(V_eta, self.ylim[1], "on_boundary")
+        #dbc_phi = fd.DirichletBC(V_phi, self.PhiTilde[0], "on_boundary")
+
+        eta_new = fd.Function(V_eta)
+        phi_new = fd.Function(V_phi)
+
+        fd.solve(F_eta_lhs == F_eta_rhs, eta_new, bcs = dbc_eta, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
+        fd.solve(F_phi_lhs == F_phi_rhs, phi_new, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
+
+        old_eta = self.fs_points[:, 1]
+        residuals = np.linalg.norm(eta_new.dat.data[:] - old_eta, np.inf)
+        #print(f"\t free surface equations done")
+
+        return eta_new.dat.data[:], phi_new.dat.data[:], residuals
 
     def __check_status__(self, residuals, iter, iter_time, solve_time) -> bool:
         if residuals < self.kwargs.get("rtol", 1e-5):
@@ -407,11 +475,19 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "V_inf": 10, "g_div": 5, "write":True,
-           "n_airfoil": 200,
-           "n_fs": 500,
+    kwargs = {"ylim":[-4,1], "xlim":[-13,13], "V_inf": 10, "g_div": 70, "write":True,
+           "n_airfoil": 50,
+           "n_fs": 50,
            "n_bed": 20,
-           "n_inlet": 15,
-           "n_outlet": 15, "a":1, "b":1}
-    model = FsSolver("0012" , alpha=10, P=2, kwargs = kwargs)
-    model.solve()
+           "n_inlet": 10,
+           "n_outlet": 10,
+           "rtol": 1e-8,
+           "fs_rtol": 1e-3,
+           "max_iter_fs": 15,
+           "max_iter": 50,
+           "dt": 1e-3,
+           "a":1, "b":1,
+           "dot_tol": 1e-4}
+    
+    FS = FsSolver("0012", alpha = 10, P=5, kwargs = kwargs)
+    FS.solve()

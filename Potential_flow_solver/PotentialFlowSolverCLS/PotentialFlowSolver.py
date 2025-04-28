@@ -215,6 +215,8 @@ class PotentialFlowSolver:
             time_it = time()
             if __name__ == "__main__" or self.kwargs.get("print_iter", False):
                 print(f"Starting iteration {it}")
+            else:
+                print(f"Starting PotentialFLowSolver iteration {it}", end="\r")
 
             # Computing the vortex strength
             vte = velocity.at(p_te_new)
@@ -252,8 +254,6 @@ class PotentialFlowSolver:
 
             # Checking for Stagnation
             if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
-                print(v12)
-                print(vte)
                 print(f"PoissonSolver stagnated in {it-1} iterations")
                 print(f"\t Total time: {time() - time_total}")
                 print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
