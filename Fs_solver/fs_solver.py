@@ -112,7 +112,7 @@ class FsSolver:
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
         fs_indecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
         self.fs_points = (fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)[fs_indecies,:]
-        self.fs_points = self.fs_points[self.fs_points[:,0].argsort()]
+        # self.fs_points = self.fs_points[self.fs_points[:,0].argsort()]
         self.fs_xs = self.fs_points[:,0]
 
         self.etas = []
@@ -267,7 +267,7 @@ class FsSolver:
         return None
 
 
-    def __compute_fs_equations_weak1d__(self) -> None:
+#    def __compute_fs_equations_weak1d__(self) -> None:
         """
         Updates the free surface by solving the free surface equations using firedrake
         """
@@ -279,14 +279,12 @@ class FsSolver:
 
         V_eta = fd.FunctionSpace(fs_mesh, "CG", 1)
         V_phi = fd.FunctionSpace(fs_mesh, "CG", 1)
-        V_U = fd.FunctionSpace(fs_mesh, "CG", 1)
-        V_W = fd.FunctionSpace(fs_mesh, "CG", 1)
 
         # Defining unknown functions
-        W = V_eta * V_phi * V_U * V_W
+        W = V_eta * V_phi
         fs_vars = fd.Function(W)
-        eta_n1, phi_n1, u_n1, w_n1 = fd.split(fs_vars) #eta^{n+1}, phi^{n+1}
-        v_1, v_2, v_3, v_4 = fd.TestFunctions(W) 
+        eta_n1, phi_n1 = fd.split(fs_vars) #eta^{n+1}, phi^{n+1}
+        v_1, v_2 = fd.TestFunctions(W) 
 
         # Defining known functions
         eta_n = fd.Function(V_eta) # eta^{n}
@@ -296,48 +294,45 @@ class FsSolver:
         velocity = np.array(self.velocity.at(self.fs_points)) # velocity at free surface points
 
         phi_n.dat.data[:] = self.PhiTilde
-        eta_n.dat.data[:] = self.fs_points[:, 1]
+        eta_n.dat.data[:] = self.fs_points[:, 1] - self.ylim[1] 
         u_n.dat.data[:] = velocity[:, 0]
         w_n.dat.data[:] = velocity[:, 1]
 
         g = fd.Constant(9.81)
         dt = fd.Constant(self.dt)
 
+        bcs_eta = fd.DirichletBC(W.sub(0), 0, "on_boundary") # Dirichlet BC for eta
+        bcs_phi1 = fd.DirichletBC(W.sub(1), self.PhiTilde[0], 1) # Dirichlet BC for phi
+        bcs_phi2 = fd.DirichletBC(W.sub(1), self.PhiTilde[-1], 2) # Dirichlet BC for phi
+
+        bcs = [bcs_eta, bcs_phi1]
+
         F1 = fd.inner(eta_n1 - eta_n, v_1)*fd.dx + dt*(fd.inner(eta_n1.dx(0)*phi_n1.dx(0), v_1)*fd.dx - 
-                                                       fd.inner(w_n1*(fd.Constant(1) + eta_n1.dx(0)**2), v_1)*fd.dx
+                                                       fd.inner(w_n, v_1)*fd.dx
                                                        )
 
         F2 = fd.inner(phi_n1 - phi_n, v_2)*fd.dx + dt*(
             fd.inner(g*eta_n1, v_2)*fd.dx +
-            fd.Constant(0.5)*fd.inner(phi_n1.dx(0)**2 - w_n1**2 * (fd.Constant(1) + eta_n1.dx(0)**2), v_2)*fd.dx
+            fd.Constant(0.5)*fd.inner(phi_n1.dx(0)**2 + w_n**2, v_2)*fd.dx
         )
-        
-        F3 = fd.inner(phi_n1 - phi_n, v_3)*fd.dx + dt*(
-            fd.Constant(0.5)*fd.inner(u_n1**2 + w_n1**2, v_3)*fd.dx+
-            fd.inner(g*eta_n1, v_3)*fd.dx
-        ) - fd.inner((eta_n1 - eta_n)*w_n1, v_3)*fd.dx
 
-        F4 = fd.inner(phi_n1.dx(0), v_4)*fd.dx - fd.inner(u_n1, v_4)*fd.dx - fd.inner(w_n1*eta_n1.dx(0), v_4)*fd.dx
+        F = F1 + F2
 
-        F = F1 + F2 + F3 + F4
+        # solver_params={'ksp_type': 'gmres',
+                    #   'pc_type': 'hypre',
+                    #    'ksp_max_it': 100}
 
-        bc3 = fd.DirichletBC(W.sub(2), fd.Constant(self.V_inf), "on_boundary")
-        bc4 = fd.DirichletBC(W.sub(3), fd.Constant(0), "on_boundary")
-        solver_params={'ksp_type': 'gmres',
-                      'pc_type': 'hypre',
-                       'ksp_max_it': 100}
+        solver_params = {
+             "newton_solver": {
+                 "relative_tolerance": self.fs_rtol,
+                 "absolute_tolerance": 1e-8,  # Add tighter absolute tolerance if needed
+                 "maximum_iterations": 500,   # Increase maximum iterations
+                 "relaxation_parameter": 1.0  # Adjust relaxation if needed
+             }
+        }
+        fd.solve(F == 0, fs_vars, bcs = bcs, solver_parameters=solver_params)
 
-        # solver_params = {
-            #  "newton_solver": {
-                #  "relative_tolerance": self.fs_rtol,
-                #  "absolute_tolerance": 1e-8,  # Add tighter absolute tolerance if needed
-                #  "maximum_iterations": 500,   # Increase maximum iterations
-                #  "relaxation_parameter": 1.0  # Adjust relaxation if needed
-            #  }
-        # }
-        fd.solve(F == 0, fs_vars, bcs = [bc3,bc4], solver_parameters=solver_params)
-
-        eta_new = fs_vars.sub(0).dat.data[:]
+        eta_new = fs_vars.sub(0).dat.data[:] + self.ylim[1]
         phi_new = fs_vars.sub(1).dat.data[:]
         old_eta = self.fs_points[:, 1]
         residuals = np.linalg.norm(eta_new - old_eta, np.inf)
@@ -346,7 +341,7 @@ class FsSolver:
 
         return eta_new, phi_new, residuals
 
-#    def __compute_fs_equations_weak1d__(self) -> tuple:
+    def __compute_fs_equations_weak1d__(self) -> tuple:
         """
         Updates the free surface and corresponding dirichlet boundary condition
         """
@@ -369,11 +364,11 @@ class FsSolver:
 
         # Defining known functions
         eta_n = fd.Function(V_eta)
-        eta_n.dat.data[:] = self.fs_points[:, 1]
+        eta_n.dat.data[:] = self.fs_points[:, 1] - self.ylim[1]
         phi_n = fd.Function(V_phi)
         phi_n.dat.data[:] = self.PhiTilde
-        u_n1 = fd.Function(V_phi)
-        u_n1.dat.data[:] = np.array(self.velocity.at(self.fs_points))[:, 0]
+        u_n = fd.Function(V_phi)
+        u_n.dat.data[:] = np.array(self.velocity.at(self.fs_points))[:, 0]
         w_n = fd.Function(V_phi)
         w_n.dat.data[:] = np.array(self.velocity.at(self.fs_points))[:, 1]
         g = fd.Constant(9.82)
@@ -381,27 +376,27 @@ class FsSolver:
 
         # Weak form EE schemes of the free surface equations
         F_eta_lhs = fd.inner(eta_n1, v_eta)*fd.dx
-        F_eta_rhs = fd.inner(eta_n, v_eta)*fd.dx + dt * (fd.inner(w_n, v_eta)*fd.dx - fd.inner(u_n1*eta_n.dx(0), v_eta)*fd.dx)
+        F_eta_rhs = fd.inner(eta_n, v_eta)*fd.dx + dt * (fd.inner(w_n, v_eta)*fd.dx - fd.inner(u_n*eta_n.dx(0), v_eta)*fd.dx)
         
 
         F_phi_lhs = fd.inner(phi_n1, v_phi)*fd.dx
         F_phi_rhs = fd.inner(phi_n, v_phi)*fd.dx + dt * (-fd.Constant(0.5)*fd.inner(u_n**2 + w_n**2, v_phi)*fd.dx-g*fd.inner(eta_n, v_phi)*fd.dx)
 
         # Dirichlet boundary conditions
-        dbc_eta = fd.DirichletBC(V_eta, self.ylim[1], "on_boundary")
-        #dbc_phi = fd.DirichletBC(V_phi, self.PhiTilde[0], "on_boundary")
+        dbc_eta = fd.DirichletBC(V_eta, 0, "on_boundary")
+        dbc_phi = [fd.DirichletBC(V_phi, self.PhiTilde[0], 1), fd.DirichletBC(V_phi, self.PhiTilde[-1], 2)]
 
         eta_new = fd.Function(V_eta)
         phi_new = fd.Function(V_phi)
 
         fd.solve(F_eta_lhs == F_eta_rhs, eta_new, bcs = dbc_eta, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
-        fd.solve(F_phi_lhs == F_phi_rhs, phi_new, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
+        fd.solve(F_phi_lhs == F_phi_rhs, phi_new, bcs = dbc_phi, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
 
         old_eta = self.fs_points[:, 1]
-        residuals = np.linalg.norm(eta_new.dat.data[:] - old_eta, np.inf)
+        residuals = np.linalg.norm(eta_new.dat.data[:] + self.ylim[1] - old_eta, np.inf)
         #print(f"\t free surface equations done")
 
-        return eta_new.dat.data[:], phi_new.dat.data[:], residuals
+        return eta_new.dat.data[:] + self.ylim[1], phi_new.dat.data[:], residuals
 
     def __check_status__(self, residuals, iter, iter_time, solve_time) -> bool:
         if residuals < self.kwargs.get("rtol", 1e-5):
@@ -435,7 +430,7 @@ class FsSolver:
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
         fs_indecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
         self.fs_points = (fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)[fs_indecies,:]
-        self.fs_points = self.fs_points[self.fs_points[:,0].argsort()]
+        # self.fs_points = self.fs_points[self.fs_points[:,0].argsort()]
         self.fs_xs = self.fs_points[:,0]
         return None
 
@@ -443,9 +438,9 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-13,13], "V_inf": 10, "g_div": 70, "write":True,
-           "n_airfoil": 150,
-           "n_fs": 50,
+    kwargs = {"ylim":[-4,1], "xlim":[-7,13], "V_inf": 10, "g_div": 70, "write":True,
+           "n_airfoil": 50,
+           "n_fs": 100,
            "n_bed": 20,
            "n_inlet": 10,
            "n_outlet": 10,
@@ -453,7 +448,7 @@ if __name__ == "__main__":
            "fs_rtol": 1e-3,
            "max_iter_fs": 15,
            "max_iter": 50,
-           "dt": 2e-4,
+           "dt": 1e-2,
            "a":1, "b":1,
            "dot_tol": 1e-4}
     
