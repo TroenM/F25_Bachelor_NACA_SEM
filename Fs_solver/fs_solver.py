@@ -150,8 +150,8 @@ class FsSolver:
 
         # Doing the initializing solve
         old_eta = self.fs_points[:,1]
-        new_eta = self.__init_mesh_guess__()
-        self.__update_mesh_data__(old_eta, new_eta)
+        # new_eta = self.__init_mesh_guess__()
+        # self.__update_mesh_data__(old_eta, new_eta)
         model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
         model.solve()
         self.model = model
@@ -236,11 +236,11 @@ class FsSolver:
         """
         Initialize the mesh guess for the free surface
         """
-        # x = self.fs_points[:,0]
+        x = self.fs_points[:,0]
         eta = self.fs_points[:,1]
-        # omega = 2*np.pi/(2)
-        # mask = (x >= -1)*(x <= 1)
-        # eta[mask] = np.sin(omega*(x[mask]))/5 + self.ylim[1]
+        omega = 2*np.pi/(2)
+        mask = (x >= 0)*(x <= 2)
+        eta[mask] = np.sin(omega*(x[mask]))/100 + self.ylim[1]
 
         return eta
 
@@ -374,29 +374,40 @@ class FsSolver:
         g = fd.Constant(9.82)
         dt = fd.Constant(self.dt)
 
-        # Weak form EE schemes of the free surface equations
-        F_eta_lhs = fd.inner(eta_n1, v_eta)*fd.dx
+        V_inf = fd.Constant(self.V_inf)
+        xd_in = fd.Constant(-6.0)
+        xd_out = fd.Constant(10.5)
+        x = fd.SpatialCoordinate(fs_mesh)[0]
+        A = fd.Constant(100)
+        eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (self.xlim[0]  - xd_in))**2, 0)*eta_n1
+        eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2, 0)*eta_n1
+        #phi_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (self.xlim[0]  - xd_in))**2, 0)*phi_n1 \
+                     #-A*fd.conditional(x < xd_in, ((x - xd_in) / (self.xlim[0]  - xd_in))**2 * V_inf, 0)
+        #phi_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2, 0)*phi_n1 \
+                      #-A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2 * V_inf, 0)
+
+        # Weak form EE schemes of the updating eta
+        F_eta_lhs = fd.inner(eta_n1, v_eta)*fd.dx + fd.inner(eta_damp_in, v_eta)*fd.dx + fd.inner(eta_damp_out, v_eta)*fd.dx
         F_eta_rhs = fd.inner(eta_n, v_eta)*fd.dx + dt * (fd.inner(w_n, v_eta)*fd.dx - fd.inner(u_n*eta_n.dx(0), v_eta)*fd.dx)
         
-
-        F_phi_lhs = fd.inner(phi_n1, v_phi)*fd.dx
-        F_phi_rhs = fd.inner(phi_n, v_phi)*fd.dx + dt * (-fd.Constant(0.5)*fd.inner(u_n**2 + w_n**2, v_phi)*fd.dx-g*fd.inner(eta_n, v_phi)*fd.dx)
-
-        # Dirichlet boundary conditions
         dbc_eta = fd.DirichletBC(V_eta, 0, "on_boundary")
-        dbc_phi = [fd.DirichletBC(V_phi, self.PhiTilde[0], 1), fd.DirichletBC(V_phi, self.PhiTilde[-1], 2)]
-
         eta_new = fd.Function(V_eta)
-        phi_new = fd.Function(V_phi)
-
         fd.solve(F_eta_lhs == F_eta_rhs, eta_new, bcs = dbc_eta, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
+
+        # Weak form EE schemes of the updating phi
+        F_phi_lhs = fd.inner(phi_n1, v_phi)*fd.dx #+ fd.inner(phi_damp_in, v_phi)*fd.dx + fd.inner(phi_damp_out, v_phi)*fd.dx
+        F_phi_rhs = fd.inner(phi_n, v_phi)*fd.dx + dt * (-fd.Constant(0.5)*fd.inner(u_n**2 + w_n**2, v_phi)*fd.dx-g*fd.inner(eta_n, v_phi)*fd.dx) + fd.inner((eta_new - eta_n)*w_n, v_phi)* fd.dx
+        
+        dbc_phi = []# [fd.DirichletBC(V_phi, self.PhiTilde[0], 1)]#, fd.DirichletBC(V_phi, self.PhiTilde[-1], 2)]
+        phi_new = fd.Function(V_phi)
         fd.solve(F_phi_lhs == F_phi_rhs, phi_new, bcs = dbc_phi, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
 
         old_eta = self.fs_points[:, 1]
-        residuals = np.linalg.norm(eta_new.dat.data[:] + self.ylim[1] - old_eta, np.inf)
+        eta_new.dat.data[:] += self.ylim[1]
+        residuals = np.linalg.norm(eta_new.dat.data[:] - old_eta, np.inf)
         #print(f"\t free surface equations done")
 
-        return eta_new.dat.data[:] + self.ylim[1], phi_new.dat.data[:], residuals
+        return eta_new.dat.data[:], phi_new.dat.data[:], residuals
 
     def __check_status__(self, residuals, iter, iter_time, solve_time) -> bool:
         if residuals < self.kwargs.get("rtol", 1e-5):
@@ -409,6 +420,13 @@ class FsSolver:
         elif residuals > 10000:
             print("\n ============================")
             print(" Fs diverged")
+            print(f" residuals norm {np.linalg.norm(residuals)} after {iter} iterations")
+            print(f" Total solve time: {time() - solve_time}")
+            print("============================\n")
+            return True
+        elif iter >= self.kwargs.get("max_iter_fs", 10):
+            print("\n ============================")
+            print(" Fs did not converge")
             print(f" residuals norm {np.linalg.norm(residuals)} after {iter} iterations")
             print(f" Total solve time: {time() - solve_time}")
             print("============================\n")
@@ -438,19 +456,19 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-7,13], "V_inf": 10, "g_div": 70, "write":True,
+    kwargs = {"ylim":[-4,1], "xlim":[-10,13], "V_inf": 10, "g_div": 70, "write":True,
            "n_airfoil": 50,
-           "n_fs": 100,
+           "n_fs": 230,
            "n_bed": 20,
            "n_inlet": 10,
            "n_outlet": 10,
            "rtol": 1e-8,
            "fs_rtol": 1e-3,
-           "max_iter_fs": 15,
+           "max_iter_fs": 50,
            "max_iter": 50,
            "dt": 1e-2,
            "a":1, "b":1,
            "dot_tol": 1e-4}
     
-    FS = FsSolver("0012", alpha = 10, P=5, kwargs = kwargs)
+    FS = FsSolver("0012", alpha = 10, P=3, kwargs = kwargs)
     FS.solve()
