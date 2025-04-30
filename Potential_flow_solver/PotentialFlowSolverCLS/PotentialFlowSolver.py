@@ -342,7 +342,8 @@ class PotentialFlowSolver:
 
         # Assuming the leading edge is at (0,0) before rotation
         alpha = self.alpha
-        p_leading_edge = np.array([[np.cos(alpha), np.sin(alpha)], [-np.sin(alpha), np.cos(alpha)]]) @ np.array([-1, 0]) + np.array([1, 0])
+        rot_mat = np.array([[np.cos(alpha), np.sin(alpha)], [-np.sin(alpha), np.cos(alpha)]])
+        p_leading_edge = rot_mat @ (-self.center_of_airfoil) + self.center_of_airfoil
         return p1, p_te, p_leading_edge, pn
 
     def compute_vortex_strength(self, v12, vte, p_te_new) -> float:
@@ -487,6 +488,8 @@ if __name__ == "__main__":
     task = input("""
     1: Compute lift coefficient for NACA airfoil
     2: Compute simple model
+    3: h-Convergence of pressure coefficients around 0012 airfoil
+    4: h-Convergence of pressure coefficients around 0012 airfoil 
     Choose task: """)
 
     if task == "1":
@@ -570,4 +573,121 @@ if __name__ == "__main__":
 
         model = PotentialFlowSolver("0012", P = 2, alpha = 10, kwargs=kwargs)
         model.solve()
+    
+    elif task == "3":
+
+        nasa_9mil_10AoA = np.array([
+            [.9483 ,  .1147],
+            [.9000 ,  .0684],
+            [.8503 ,  .0882],
+            [.7998 ,  .0849],
+            [.7497 ,  .0782],
+            [.7003 ,  .0739],
+            [.6502 ,  .0685],
+            [.5997 ,  .0813],
+            [.5506 ,  .0884],
+            [.5000 ,  .0940],
+            [.4503 ,  .1125],
+            [.4000 ,  .1225],
+            [.3507 ,  .1488],
+            [.3002 ,  .1893],
+            [.2501 ,  .2292],
+            [.2004 ,  .2973],
+            [.1504 ,  .3900],
+            [.1000 ,  .5435],
+            [.0755 ,  .6563],
+            [.0510 ,  .8031],
+            [.0251 , 1.0081],
+            [.0122 , 1.0241],
+            [0.    ,-2.6598],
+            [.0135 ,-3.9314],
+            [.0271 ,-3.1386],
+            [.0515 ,-2.4889],
+            [.0763 ,-2.0671],
+            [.1012 ,-1.8066],
+            [.1503 ,-1.4381],
+            [.1994 ,-1.2297],
+            [.2501 ,-1.0638],
+            [.2999 , -.9300],
+            [.3499 , -.8094],
+            [.3994 , -.7131],
+            [.4496 , -.6182],
+            [.4997 , -.5374],
+            [.5492 , -.4563],
+            [.5994 , -.3921],
+            [.6495 , -.3247],
+            [.6996 , -.2636],
+            [.7489 , -.1964],
+            [.8003 , -.1318],
+            [.8500 , -.0613],
+            [.8993 , -.0021],
+            [.9489 ,  .0795],
+        ])
+        # P convergence
+        points_around_airfoil = np.array([1000,20,40,50,70,100,150,200,400,1000])
+        norms = np.zeros_like(points_around_airfoil, dtype=float)
+        times = np.zeros_like(points_around_airfoil, dtype=float)
+
+        for i,val in enumerate(points_around_airfoil):
+            kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":True,
+                    "n_airfoil": val,
+                    "n_fs": 40,
+                    "n_bed": 40,
+                    "n_inlet": 20,
+                    "n_outlet": 20,
+                    "dot_tol": 1e-4}
+            model = PotentialFlowSolver("0012", alpha = 10.0228, P=3, kwargs = kwargs)
+            it_time = time()
+
+            model.solve()
+
+            times[i] = time() - it_time
+
+            p1, p_te, p_leading_edge, pn= model.get_edge_info()
+
+            cord = p_te-p_leading_edge
+            print(np.linalg.norm(cord))
+            orthcord = np.array([-cord[1],cord[0]])
+            
+            xvals = nasa_9mil_10AoA[:,0]
+
+            all_coords = p_leading_edge + np.array([cord * i for i in xvals])
+            pressure = np.zeros_like(xvals)
+            OnLower = True
+
+            for j in range(len(pressure)):
+                if nasa_9mil_10AoA[j,0] == 0:
+                    OnLower = False
+                    pressure[j] = model.pressure_coeff.at(p_leading_edge)
+                    continue
+                if OnLower:
+                    coords = all_coords[j,:]
+                    coords -= orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                    try:
+                        pressure[j] = model.pressure_coeff.at(coords)
+                    except:
+                        pressure[j] = model.pressure_coeff.at(coords - 1e-5 * orthcord)
+                else:
+                    coords = all_coords[j,:]
+                    coords += orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                    try:
+                        pressure[j] = model.pressure_coeff.at(coords)
+                    except:
+                        pressure[j] = model.pressure_coeff.at(coords + 1e-5 * orthcord)
+            
+
+            norm_of_distance = np.linalg.norm(nasa_9mil_10AoA[:,1] - pressure)
+            print(nasa_9mil_10AoA[:,1])
+            print(pressure)
+
+            norms[i] = norm_of_distance
+        results = np.vstack((points_around_airfoil, norms, times), dtype=float)
+        np.savetxt("../../Visualisation/P_Coeff_Convergence/P_Coeffs_point.txt",results)
+            
+
+
+
+
+
+
         
