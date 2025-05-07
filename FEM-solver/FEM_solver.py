@@ -396,7 +396,7 @@ class PotentialFlowSolver_FEM():
 
             q = np.array(GRAD_func((x1+x2)/2, (y1+y2)/2)) @ n
             integral = q/2 * np.linalg.norm(np.array([x1-x2,y1-y2]), 2)
-            self.b[p2] += integral
+            self.b[p1] += integral
             self.b[p2] += integral
     
     ##################### Solution Methods #####################

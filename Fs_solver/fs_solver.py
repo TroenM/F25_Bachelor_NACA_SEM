@@ -436,9 +436,7 @@ class FsSolver:
             print(f"\t residual norm {residuals}")
             print(f"\t iteration time: {time() - iter_time}\n")
             return False
-        
-
-        
+           
     
     def __update_mesh_data__(self, old_eta : np.ndarray, new_eta : np.ndarray) -> None:
         new_mesh = shift_surface(self.mesh, interp1d(self.fs_xs, old_eta), interp1d(self.fs_xs, new_eta))
