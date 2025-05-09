@@ -107,11 +107,12 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     # setting legends, colors and linewidth
     BC_dict = {"in":1, "out":2, "deck":3, "fs":4, "naca":5}
     BC_colors = {"in":"darkgreen", "out":"darkred", "deck":"darkblue", "fs":"yellow", "naca":"red"}
-    linew = 1.5
+    linew = 0.8
+    boundary_linew = 2
 
     # setting color and size for points
     point_color = "black"
-    point_size = 1
+    point_size = 0
 
     # Set y and x lim
     yrange = y_max - y_min
@@ -150,41 +151,41 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["in"], label=f"{BC_dict['in']}")
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["in"], label=f"{BC_dict['in']}")
                 else:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["in"])
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["in"])
             for i in range(len(out_lines)):
                 line = points[out_lines[i], :]
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["out"], label=f"{BC_dict['out']}")
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["out"], label=f"{BC_dict['out']}")
                 else:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["out"])
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["out"])
             for i in range(len(deck_lines)):
                 line = points[deck_lines[i], :]
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["deck"], label=f"{BC_dict['deck']}")
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["deck"], label=f"{BC_dict['deck']}")
                 else:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["deck"])
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["deck"])
             for i in range(len(fs_lines)):
                 line = points[fs_lines[i], :]
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["fs"], label=f"{BC_dict['fs']}")
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["fs"], label=f"{BC_dict['fs']}")
                 else:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["fs"])
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["fs"])
             for i in range(len(naca_lines)):
                 line = points[naca_lines[i], :]
                 x_vals = line[:,0]
                 y_vals = line[:,1]
                 if i == 0:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["naca"], label=f"{BC_dict['naca']}")
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["naca"], label=f"{BC_dict['naca']}")
                 else:
-                    ax.plot(x_vals,y_vals, linewidth = linew, color=BC_colors["naca"])
+                    ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["naca"])
     
 
     

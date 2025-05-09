@@ -352,10 +352,6 @@ class PotentialFlowSolver:
         """
         a = self.a
         b = self.b
-
-        ##################################################
-        ###### ALPHA IS SET TO ZERO FOR NOW ##############
-        ##################################################
         alpha = self.alpha
 
         # Get the coordinates of the trailing edge
@@ -367,16 +363,12 @@ class PotentialFlowSolver:
         y_t = p_y - self.center_of_airfoil[1]
 
         # Rotating to align with airfoil
-        x_rot = x_t * np.cos(alpha) - y_t * np.sin(alpha)
-        y_rot = x_t * np.sin(alpha) + y_t * np.cos(alpha)
-
-        # Scaling to unit circle
-        x_s = x_rot / a
-        y_s = y_rot / b
+        x_bar = x_t * np.cos(alpha) - y_t * np.sin(alpha)
+        y_bar = x_t * np.sin(alpha) + y_t * np.cos(alpha)
 
         # Computing vortex at trailing edge without Gamma/2pi
-        Wx = -y_s / (x_s**2 + y_s**2)
-        Wy = x_s / (x_s**2 + y_s**2)
+        Wx = -(y_bar/b) / (x_bar**2/a + y_bar**2/b)
+        Wy = (x_bar/a) / (x_bar**2/a + y_bar**2/b)
 
         
         # Rotating back to global coordinates
@@ -395,37 +387,26 @@ class PotentialFlowSolver:
         Computes the vortex field for the given vortex strength
         """
 
-        ##################################################
-        ###### ALPHA IS SET TO ZERO FOR NOW ##############
-        ##################################################
-
         alpha = self.alpha  # Convert angle of attack to radians
         alpha = fd.Constant(alpha)
 
         # Extract airfoil scaling parameters
-        a = self.a
-        b = self.b
+        a = fd.Constant(self.a)
+        b = fd.Constant(self.b)
+        
+        # Transform coordinates
+        x_translated = model.x - center_of_vortex[0]
+        y_translated = model.y - center_of_vortex[1]
 
-        # Translate coordinates to vortex-centered frame
-        x_shifted = model.x - center_of_vortex[0]
-        y_shifted = model.y - center_of_vortex[1]
-
-        x_rot = x_shifted * fd.cos(alpha) - y_shifted * fd.sin(alpha)
-        y_rot = x_shifted * fd.sin(alpha) + y_shifted * fd.cos(alpha)
-
-        x_scaled = x_rot / a
-        y_scaled = y_rot / b
-        # Rotate global coordinates to align with airfoil
+        x_bar = (x_translated) * fd.cos(alpha) - (y_translated) * fd.sin(alpha)
+        y_bar = (x_translated) * fd.sin(alpha) + (y_translated) * fd.cos(alpha)
         
 
-        # Apply elliptical scaling (stretch along x or y)
-        
-
-        elipse_circumference = np.pi*(3*(a+b)-np.sqrt((3*a+b)*(a+3*b)))
+        elipse_circumference = np.pi*(3*(self.a+self.b)-np.sqrt((3*self.a+self.b)*(self.a+3*self.b)))
 
         # Compute the unrotated vortex velocity field
-        u_x = -Gamma / elipse_circumference * y_scaled / (x_scaled**2 + y_scaled**2)
-        u_y = Gamma / elipse_circumference * x_scaled / (x_scaled**2 + y_scaled**2)
+        u_x = -Gamma / elipse_circumference * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
+        u_y = Gamma / elipse_circumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
 
         u_x = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
         u_y = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
@@ -488,8 +469,9 @@ if __name__ == "__main__":
     task = input("""
     1: Compute lift coefficient for NACA airfoil
     2: Compute simple model
-    3: h-Convergence of pressure coefficients around 0012 airfoil
-    4: h-Convergence of pressure coefficients around 0012 airfoil 
+    3: n-Convergence of pressure coefficients around 0012 airfoil
+    4: p-Convergence of pressure coefficients around 0012 airfoil 
+    5: hp-Convergence of pressure coefficients around 0012 airfoil
     Choose task: """)
 
     if task == "1":
@@ -623,8 +605,8 @@ if __name__ == "__main__":
             [.8993 , -.0021],
             [.9489 ,  .0795],
         ])
-        # P convergence
-        points_around_airfoil = np.array([1000,20,40,50,70,100,150,200,400,1000])
+        # n convergence
+        points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
         norms = np.zeros_like(points_around_airfoil, dtype=float)
         times = np.zeros_like(points_around_airfoil, dtype=float)
 
@@ -635,8 +617,9 @@ if __name__ == "__main__":
                     "n_bed": 40,
                     "n_inlet": 20,
                     "n_outlet": 20,
-                    "dot_tol": 1e-4}
-            model = PotentialFlowSolver("0012", alpha = 10.0228, P=3, kwargs = kwargs)
+                    "dot_tol": 1e-4,
+                    "a": 1, "b":1}
+            model = PotentialFlowSolver("0012", alpha = 10.0228, P=2, kwargs = kwargs)
             it_time = time()
 
             model.solve()
@@ -646,7 +629,6 @@ if __name__ == "__main__":
             p1, p_te, p_leading_edge, pn= model.get_edge_info()
 
             cord = p_te-p_leading_edge
-            print(np.linalg.norm(cord))
             orthcord = np.array([-cord[1],cord[0]])
             
             xvals = nasa_9mil_10AoA[:,0]
@@ -662,27 +644,457 @@ if __name__ == "__main__":
                     continue
                 if OnLower:
                     coords = all_coords[j,:]
-                    coords -= orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
-                    try:
-                        pressure[j] = model.pressure_coeff.at(coords)
-                    except:
-                        pressure[j] = model.pressure_coeff.at(coords - 1e-5 * orthcord)
+                    coords -= 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                    while True:
+                        try:
+                            pressure[j] = model.pressure_coeff.at(coords)
+                            break
+                        except:
+                            coords -= 1e-5 * orthcord
                 else:
                     coords = all_coords[j,:]
-                    coords += orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
-                    try:
-                        pressure[j] = model.pressure_coeff.at(coords)
-                    except:
-                        pressure[j] = model.pressure_coeff.at(coords + 1e-5 * orthcord)
+                    coords += 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                    while True:
+                        try:
+                            pressure[j] = model.pressure_coeff.at(coords)
+                            break
+                        except:
+                            coords += 1e-5 * orthcord
             
 
             norm_of_distance = np.linalg.norm(nasa_9mil_10AoA[:,1] - pressure)
-            print(nasa_9mil_10AoA[:,1])
-            print(pressure)
 
             norms[i] = norm_of_distance
         results = np.vstack((points_around_airfoil, norms, times), dtype=float)
-        np.savetxt("../../Visualisation/P_Coeff_Convergence/P_Coeffs_point.txt",results)
+        np.savetxt("../../Visualisation/P_Coeff_Convergence/P_Coeffs_point_circle.txt",results)
+    
+    elif task == "4":
+
+        nasa_9mil_10AoA = np.array([
+            [.9483 ,  .1147],
+            [.9000 ,  .0684],
+            [.8503 ,  .0882],
+            [.7998 ,  .0849],
+            [.7497 ,  .0782],
+            [.7003 ,  .0739],
+            [.6502 ,  .0685],
+            [.5997 ,  .0813],
+            [.5506 ,  .0884],
+            [.5000 ,  .0940],
+            [.4503 ,  .1125],
+            [.4000 ,  .1225],
+            [.3507 ,  .1488],
+            [.3002 ,  .1893],
+            [.2501 ,  .2292],
+            [.2004 ,  .2973],
+            [.1504 ,  .3900],
+            [.1000 ,  .5435],
+            [.0755 ,  .6563],
+            [.0510 ,  .8031],
+            [.0251 , 1.0081],
+            [.0122 , 1.0241],
+            [0.    ,-2.6598],
+            [.0135 ,-3.9314],
+            [.0271 ,-3.1386],
+            [.0515 ,-2.4889],
+            [.0763 ,-2.0671],
+            [.1012 ,-1.8066],
+            [.1503 ,-1.4381],
+            [.1994 ,-1.2297],
+            [.2501 ,-1.0638],
+            [.2999 , -.9300],
+            [.3499 , -.8094],
+            [.3994 , -.7131],
+            [.4496 , -.6182],
+            [.4997 , -.5374],
+            [.5492 , -.4563],
+            [.5994 , -.3921],
+            [.6495 , -.3247],
+            [.6996 , -.2636],
+            [.7489 , -.1964],
+            [.8003 , -.1318],
+            [.8500 , -.0613],
+            [.8993 , -.0021],
+            [.9489 ,  .0795],
+        ])
+        # P convergence
+        ps = np.array([1,2,3,4,5])
+        norms = np.zeros_like(ps, dtype=float)
+        times = np.zeros_like(ps, dtype=float)
+        n_airfoil = 200
+        for i,val in enumerate(ps):
+            kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":True,
+                    "n_airfoil": n_airfoil,
+                    "n_fs": 40,
+                    "n_bed": 40,
+                    "n_inlet": 20,
+                    "n_outlet": 20,
+                    "dot_tol": 1e-4,
+                    "a": 1, "b":1}
+            model = PotentialFlowSolver("0012", alpha = 10.0228, P=int(val), kwargs = kwargs)
+            it_time = time()
+
+            model.solve()
+
+            times[i] = time() - it_time
+
+            p1, p_te, p_leading_edge, pn= model.get_edge_info()
+
+            cord = p_te-p_leading_edge
+            orthcord = np.array([-cord[1],cord[0]])
+            
+            xvals = nasa_9mil_10AoA[:,0]
+
+            all_coords = p_leading_edge + np.array([cord * i for i in xvals])
+            pressure = np.zeros_like(xvals)
+            OnLower = True
+
+            for j in range(len(pressure)):
+                if nasa_9mil_10AoA[j,0] == 0:
+                    OnLower = False
+                    pressure[j] = model.pressure_coeff.at(p_leading_edge)
+                    continue
+                if OnLower:
+                    coords = all_coords[j,:]
+                    coords -= 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                    while True:
+                        try:
+                            pressure[j] = model.pressure_coeff.at(coords)
+                            break
+                        except:
+                            coords -= 1e-5 * orthcord
+                else:
+                    coords = all_coords[j,:]
+                    coords += 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                    while True:
+                        try:
+                            pressure[j] = model.pressure_coeff.at(coords)
+                            break
+                        except:
+                            coords += 1e-5 * orthcord
+            
+
+            norm_of_distance = np.linalg.norm(nasa_9mil_10AoA[:,1] - pressure)
+
+            norms[i] = norm_of_distance
+        results = np.vstack((ps, norms, times), dtype=float)
+        np.savetxt("../../Visualisation/P_Coeff_Convergence/P_Coeffs_point_circle_p.txt",results)
+
+        norms = np.zeros_like(ps, dtype=float)
+        times = np.zeros_like(ps, dtype=float)
+
+        for i,val in enumerate(ps):
+            kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":True,
+                    "n_airfoil": n_airfoil,
+                    "n_fs": 40,
+                    "n_bed": 40,
+                    "n_inlet": 20,
+                    "n_outlet": 20,
+                    "dot_tol": 1e-4}
+            model = PotentialFlowSolver("0012", alpha = 10.0228, P=int(val), kwargs = kwargs)
+            it_time = time()
+
+            model.solve()
+
+            times[i] = time() - it_time
+
+            p1, p_te, p_leading_edge, pn= model.get_edge_info()
+
+            cord = p_te-p_leading_edge
+            orthcord = np.array([-cord[1],cord[0]])
+            
+            xvals = nasa_9mil_10AoA[:,0]
+
+            all_coords = p_leading_edge + np.array([cord * i for i in xvals])
+            pressure = np.zeros_like(xvals)
+            OnLower = True
+
+            for j in range(len(pressure)):
+                if nasa_9mil_10AoA[j,0] == 0:
+                    OnLower = False
+                    pressure[j] = model.pressure_coeff.at(p_leading_edge)
+                    continue
+                if OnLower:
+                    coords = all_coords[j,:]
+                    coords -= 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                    while True:
+                        try:
+                            pressure[j] = model.pressure_coeff.at(coords)
+                            break
+                        except:
+                            coords -= 1e-5 * orthcord
+                else:
+                    coords = all_coords[j,:]
+                    coords += 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                    while True:
+                        try:
+                            pressure[j] = model.pressure_coeff.at(coords)
+                            break
+                        except:
+                            coords += 1e-5 * orthcord
+            
+
+            norm_of_distance = np.linalg.norm(nasa_9mil_10AoA[:,1] - pressure)
+
+            norms[i] = norm_of_distance
+        results = np.vstack((ps, norms, times), dtype=float)
+        np.savetxt("../../Visualisation/P_Coeff_Convergence/P_Coeffs_point_p.txt",results)
+
+    elif task == "5":
+
+        nasa_9mil_10AoA = np.array([
+            [.9483 ,  .1147],
+            [.9000 ,  .0684],
+            [.8503 ,  .0882],
+            [.7998 ,  .0849],
+            [.7497 ,  .0782],
+            [.7003 ,  .0739],
+            [.6502 ,  .0685],
+            [.5997 ,  .0813],
+            [.5506 ,  .0884],
+            [.5000 ,  .0940],
+            [.4503 ,  .1125],
+            [.4000 ,  .1225],
+            [.3507 ,  .1488],
+            [.3002 ,  .1893],
+            [.2501 ,  .2292],
+            [.2004 ,  .2973],
+            [.1504 ,  .3900],
+            [.1000 ,  .5435],
+            [.0755 ,  .6563],
+            [.0510 ,  .8031],
+            [.0251 , 1.0081],
+            [.0122 , 1.0241],
+            [0.    ,-2.6598],
+            [.0135 ,-3.9314],
+            [.0271 ,-3.1386],
+            [.0515 ,-2.4889],
+            [.0763 ,-2.0671],
+            [.1012 ,-1.8066],
+            [.1503 ,-1.4381],
+            [.1994 ,-1.2297],
+            [.2501 ,-1.0638],
+            [.2999 , -.9300],
+            [.3499 , -.8094],
+            [.3994 , -.7131],
+            [.4496 , -.6182],
+            [.4997 , -.5374],
+            [.5492 , -.4563],
+            [.5994 , -.3921],
+            [.6495 , -.3247],
+            [.6996 , -.2636],
+            [.7489 , -.1964],
+            [.8003 , -.1318],
+            [.8500 , -.0613],
+            [.8993 , -.0021],
+            [.9489 ,  .0795],
+        ])
+        # P convergence
+        n_airfoil = [200,500,1000,2000,3000]
+        ps = [1,2,3,4]
+        norms = np.zeros((len(n_airfoil),len(ps)), dtype=float)
+        times = np.zeros((len(n_airfoil),len(ps)), dtype=float)
+        clock = 0
+        for i,n in enumerate(n_airfoil):
+            for j,p in enumerate(ps):
+                kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70,
+                        "n_airfoil": n,
+                        "n_fs": 40,
+                        "n_bed": 40,
+                        "n_inlet": 20,
+                        "n_outlet": 20,
+                        "dot_tol": 1e-4,
+                        "a": 1, "b":1}
+                model = PotentialFlowSolver("0012", alpha = 10.0228, P=int(p), kwargs = kwargs)
+                it_time = time()
+
+                model.solve()
+
+                times[i,j] = time() - it_time
+
+                p1, p_te, p_leading_edge, pn= model.get_edge_info()
+
+                cord = p_te-p_leading_edge
+                orthcord = np.array([-cord[1],cord[0]])
+                
+                xvals = nasa_9mil_10AoA[:,0]
+
+                all_coords = p_leading_edge + np.array([cord * i for i in xvals])
+                pressure = np.zeros_like(xvals)
+                OnLower = True
+
+                for k in range(len(pressure)):
+                    if nasa_9mil_10AoA[k,0] == 0:
+                        OnLower = False
+                        pressure[k] = model.pressure_coeff.at(p_leading_edge)
+                        continue
+                    if OnLower:
+                        coords = all_coords[k,:]
+                        coords -= 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                        while True:
+                            try:
+                                pressure[k] = model.pressure_coeff.at(coords)
+                                break
+                            except:
+                                coords -= 1e-5 * orthcord
+                    else:
+                        coords = all_coords[k,:]
+                        coords += 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                        while True:
+                            try:
+                                pressure[k] = model.pressure_coeff.at(coords)
+                                break
+                            except:
+                                coords += 1e-5 * orthcord
+                
+
+                norm_of_distance = np.linalg.norm(nasa_9mil_10AoA[:,1] - pressure)
+
+                norms[i,j] = norm_of_distance
+                clock += 1
+                print(f"{clock/(len(n_airfoil)*len(ps))*100}% of loop 1")
+        results = np.dstack((norms, times))
+        np.savetxt("../../Visualisation/P_Coeff_Convergence/P_Coeffs_point_circle_hp.txt",results)
+
+        norms = np.zeros((len(n_airfoil),len(ps)), dtype=float)
+        times = np.zeros((len(n_airfoil),len(ps)), dtype=float)
+        clock = 0
+        for i,n in enumerate(n_airfoil):
+            for j,p in enumerate(ps):
+                kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70,
+                        "n_airfoil": n,
+                        "n_fs": 40,
+                        "n_bed": 40,
+                        "n_inlet": 20,
+                        "n_outlet": 20,
+                        "dot_tol": 1e-4}
+                model = PotentialFlowSolver("0012", alpha = 10.0228, P=int(p), kwargs = kwargs)
+                it_time = time()
+
+                model.solve()
+
+                times[i,j] = time() - it_time
+
+                p1, p_te, p_leading_edge, pn= model.get_edge_info()
+
+                cord = p_te-p_leading_edge
+                orthcord = np.array([-cord[1],cord[0]])
+                
+                xvals = nasa_9mil_10AoA[:,0]
+
+                all_coords = p_leading_edge + np.array([cord * i for i in xvals])
+                pressure = np.zeros_like(xvals)
+                OnLower = True
+
+                for k in range(len(pressure)):
+                    if nasa_9mil_10AoA[k,0] == 0:
+                        OnLower = False
+                        pressure[k] = model.pressure_coeff.at(p_leading_edge)
+                        continue
+                    if OnLower:
+                        coords = all_coords[k,:]
+                        coords -= 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                        while True:
+                            try:
+                                pressure[k] = model.pressure_coeff.at(coords)
+                                break
+                            except:
+                                coords -= 1e-5 * orthcord
+                    else:
+                        coords = all_coords[k,:]
+                        coords += 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                        while True:
+                            try:
+                                pressure[k] = model.pressure_coeff.at(coords)
+                                break
+                            except:
+                                coords += 1e-5 * orthcord
+                
+
+                norm_of_distance = np.linalg.norm(nasa_9mil_10AoA[:,1] - pressure)
+
+                norms[i,j] = norm_of_distance
+                clock += 1
+                print(f"{clock/(len(n_airfoil)*len(ps))*100}% of loop 1")
+        results = np.dstack((norms, times))
+        np.savetxt("../../Visualisation/P_Coeff_Convergence/P_Coeffs_point_hp.txt",results)
+    
+    elif task == "5":
+        """Example for NACA 0012 airfoil
+        NASA data from https://turbmodels.larc.nasa.gov/naca0012_val.html
+        - Digitized Abbott and von Doenhoff CL data
+        Data is in the form of [alpha, cl]
+        NASA data is in degrees"""
+
+        nasa_data = np.array([
+            [-12.2535, -1.25912],
+            [-11.2222, -1.18135],
+            [-10.1947, -1.06927],
+            [-8.14138, -0.827958],
+            [-6.25579, -0.638207],
+            [-5.22822, -0.526128],
+            [-4.19972, -0.422627],
+            [-1.96944, -0.215533],
+            [0.0, 0.0],
+            [0.940006, 0.120611],
+            [1.96944, 0.215533],
+            [2.99515, 0.34477],
+            [3.85131, 0.439599],
+            [4.87888, 0.551678],
+            [5.90831, 0.6466],
+            [7.96346, 0.870758],
+            [10.1891, 1.12074],
+            [11.0471, 1.19842]
+        ])
+        
+        eliptic_data = np.empty_like(nasa_data)
+        eliptic_data[:,0] = nasa_data[:,0]
+        circular_data = np.empty_like(nasa_data)
+        circular_data[:,0] = nasa_data[:,0]
+        kwargs_eliptic = {"ylim":[-4,4], "V_inf": 10, "g_div": 100, "write":False,
+            "n_airfoil": 2000,
+            "n_fs": 50,
+            "n_bed": 50,
+            "n_inlet": 20,
+            "n_outlet": 20,
+            "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
+        kwargs_circular = {"ylim":[-4,4], "V_inf": 10, "g_div": 100, "write":False,
+            "n_airfoil": 2000,
+            "n_fs": 50,
+            "n_bed": 50,
+            "n_inlet": 20,
+            "n_outlet": 20,
+            "a": 1,
+            "b": 1,
+            "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
+
+        for i,val in enumerate(nasa_data[:,0]):
+            print(f"{i+1}/{len(nasa_data[:,0])}")
+            print("Elliptic model")
+            eliptic_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_eliptic)
+            eliptic_model.solve()
+            eliptic_data[i,1] = eliptic_model.lift_coeff
+            del(eliptic_model)
+
+            print("Circular Model")
+            circular_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_circular)
+            circular_model.solve()
+            circular_data[i,1] = circular_model.lift_coeff
+            del(circular_model)
+            
+        
+        while True:
+            save_results = input("Save results? (y/n) \n This will overwrite the existing files: ").lower()
+            if save_results not in ["y" , "y " , " y", "n", " n", "n "]:
+                print(f"\t '{save_results}' is not a valid answer")
+                continue
+            else:
+                break
+        
+        if save_results.lower() in ["y" , "y " , " y"]:
+            print(os.getcwd())
+            np.savetxt("../../Visualisation/LiftCoeffPlot/circular_cl_point.txt",circular_data)
+            np.savetxt("../../Visualisation/LiftCoeffPlot/eliptic_cl_point.txt",eliptic_data)
             
 
 

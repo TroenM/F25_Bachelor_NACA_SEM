@@ -238,9 +238,9 @@ class FsSolver:
         """
         x = self.fs_points[:,0]
         eta = self.fs_points[:,1]
-        omega = 2*np.pi/(2)
-        mask = (x >= 0)*(x <= 2)
-        eta[mask] = np.sin(omega*(x[mask]))/100 + self.ylim[1]
+        # omega = 2*np.pi/(2)
+        # mask = (x >= 0)*(x <= 2)
+        # eta[mask] = np.sin(omega*(x[mask]))/100 + self.ylim[1]
 
         return eta
 
@@ -454,7 +454,7 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-10,13], "V_inf": 10, "g_div": 70, "write":True,
+    kwargs = {"ylim":[-4,1], "xlim":[-10,23], "V_inf": 10, "g_div": 70, "write":True,
            "n_airfoil": 50,
            "n_fs": 230,
            "n_bed": 20,
@@ -464,7 +464,7 @@ if __name__ == "__main__":
            "fs_rtol": 1e-3,
            "max_iter_fs": 50,
            "max_iter": 50,
-           "dt": 1e-2,
+           "dt": 5e-3,
            "a":1, "b":1,
            "dot_tol": 1e-4}
     
