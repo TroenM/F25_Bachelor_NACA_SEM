@@ -27,7 +27,7 @@ def add_dummy_geometrical_data(mesh) -> meshio.Mesh:
     return mesh
 
 
-def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.Mesh:
+def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str, xlim: list = [-3,3], ylim: list = [-2,2]) -> meshio.Mesh:
     '''
     Parameters
     ---
@@ -38,8 +38,8 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str) -> meshio.M
     gridtype : str
         The gridtype is "triangle" if you want the grid to be made up of triangles, or "quad" if you want your grid to be made of squares
     '''
-    first_list = np.tile(np.linspace(-3,3,N_cols),N_rows)
-    second_list = np.repeat(np.linspace(-2,2,N_rows),N_cols)
+    first_list = np.tile(np.linspace(xlim[0], xlim[1],N_cols),N_rows)
+    second_list = np.repeat(np.linspace(ylim[0], ylim[1],N_rows),N_cols)
     points = np.array(((first_list,second_list,np.zeros(N_cols*N_rows)))).T
     if gridtype.lower() == "quad":
         amount_of_squares = (N_cols-1)*(N_rows-1)

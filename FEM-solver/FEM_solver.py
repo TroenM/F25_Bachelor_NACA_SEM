@@ -8,7 +8,13 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 
-class PotentialFlowSolver_FEM():
+import sys
+sys.path.append("./")
+sys.path.append("../")
+
+from Meshing.mesh_library import mesh_gen_uniform_2D_grid, plot_mesh
+
+class PoissonSolver():
     """
     Finite element solver for incompressible potential flow 
 
@@ -176,7 +182,7 @@ class PotentialFlowSolver_FEM():
         try :
             EtoV.append(mesh.cells_dict["quad"])
         except:
-            print("No quad cells found")
+            pass
 
         # Extract the node coordinates
         coords = mesh.points[:, :2]
@@ -386,11 +392,11 @@ class PotentialFlowSolver_FEM():
             relevant_cell = np.tile(relevant_cell,2)
             for i in range(len(relevant_cell)):
                 if (p1 == relevant_cell[i] and p2 == relevant_cell[i+1]):
-                    n = np.array([y1-y2,x2-x1])
+                    n = np.array([y2-y1,x1-x2])
                     n /= np.linalg.norm(n,2)
                     break
                 if (p2 == relevant_cell[i] and p1 == relevant_cell[i+1]):
-                    n = np.array([y2-y1,x1-x2])
+                    n = np.array([y1-y2,x2-x1])
                     n /= np.linalg.norm(n,2)
                     break
 
@@ -480,6 +486,8 @@ class PotentialFlowSolver_FEM():
         plt.colorbar()
         plt.title(title)
         plt.axis("equal")
+        plt.xlabel("x")
+        plt.ylabel("z")
         plt.show()
 
     def plot3d(self, show_elements: bool = True, cmap: str = "thermal"):
@@ -501,6 +509,23 @@ class PotentialFlowSolver_FEM():
                 intensity = points_3d[:, 2],
                 colorbar_title = "Stream function"
             )
+        scene = dict(
+                      xaxis=dict(
+                          title=dict(
+                              text='x'
+                          )
+                      ),
+                      yaxis=dict(
+                          title=dict(
+                              text='z'
+                          )
+                      ),
+                      zaxis=dict(
+                          title=dict(
+                              text='phi(x,z)'
+                          )
+                      ),
+                    )
         
         if show_elements:
 
@@ -526,21 +551,54 @@ class PotentialFlowSolver_FEM():
 
 
             fig = go.Figure(data=[mesh_3d, lines])
+            fig.update_layout(scene=scene)
         else:
             fig = go.Figure(data=[mesh_3d])
+            fig.update_layout(scene=scene)
     
         fig.show()
 
 
 if __name__ == "__main__":
-    print("Reading mesh\n")
-    mesh = meshio.read("./FEM-solver/meshes/NACAmesh.msh")
-    print("Initializing solver")
-    model = PotentialFlowSolver_FEM(mesh)
-    print("Imposing BCs\n")
-    model.impose_BC("Dirichlet", 1, lambda x, y: 10)
-    model.impose_BC("Dirichlet", 2, lambda x, y: 10)
-    print("Solving\n")
-    model.solve()
-    print("Plotting\n")
-    model.plot_solution(show_elements=False, figsize=(7,7))
+    from time import time
+    hs = [4,4,4, 5, 10, 25, 50, 75, 100]
+    true_sol_lam = lambda x, y: np.sin(x)*np.sin(y)
+    rhs = lambda x,y: -2*np.sin(x)*np.sin(y)
+    grad = lambda x, y: np.array([np.cos(x)*np.sin(y), np.sin(x)*np.cos(y)])
+
+    error_h = []
+
+    for h in hs:
+        # Generate a uniform 2D grid mesh
+        print(f"Computing for h = {h}...")
+        t1 = time()
+
+        mesh = mesh_gen_uniform_2D_grid(h, h, "triangle", xlim = [0,1], ylim = [0,1])
+        model = PoissonSolver(mesh, rhs)
+
+        # Imposing Neumann BCs on left and right
+        #model.impose_BC("Neumann", 1, grad)
+        #model.impose_BC("Neumann", 2, grad)
+
+        # Imposing Dirichlet BCs on top and bed
+        model.impose_BC("Dirichlet", 3, true_sol_lam)
+        model.impose_BC("Dirichlet", 4, true_sol_lam)
+        model.impose_BC("Dirichlet", 2, true_sol_lam)
+        model.impose_BC("Dirichlet", 1, true_sol_lam)
+        model.solve()
+
+        time_taken = time() - t1
+
+        true_sol = true_sol_lam(model.coords[:, 0], model.coords[:, 1])
+        error = np.linalg.norm(model.sol - true_sol, 2)/np.linalg.norm(true_sol, 2)
+        if h != 4:
+            error_h.append(np.array([h,error, time_taken]))
+            pass
+        print(f"Time taken: {time_taken:.2f} seconds\n")
+        print(h, error, time_taken)
+
+
+    # Saving the error in a file
+    np.savetxt("./FEM-solver/error.txt", error_h)
+
+

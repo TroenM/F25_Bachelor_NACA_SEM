@@ -268,8 +268,9 @@ class PoissonSolver:
 if __name__ == "__main__":
 
     task = input("""
-    1: Generate Convergence data
-    2: Simple test
+    1: Generate h and p Convergence data
+    2: Generate h/p convergence data
+    3: Simple test
     
     Choose task: """)
 
@@ -283,8 +284,8 @@ if __name__ == "__main__":
 
         true_sol = lambda x,y: fd.sin(x)*fd.sin(y)
         rhs = lambda x,y: -2*fd.sin(x)*fd.sin(y)
-        NBC3 = lambda x,y: -fd.sin(x)*fd.cos(y)
-        NBC4 = lambda x,y: fd.sin(x)*fd.cos(y)
+        NBC1 = lambda x,y: -fd.cos(x)*fd.sin(y)
+        NBC2 = lambda x,y: fd.cos(x)*fd.sin(y)
 
         for h in hs:
             print(f"Computing for h = {h}...")
@@ -296,10 +297,10 @@ if __name__ == "__main__":
             model = PoissonSolver(mesh, P = 1)
 
             # Imposing true solution
-            model.MMS(true_sol, DBCs=[1, 2], func_type="callable")
+            model.MMS(true_sol, DBCs=[3, 4], func_type="callable")
             model.impose_rhs(rhs, func_type="callable")
-            model.impose_NBC(NBC3, 3, func_type="callable")
-            model.impose_NBC(NBC4, 4, func_type="callable")
+            model.impose_NBC(NBC1, 1, func_type="callable")
+            model.impose_NBC(NBC2, 2, func_type="callable")
 
             # Solve
             model.solve()
@@ -332,10 +333,10 @@ if __name__ == "__main__":
             model = PoissonSolver(mesh, P = int(P))
 
             # Imposing true solution
-            model.MMS(true_sol, DBCs=[1, 2], func_type="callable")
+            model.MMS(true_sol, DBCs=[3, 4], func_type="callable")
             model.impose_rhs(rhs, func_type="callable")
-            model.impose_NBC(NBC3, 3, func_type="callable")
-            model.impose_NBC(NBC4, 4, func_type="callable")
+            model.impose_NBC(NBC1, 1, func_type="callable")
+            model.impose_NBC(NBC2, 2, func_type="callable")
 
             # Solve
             model.solve()
@@ -354,12 +355,54 @@ if __name__ == "__main__":
 
         save_data = input("Save new results? (y/n): ")
         if save_data == "y":
-            np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonCLS/PoissonError_h.txt", error_h)
-            np.savetxt("./F25_Bachelor_NACA_SEM/PoissonSolver/PoissonCLS/PoissonError_p.txt", error_p)
+            np.savetxt("./PoissonSolver/PoissonCLS/PoissonError_h.txt", error_h)
+            np.savetxt("./PoissonSolver/PoissonCLS/PoissonError_p.txt", error_p)
         else:
             print("Results not saved")
-        
+
     elif task == "2":
+        ps = np.array([1,2,3])
+        hs = np.array([5, 10, 50, 100, 150])
+
+        error_hp = []
+
+        true_sol = lambda x,y: fd.sin(x)*fd.sin(y)
+        rhs = lambda x,y: -2*fd.sin(x)*fd.sin(y)
+        NBC1 = lambda x,y: -fd.cos(x)*fd.sin(y)
+        NBC2 = lambda x,y: fd.cos(x)*fd.sin(y)
+
+        for p in ps:
+            for h in hs:
+                print(f"Computing for P = {p} and h = {h}...")
+                # Mesh
+                mesh = fd.UnitSquareMesh(int(h/p), int(h/p))
+
+                # Solver
+                model = PoissonSolver(mesh, P = int(p))
+
+                # Imposing true solution
+                model.MMS(true_sol, DBCs=[3, 4], func_type="callable")
+                model.impose_rhs(rhs, func_type="callable")
+                model.impose_NBC(NBC1, 1, func_type="callable")
+                model.impose_NBC(NBC2, 2, func_type="callable")
+
+                # Solve
+                model.solve()
+
+                err = fd.errornorm(model.true_sol, model.u_sol, norm_type="L2")
+                print(f"\t\t Error: {err} \n")
+
+                # Compute error
+                error_hp.append(np.array([p, model.V.dof_count, err]))
+        
+        # Save data
+        save_data = input("Save new results? (y/n): ")
+        if save_data == "y":
+            np.savetxt("./PoissonSolver/PoissonCLS/PoissonError_hp.txt", error_hp)
+        else:
+            print("Results not saved")
+
+    elif task == "3":
         mesh_kwargs = {
             "n_in": 20,
             "n_out": 20,
