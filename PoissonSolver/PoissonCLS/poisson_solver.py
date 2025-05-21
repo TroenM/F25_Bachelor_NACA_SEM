@@ -410,7 +410,7 @@ if __name__ == "__main__":
             "n_fs": 50, 
             "n_airfoil" : 100
         }
-        mesh = naca_mesh("0012", alpha = 10, ylim = (-4, 4), kwargs = mesh_kwargs)
+        mesh = naca_mesh("0012", alpha = 15, ylim = (-4, 4), kwargs = mesh_kwargs)
         fd_mesh = meshio_to_fd(mesh)
 
         V_inf = fd.Constant(10)
