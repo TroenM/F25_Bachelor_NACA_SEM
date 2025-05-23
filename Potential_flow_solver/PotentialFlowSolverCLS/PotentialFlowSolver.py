@@ -112,7 +112,7 @@ class PotentialFlowSolver:
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
 
         self.a = self.kwargs.get("a", 1)
-        self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
+        self.b = self.kwargs.get("b", np.sqrt(0.65))
 
         self.solver_params = self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"})
 
@@ -375,10 +375,10 @@ class PotentialFlowSolver:
         Wx_rot = Wx * np.cos(-alpha) - Wy * np.sin(-alpha)
         Wy_rot = Wx * np.sin(-alpha) + Wy * np.cos(-alpha)
 
-        elipse_circumference = np.pi*(3*(a+b)-np.sqrt((3*a+b)*(a+3*b)))
+        elipse_area = np.sqrt(a) * np.sqrt(b)* 2*np.pi
 
         # Computing the vortex strength
-        Gamma = -elipse_circumference*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
+        Gamma = -elipse_area*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
 
         return Gamma
 
@@ -402,11 +402,11 @@ class PotentialFlowSolver:
         y_bar = (x_translated) * fd.sin(alpha) + (y_translated) * fd.cos(alpha)
         
 
-        elipse_circumference = np.pi*(3*(self.a+self.b)-np.sqrt((3*self.a+self.b)*(self.a+3*self.b)))
+        elipse_area = fd.sqrt(a) * fd.sqrt(b)* 2*fd.pi
 
         # Compute the unrotated vortex velocity field
-        u_x = -Gamma / elipse_circumference * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
-        u_y = Gamma / elipse_circumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
+        u_x = -Gamma / elipse_area * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
+        u_y = Gamma / elipse_area * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
 
         u_x = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
         u_y = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
@@ -472,6 +472,7 @@ if __name__ == "__main__":
     2: Compute simple model
     3: n-Convergence and p-convergence of pressure coefficients around 0012 airfoil with eliptic and circular flow
     4: n-Convergence and p-convergence of lift coefficients around 0012 airfoil with eliptic and circular flow
+    5: Compute information for pressure coefficient plot
     Choose task: """)
 
     if task == "1":
@@ -487,14 +488,14 @@ if __name__ == "__main__":
         circular_data = np.empty_like(nasa_data)
         circular_data[:,0] = nasa_data[:,0]
         kwargs_eliptic = {"ylim":[-4,4], "V_inf": 10, "g_div": 100, "write":False,
-               "n_airfoil": 2000,
+               "n_airfoil": 500,
                "n_fs": 50,
                "n_bed": 50,
                "n_inlet": 20,
                "n_outlet": 20,
                "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
         kwargs_circular = {"ylim":[-4,4], "V_inf": 10, "g_div": 100, "write":False,
-               "n_airfoil": 2000,
+               "n_airfoil": 500,
                "n_fs": 50,
                "n_bed": 50,
                "n_inlet": 20,
@@ -506,13 +507,13 @@ if __name__ == "__main__":
         for i,val in enumerate(nasa_data[:,0]):
             print(f"{i+1}/{len(nasa_data[:,0])}")
             print("Elliptic model")
-            eliptic_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_eliptic)
+            eliptic_model = PotentialFlowSolver("0012", 2, val, kwargs=kwargs_eliptic)
             eliptic_model.solve()
             eliptic_data[i,1] = eliptic_model.lift_coeff
             del(eliptic_model)
 
             print("Circular Model")
-            circular_model = PotentialFlowSolver("0012", 3, val, kwargs=kwargs_circular)
+            circular_model = PotentialFlowSolver("0012", 2, val, kwargs=kwargs_circular)
             circular_model.solve()
             circular_data[i,1] = circular_model.lift_coeff
             del(circular_model)
@@ -607,25 +608,26 @@ if __name__ == "__main__":
         ])
         # n convergence
         points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
+        np.savetxt(f"../../Visualisation/P_Coeff_Convergence/n_airfoil.txt",points_around_airfoil)
         ps = np.array([1,2,3,4,5])
+        np.savetxt(f"../../Visualisation/P_Coeff_Convergence/ps.txt",ps)
 
         for P in ps:
             P = int(P)
-            for mode in ["e","c"]:
+            for mode in ["e"]:
                 infnorm = np.zeros_like(points_around_airfoil, dtype=float)
                 meannorm = np.zeros_like(points_around_airfoil, dtype=float)
                 l2norm = np.zeros_like(points_around_airfoil, dtype=float)
                 times = np.zeros_like(points_around_airfoil, dtype=float)
 
                 for i,val in enumerate(points_around_airfoil):
-                    kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":True,
+                    kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":False,
                             "n_airfoil": val,
                             "n_fs": 40,
                             "n_bed": 40,
                             "n_inlet": 20,
                             "n_outlet": 20,
-                            "dot_tol": 1e-4,
-                            "a": 1, "b":1}
+                            "dot_tol": 1e-4}
                     if mode == "c":
                         kwargs["a"] = 1
                         kwargs["b"] = 1
@@ -635,10 +637,10 @@ if __name__ == "__main__":
                     try:
                         model.solve()
                     except:
-                        times[i] = np.inf
-                        infnorm[i] = np.inf
-                        meannorm[i] = np.inf
-                        l2norm[i] = np.inf
+                        times[i] = np.nan
+                        infnorm[i] = np.nan
+                        meannorm[i] = np.nan
+                        l2norm[i] = np.nan
                         continue
 
                     times[i] = time() - it_time
@@ -684,15 +686,13 @@ if __name__ == "__main__":
                     infnorm[i] = abs_distance.max()
                     meannorm[i] = abs_distance.mean()
                     l2norm[i] = np.linalg.norm(abs_distance)
-                results = np.vstack((points_around_airfoil, infnorm, meannorm, l2norm, times), dtype=float)
+                results = np.vstack((infnorm, meannorm, l2norm, times), dtype=float)
                 if mode == "e":
                     np.savetxt(f"../../Visualisation/P_Coeff_Convergence/P_Coeffs_errors_ellipse_P:{P}.txt",results)
                 else:
                     np.savetxt(f"../../Visualisation/P_Coeff_Convergence/P_Coeffs_errors_circle_P:{P}.txt",results)
     
     elif task == "4":
-        points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
-        ps = np.array([1,2,3,4,5])
         Truths = np.array([
             [-12.2535, -1.25912],
             [-11.2222, -1.18135],
@@ -714,23 +714,28 @@ if __name__ == "__main__":
             [11.0471, 1.19842]
         ])
 
-        index = 16
+        index = 5
+        
+        points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
+        np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/n_airfoil.txt",points_around_airfoil)
+        ps = np.array([1,2,3,4])
+        np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/ps.txt",ps)
+        
 
         for P in ps:
             P = int(P)
             for mode in ["e","c"]:
-                norm = np.zeros_like(points_around_airfoil, dtype=float)
+                error = np.zeros_like(points_around_airfoil, dtype=float)
                 times = np.zeros_like(points_around_airfoil, dtype=float)
 
                 for i,val in enumerate(points_around_airfoil):
-                    kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":True,
+                    kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":False,
                             "n_airfoil": val,
                             "n_fs": 40,
                             "n_bed": 40,
                             "n_inlet": 20,
                             "n_outlet": 20,
-                            "dot_tol": 1e-4,
-                            "a": 1, "b":1}
+                            "dot_tol": 1e-4}
                     if mode == "c":
                         kwargs["a"] = 1
                         kwargs["b"] = 1
@@ -739,14 +744,127 @@ if __name__ == "__main__":
                     try:
                         model.solve()
                     except:
-                        times[i] = np.inf
-                        norm[i] = np.inf
+                        times[i] = np.nan
+                        error[i] = np.nan
                         continue
 
                     times[i] = time() - it_time
-                    norm[i] = np.abs(Truths[index,0] - model.lift_coeff)
-                results = np.vstack((points_around_airfoil, norm, times), dtype=float)
+                    error[i] = (Truths[index,1] - model.lift_coeff)
+                results = np.vstack((error, times), dtype=float)
                 if mode == "e":
-                    np.savetxt(f"../../Visualisation/L_Coeff_Convergence/L_Coeffs_errors_ellipse_P:{P}.txt",results)
+                    np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/L_Coeffs_errors_ellipse_P:{P}_AOA:{Truths[index,0]}.txt",results)
                 else:
-                    np.savetxt(f"../../Visualisation/L_Coeff_Convergence/L_Coeffs_errors_circle_P:{P}.txt",results)
+                    np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/L_Coeffs_errors_circle_P:{P}_AOA:{Truths[index,0]}.txt",results)
+
+    elif task == "5":
+        nasa_9mil_10AoA = np.array([
+            [.9483 ,  .1147],
+            [.9000 ,  .0684],
+            [.8503 ,  .0882],
+            [.7998 ,  .0849],
+            [.7497 ,  .0782],
+            [.7003 ,  .0739],
+            [.6502 ,  .0685],
+            [.5997 ,  .0813],
+            [.5506 ,  .0884],
+            [.5000 ,  .0940],
+            [.4503 ,  .1125],
+            [.4000 ,  .1225],
+            [.3507 ,  .1488],
+            [.3002 ,  .1893],
+            [.2501 ,  .2292],
+            [.2004 ,  .2973],
+            [.1504 ,  .3900],
+            [.1000 ,  .5435],
+            [.0755 ,  .6563],
+            [.0510 ,  .8031],
+            [.0251 , 1.0081],
+            [.0122 , 1.0241],
+            [0.    ,-2.6598],
+            [.0135 ,-3.9314],
+            [.0271 ,-3.1386],
+            [.0515 ,-2.4889],
+            [.0763 ,-2.0671],
+            [.1012 ,-1.8066],
+            [.1503 ,-1.4381],
+            [.1994 ,-1.2297],
+            [.2501 ,-1.0638],
+            [.2999 , -.9300],
+            [.3499 , -.8094],
+            [.3994 , -.7131],
+            [.4496 , -.6182],
+            [.4997 , -.5374],
+            [.5492 , -.4563],
+            [.5994 , -.3921],
+            [.6495 , -.3247],
+            [.6996 , -.2636],
+            [.7489 , -.1964],
+            [.8003 , -.1318],
+            [.8500 , -.0613],
+            [.8993 , -.0021],
+            [.9489 ,  .0795],
+        ])
+        # n convergence
+        n_airfoil = int(input("What should the value of n_airfoil be?: "))
+        P = int(input("What should the value of P be?: "))
+        circle_answer = input("Should the vortex be circular? [Y/n]: ").lower()
+        if circle_answer == "y":
+            circle = True
+        elif circle_answer == "n":
+            circle = False
+        else:
+            raise ValueError("Not a valid answer")
+        
+
+        kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":False,
+                "n_airfoil": n_airfoil,
+                "n_fs": 100,
+                "n_bed": 100,
+                "n_inlet": 100,
+                "n_outlet": 100,
+                "dot_tol": 1e-4}
+        if circle:
+            kwargs["a"] = 1
+            kwargs["b"] = 1
+        model = PotentialFlowSolver("0012", alpha = 10.0228, P=P, kwargs = kwargs)
+
+        model.solve()
+
+        p1, p_te, p_leading_edge, pn= model.get_edge_info()
+
+        cord = p_te-p_leading_edge
+        orthcord = np.array([-cord[1],cord[0]])
+        
+        xvals = nasa_9mil_10AoA[:,0]
+
+        all_coords = p_leading_edge + np.array([cord * i for i in xvals])
+        pressure = np.zeros_like(xvals)
+        OnLower = True
+
+        for j in range(len(pressure)):
+            if nasa_9mil_10AoA[j,0] == 0:
+                OnLower = False
+                pressure[j] = model.pressure_coeff.at(p_leading_edge)
+                continue
+            if OnLower:
+                coords = all_coords[j,:]
+                coords -= 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                while True:
+                    try:
+                        pressure[j] = model.pressure_coeff.at(coords)
+                        break
+                    except:
+                        coords -= 1e-5 * orthcord
+            else:
+                coords = all_coords[j,:]
+                coords += 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
+                while True:
+                    try:
+                        pressure[j] = model.pressure_coeff.at(coords)
+                        break
+                    except:
+                        coords += 1e-5 * orthcord
+        if circle:
+            np.savetxt(f"../../Visualisation/P_Coeff_plot/data/P_Coeffs_pressure_circle_P:{P}_POA:{n_airfoil}.txt",pressure)
+        else:
+            np.savetxt(f"../../Visualisation/P_Coeff_plot/data/P_Coeffs_pressure_ellipse_P:{P}_POA:{n_airfoil}.txt",pressure)
