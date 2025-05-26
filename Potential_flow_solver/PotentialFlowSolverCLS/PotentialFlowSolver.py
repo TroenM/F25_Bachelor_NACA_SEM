@@ -112,7 +112,7 @@ class PotentialFlowSolver:
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
 
         self.a = self.kwargs.get("a", 1)
-        self.b = self.kwargs.get("b", np.sqrt(0.65))
+        self.b = self.kwargs.get("b", 0.12)
 
         self.solver_params = self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"})
 
@@ -375,10 +375,10 @@ class PotentialFlowSolver:
         Wx_rot = Wx * np.cos(-alpha) - Wy * np.sin(-alpha)
         Wy_rot = Wx * np.sin(-alpha) + Wy * np.cos(-alpha)
 
-        elipse_area = np.sqrt(a) * np.sqrt(b)* 2*np.pi
+        spherical_cow = 3*(a+b) - np.sqrt(3*(a+b)**2+4*a*b)
 
         # Computing the vortex strength
-        Gamma = -elipse_area*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
+        Gamma = -spherical_cow*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
 
         return Gamma
 
@@ -402,11 +402,11 @@ class PotentialFlowSolver:
         y_bar = (x_translated) * fd.sin(alpha) + (y_translated) * fd.cos(alpha)
         
 
-        elipse_area = fd.sqrt(a) * fd.sqrt(b)* 2*fd.pi
+        spherical_cow = 3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b)
 
         # Compute the unrotated vortex velocity field
-        u_x = -Gamma / elipse_area * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
-        u_y = Gamma / elipse_area * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
+        u_x = -Gamma / spherical_cow * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
+        u_y = Gamma / spherical_cow * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
 
         u_x = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
         u_y = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
@@ -609,12 +609,12 @@ if __name__ == "__main__":
         # n convergence
         points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
         np.savetxt(f"../../Visualisation/P_Coeff_Convergence/n_airfoil.txt",points_around_airfoil)
-        ps = np.array([1,2,3,4,5])
+        ps = np.array([1,2,3,4])
         np.savetxt(f"../../Visualisation/P_Coeff_Convergence/ps.txt",ps)
 
         for P in ps:
             P = int(P)
-            for mode in ["e"]:
+            for mode in ["c"]:
                 infnorm = np.zeros_like(points_around_airfoil, dtype=float)
                 meannorm = np.zeros_like(points_around_airfoil, dtype=float)
                 l2norm = np.zeros_like(points_around_airfoil, dtype=float)
@@ -713,48 +713,47 @@ if __name__ == "__main__":
             [10.1891, 1.12074],
             [11.0471, 1.19842]
         ])
-
-        index = 5
+        for index in [1,5,10,17]:
         
-        points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
-        np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/n_airfoil.txt",points_around_airfoil)
-        ps = np.array([1,2,3,4])
-        np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/ps.txt",ps)
-        
+            points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
+            #np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/n_airfoil.txt",points_around_airfoil)
+            ps = np.array([4])
+            #np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/ps.txt",ps)
+            
 
-        for P in ps:
-            P = int(P)
-            for mode in ["e","c"]:
-                error = np.zeros_like(points_around_airfoil, dtype=float)
-                times = np.zeros_like(points_around_airfoil, dtype=float)
+            for P in ps:
+                P = int(P)
+                for mode in ["e"]:
+                    error = np.zeros_like(points_around_airfoil, dtype=float)
+                    times = np.zeros_like(points_around_airfoil, dtype=float)
 
-                for i,val in enumerate(points_around_airfoil):
-                    kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":False,
-                            "n_airfoil": val,
-                            "n_fs": 40,
-                            "n_bed": 40,
-                            "n_inlet": 20,
-                            "n_outlet": 20,
-                            "dot_tol": 1e-4}
-                    if mode == "c":
-                        kwargs["a"] = 1
-                        kwargs["b"] = 1
-                    model = PotentialFlowSolver("0012", alpha = Truths[index,0], P=P, kwargs = kwargs)
-                    it_time = time()
-                    try:
-                        model.solve()
-                    except:
-                        times[i] = np.nan
-                        error[i] = np.nan
-                        continue
+                    for i,val in enumerate(points_around_airfoil):
+                        kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":False,
+                                "n_airfoil": val,
+                                "n_fs": 40,
+                                "n_bed": 40,
+                                "n_inlet": 20,
+                                "n_outlet": 20,
+                                "dot_tol": 1e-4}
+                        if mode == "c":
+                            kwargs["a"] = 1
+                            kwargs["b"] = 1
+                        model = PotentialFlowSolver("0012", alpha = Truths[index,0], P=P, kwargs = kwargs)
+                        it_time = time()
+                        try:
+                            model.solve()
+                        except:
+                            times[i] = np.nan
+                            error[i] = np.nan
+                            continue
 
-                    times[i] = time() - it_time
-                    error[i] = (Truths[index,1] - model.lift_coeff)
-                results = np.vstack((error, times), dtype=float)
-                if mode == "e":
-                    np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/L_Coeffs_errors_ellipse_P:{P}_AOA:{Truths[index,0]}.txt",results)
-                else:
-                    np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/L_Coeffs_errors_circle_P:{P}_AOA:{Truths[index,0]}.txt",results)
+                        times[i] = time() - it_time
+                        error[i] = (Truths[index,1] - model.lift_coeff)
+                    results = np.vstack((error, times), dtype=float)
+                    if mode == "e":
+                        np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/L_Coeffs_errors_ellipse_P:{P}_AOA:{Truths[index,0]}.txt",results)
+                    else:
+                        np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/L_Coeffs_errors_circle_P:{P}_AOA:{Truths[index,0]}.txt",results)
 
     elif task == "5":
         nasa_9mil_10AoA = np.array([
