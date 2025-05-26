@@ -212,13 +212,16 @@ def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : calla
 
     
     point = mesh.points.copy()
-    func_before = np.vectorize(func_before)
-    func_after = np.vectorize(func_after)
     airfoil_values = point[airfoil_points]
 
     # Mask all points above airfoil
     point_mask = np.where((point[:,1] > np.max(airfoil_values[:,1])))
     min_point_val = np.min(point[point_mask,1])
+
+    func_before = lambda x: func_before(x)-min_point_val
+    func_after = lambda x: func_after(x)-min_point_val
+    func_before = np.vectorize(func_before)
+    func_after = np.vectorize(func_after)
     
     point[point_mask,1] -= min_point_val
     point[point_mask,1] = point[point_mask,1] * (func_after(point[point_mask,0]) /  func_before(point[point_mask,0]))
