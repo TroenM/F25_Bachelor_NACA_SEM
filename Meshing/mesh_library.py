@@ -92,7 +92,7 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str, xlim: list 
         raise ValueError("That is not a valid gridtype, it should either be triangle or quad")
 
 
-def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], legend : bool=False, dpi=300, show=True) -> None:
+def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], legend : bool=False, dpi=300, show=True, axes=False) -> None:
     # Extract points and cells
     points = mesh.points[:, :2]  # Only take x, y for 2D
     cell_dict = mesh.cells_dict.keys()
@@ -108,7 +108,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     BC_dict = {"in":1, "out":2, "deck":3, "fs":4, "naca":5}
     BC_colors = {"in":"darkgreen", "out":"darkred", "deck":"darkblue", "fs":"yellow", "naca":"red"}
     linew = 0.8
-    boundary_linew = 2
+    boundary_linew = 1.2
 
     # setting color and size for points
     point_color = "black"
@@ -126,7 +126,10 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     ranges = np.array([xrange,yrange])
     a = 20/xrange ; b = 20/yrange
     ranges *= min(a,b)
-    fig, ax = plt.subplots(figsize=ranges, dpi=dpi)
+    if axes:
+        ax = axes
+    else:
+        fig, ax = plt.subplots(figsize=ranges, dpi=dpi)
     
     for celltype in cell_dict:
         if celltype in ["quad","triangle", "polygon"]:
@@ -198,14 +201,15 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     
     plt.xlabel("X")
     plt.ylabel("Y")
-    plt.title("2D Mesh Visualization")
+    if not axes:
+        plt.title("2D Mesh Visualization")
     if show:
         plt.show()
     return None
 
 
 
-def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : callable) -> meshio.Mesh:
+def shift_surface(mesh : meshio.Mesh, func_b : callable, func_a : callable) -> meshio.Mesh:
     line_clasifications = mesh.cell_data_dict["gmsh:physical"]["line"]
     airfoil_lines = mesh.cells_dict["line"][np.where(line_clasifications == 5)[0]]
     airfoil_points = np.unique(airfoil_lines)
@@ -218,8 +222,8 @@ def shift_surface(mesh : meshio.Mesh, func_before : callable, func_after : calla
     point_mask = np.where((point[:,1] > np.max(airfoil_values[:,1])))
     min_point_val = np.min(point[point_mask,1])
 
-    func_before = lambda x: func_before(x)-min_point_val
-    func_after = lambda x: func_after(x)-min_point_val
+    func_before = lambda x: func_b(x)-min_point_val
+    func_after = lambda x: func_a(x)-min_point_val
     func_before = np.vectorize(func_before)
     func_after = np.vectorize(func_after)
     
