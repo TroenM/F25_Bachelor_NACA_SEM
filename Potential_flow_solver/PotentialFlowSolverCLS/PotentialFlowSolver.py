@@ -375,7 +375,7 @@ class PotentialFlowSolver:
         Wx_rot = Wx * np.cos(-alpha) - Wy * np.sin(-alpha)
         Wy_rot = Wx * np.sin(-alpha) + Wy * np.cos(-alpha)
 
-        spherical_cow = 3*(a+b) - np.sqrt(3*(a+b)**2+4*a*b)
+        spherical_cow = np.pi*(3*(a+b) - np.sqrt(3*(a+b)**2+4*a*b))
 
         # Computing the vortex strength
         Gamma = -spherical_cow*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
@@ -402,7 +402,7 @@ class PotentialFlowSolver:
         y_bar = (x_translated) * fd.sin(alpha) + (y_translated) * fd.cos(alpha)
         
 
-        spherical_cow = 3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b)
+        spherical_cow = fd.pi*(3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b))
 
         # Compute the unrotated vortex velocity field
         u_x = -Gamma / spherical_cow * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
@@ -482,24 +482,26 @@ if __name__ == "__main__":
         Data is in the form of [alpha, cl]
         NASA data is in degrees"""
 
+        P = 2
+
         nasa_data = np.loadtxt("0012.abbottdata.cl.txt")
         eliptic_data = np.empty_like(nasa_data)
         eliptic_data[:,0] = nasa_data[:,0]
         circular_data = np.empty_like(nasa_data)
         circular_data[:,0] = nasa_data[:,0]
-        kwargs_eliptic = {"ylim":[-4,4], "V_inf": 10, "g_div": 100, "write":False,
-               "n_airfoil": 500,
-               "n_fs": 50,
-               "n_bed": 50,
-               "n_inlet": 20,
-               "n_outlet": 20,
+        kwargs_eliptic = {"ylim":[-10,10], "V_inf": 10, "g_div": 100, "write":False,
+               "n_airfoil": 800,
+               "n_fs": 100,
+               "n_bed": 100,
+               "n_inlet": 50,
+               "n_outlet": 50,
                "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
-        kwargs_circular = {"ylim":[-4,4], "V_inf": 10, "g_div": 100, "write":False,
-               "n_airfoil": 500,
-               "n_fs": 50,
-               "n_bed": 50,
-               "n_inlet": 20,
-               "n_outlet": 20,
+        kwargs_circular = {"ylim":[-10,10], "V_inf": 10, "g_div": 100, "write":False,
+               "n_airfoil": 800,
+               "n_fs": 100,
+               "n_bed": 100,
+               "n_inlet": 50,
+               "n_outlet": 50,
                "a": 1,
                "b": 1,
                "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
@@ -507,13 +509,13 @@ if __name__ == "__main__":
         for i,val in enumerate(nasa_data[:,0]):
             print(f"{i+1}/{len(nasa_data[:,0])}")
             print("Elliptic model")
-            eliptic_model = PotentialFlowSolver("0012", 2, val, kwargs=kwargs_eliptic)
+            eliptic_model = PotentialFlowSolver("0012", P, val, kwargs=kwargs_eliptic)
             eliptic_model.solve()
             eliptic_data[i,1] = eliptic_model.lift_coeff
             del(eliptic_model)
 
             print("Circular Model")
-            circular_model = PotentialFlowSolver("0012", 2, val, kwargs=kwargs_circular)
+            circular_model = PotentialFlowSolver("0012", P, val, kwargs=kwargs_circular)
             circular_model.solve()
             circular_data[i,1] = circular_model.lift_coeff
             del(circular_model)
@@ -713,11 +715,12 @@ if __name__ == "__main__":
             [10.1891, 1.12074],
             [11.0471, 1.19842]
         ])
-        for index in [1,5,10,17]:
         
+        #index = 1
+        for index in [10,17]:
             points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
             #np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/n_airfoil.txt",points_around_airfoil)
-            ps = np.array([4])
+            ps = np.array([1,2,3,4])
             #np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/ps.txt",ps)
             
 
@@ -815,7 +818,7 @@ if __name__ == "__main__":
             raise ValueError("Not a valid answer")
         
 
-        kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":False,
+        kwargs = {"ylim":[-10,10], "V_inf": 10, "g_div": 70, "write":False,
                 "n_airfoil": n_airfoil,
                 "n_fs": 100,
                 "n_bed": 100,
