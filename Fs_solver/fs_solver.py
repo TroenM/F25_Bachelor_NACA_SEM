@@ -358,6 +358,7 @@ class FsSolver:
         Updates the free surface and corresponding dirichlet boundary condition
         """
         #print("\t Computing free surface equations using EE")
+
         # Initialize mesh on the free surface only
         number_of_points = self.fs_points.shape[0]
         fs_mesh = fd.IntervalMesh(number_of_points-1, self.xlim[0], self.xlim[1])
@@ -401,10 +402,8 @@ class FsSolver:
         eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2, 0)*eta_n1
 
         # A try of dampening phi towards the edge of the domain
-        #phi_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (self.xlim[0]  - xd_in))**2, 0)*phi_n1 \
-                     #-A*fd.conditional(x < xd_in, ((x - xd_in) / (self.xlim[0]  - xd_in))**2 * V_inf, 0)
-        #phi_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2, 0)*phi_n1 \
-                      #-A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2 * V_inf, 0)
+        #phi_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (self.xlim[0]  - xd_in))**2, 0) * (phi_n1 - V_inf*x)
+        #phi_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2, 0) * (phi_n1 - V_inf*x) 
 
         # Weak form EE schemes of the updating eta
         F_eta_lhs = fd.inner(eta_n1, v_eta)*fd.dx + fd.inner(eta_damp_in, v_eta)*fd.dx + fd.inner(eta_damp_out, v_eta)*fd.dx
@@ -472,11 +471,14 @@ class FsSolver:
     
     def __update_mesh_data__(self, old_eta : np.ndarray, new_eta : np.ndarray) -> None:
         # Shift surface of the mesh and set this as new mesh
-        new_mesh = shift_surface(self.mesh, interp1d(self.fs_xs, old_eta), interp1d(self.fs_xs, new_eta))
-        self.mesh = new_mesh
 
-        # Use these coordinates for the firedrake mesh as well
-        self.fd_mesh.coordinates.dat.data[:] = meshio_to_fd(self.mesh).coordinates.dat.data
+        old_eta_sorted = old_eta[np.argsort(self.fs_xs)]
+        new_eta_sorted = new_eta[np.argsort(self.fs_xs)]
+        x_sorted = np.sort(self.fs_xs)
+        func_before = interp1d(x_sorted, old_eta_sorted)
+        func_after = interp1d(x_sorted, new_eta_sorted)
+
+        self.fd_mesh.coordinates.dat.data[:] = shift_surface(self.fd_mesh, lambda x: 1, lambda x: 0.1*np.sin(x) + 1).coordinates.dat.data
 
         # Change the firedrake function spaces to match the new mesh
         self.V = fd.FunctionSpace(self.fd_mesh, "CG", self.P)
@@ -493,11 +495,11 @@ class FsSolver:
 
 if __name__ == "__main__":
     kwargs = {"ylim":[-4,1], "xlim":[-10,23], "V_inf": 10, "g_div": 70, "write":True,
-           "n_airfoil": 50,
-           "n_fs": 230,
-           "n_bed": 20,
-           "n_inlet": 10,
-           "n_outlet": 10,
+           "n_airfoil": 100,
+           "n_fs": 460,
+           "n_bed": 100,
+           "n_inlet": 50,
+           "n_outlet": 50,
            "rtol": 1e-8,
            "fs_rtol": 1e-3,
            "max_iter_fs": 50,

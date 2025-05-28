@@ -261,38 +261,45 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     return None
 
 
-def shift_surface(mesh : meshio.Mesh, func_b : callable, func_a : callable) -> meshio.Mesh:
-    
-    # Locate points a part of the airfoil
-    line_clasifications = mesh.cell_data_dict["gmsh:physical"]["line"]
-    airfoil_lines = mesh.cells_dict["line"][np.where(line_clasifications == 5)[0]]
-    airfoil_points = np.unique(airfoil_lines)
+def shift_surface(mesh : fd.Mesh, func_b : callable, func_a : callable) -> meshio.Mesh:
+    '''
+    params
+    ---
+    func_b: callable 
+        - Function before
+    func_a: callable
+        - Function after
+    '''
+    # Define p=1 functionspace
+    V1 = fd.FunctionSpace(mesh, "CG", 1)
 
-    # Find concrete coordinates for the points on the airfoil
-    point = mesh.points.copy()
-    airfoil_values = point[airfoil_points]
+    coords = mesh.coordinates.dat.data
+    
+    # Find airfoil indecies
+    naca_idx = V1.boundary_nodes(5)
+
+    # Define maximal y value of coordinates on airfoil 
+    M = np.max(coords[naca_idx][:,1])
 
     # Mask all points above the largest value of the airfoil
-    point_mask = np.where((point[:,1] > np.max(airfoil_values[:,1])))
-    
-    # Define the largest y val of the airfoil as a new "minimum"
-    min_point_val = np.max(airfoil_values[:,1])
+    point_mask = np.where((coords[:,1] > M))
 
     # Manipulate functions
-    func_before = lambda x: func_b(x)-min_point_val
-    func_after = lambda x: func_a(x)-min_point_val
+    func_before = lambda x: func_b(x)-M
+    func_after = lambda x: func_a(x)-M
     func_before = np.vectorize(func_before)
     func_after = np.vectorize(func_after)
     
     # Manipulate point values as stated in the report under methodology for free surface.
-    point[point_mask,1] -= min_point_val
-    point[point_mask,1] = point[point_mask,1] * (func_after(point[point_mask,0]) /  func_before(point[point_mask,0]))
-    point[point_mask,1] += min_point_val
+    coords[point_mask,1] -= M
+    coords[point_mask,1] *= (func_after(coords[point_mask,0]) /  func_before(coords[point_mask,0]))
+    coords[point_mask,1] += M
 
-    # Copy the mesh and set new points to return a new mesh.
-    copy_mesh = mesh.copy()
-    copy_mesh.points = point
-    return copy_mesh
+    # Set new coordinates of mesh
+    mesh.coordinates.dat.data[:] = coords
+
+    # Return mesh
+    return mesh
 
 
 def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : np.ndarray = np.array([0.5,0])) -> np.ndarray:
