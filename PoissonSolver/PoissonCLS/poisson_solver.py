@@ -409,13 +409,19 @@ if __name__ == "__main__":
             "n_out": 20,
             "n_bed": 50,
             "n_fs": 50, 
-            "n_airfoil" : 100
+            "n_airfoil" : 100,
         }
-        mesh = naca_mesh("0012", alpha = 15, ylim = (-4, 4), kwargs = mesh_kwargs)
+        mesh = naca_mesh("0012", alpha = 10, ylim = (-4, 4), kwargs = mesh_kwargs)
         fd_mesh = meshio_to_fd(mesh)
 
-        V_inf = fd.Constant(10)
+        V_inf = fd.Constant(1)
         model = PoissonSolver(fd_mesh, P = 1)
+
+        from scipy.interpolate import interp1d
+        xs = np.linspace(-7,13,50)
+        ys = np.sin(xs)
+        bc_func = interp1d(xs,ys)
+        model.impose_DBC(bc_func, 4, "only_x")
 
         model.impose_NBC(-V_inf, 1, func_type="fd")
         model.impose_NBC(V_inf, 2, func_type="fd")

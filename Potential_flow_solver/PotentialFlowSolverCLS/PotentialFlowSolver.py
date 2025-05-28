@@ -168,8 +168,7 @@ class PotentialFlowSolver:
 
         # Free surface boundary condition
         if self.kwargs.get("fs_DBC", np.array([0])).any():
-            boundary_indecies = model.V.boundary_nodes(self.kwargs.get("fs", 4))
-            xs = (fd.Function(model.W).interpolate(model.mesh.coordinates).dat.data)[boundary_indecies,0]
+            xs = self.kwargs.get("fs_xs")
             ys = self.kwargs.get("fs_DBC")
             model.impose_DBC(interp1d(xs,ys), self.kwargs.get("fs", 4), "only_x")
         
@@ -558,15 +557,17 @@ if __name__ == "__main__":
     
     elif task == "2":
         # Defining a model and solving it
-        kwargs = {"ylim":[-10,10], "V_inf": 10, "write":True,
-           "n_airfoil": 1000,
+        kwargs = {"ylim":[-4,4], "V_inf": 1, "write":True,
+           "n_airfoil": 300,
            "n_fs": 50,
            "n_bed": 50,
-           "n_inlet": 50,
-           "n_outlet": 50,
-           "dot_tol": 1e-4}
+           "n_inlet": 20,
+           "n_outlet": 20,
+           "dot_tol": 1e-4,
+           "fs_xs": np.linspace(-7,13, 100),
+           "fs_DBC": -np.cos(np.linspace(-7,13, 100))}
         
-        model = PotentialFlowSolver("0012", P = 2, alpha = 30, kwargs=kwargs)
+        model = PotentialFlowSolver("0012", P = 2, alpha = 10, kwargs=kwargs)
         model.solve()
     
     elif task == "3":
