@@ -67,6 +67,7 @@ class PotentialFlowSolver:
 
     ########### Constructor ###########
     def __init__(self, airfoil : str = "0012", P : int = 1, alpha : float = 0, **kwargs):
+        # Fetching kwargs and setting standard parameters for the solver if they are not stated
         self.airfoil = airfoil
         self.P = P
 
@@ -112,7 +113,7 @@ class PotentialFlowSolver:
         self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
 
         self.a = self.kwargs.get("a", 1)
-        self.b = self.kwargs.get("b", 0.12)
+        self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
 
         self.solver_params = self.kwargs.get("solver_params", {"ksp_type": "preonly", "pc_type": "lu"})
 
@@ -149,16 +150,14 @@ class PotentialFlowSolver:
 
     def solve(self):
         center_of_vortex = self.kwargs.get("center_of_vortex", self.center_of_airfoil)
-        # Identify trailing edge and leading edge
+        # Identify trailing edge and leading edge and use these coordinates to set a point a little distance from the trailing edge
         p1, p_te, p_leading_edge, pn= self.get_edge_info()
         vn = pn - p_te
         vn /= np.linalg.norm(vn)
         v1 = p1 - p_te
         v1 /= np.linalg.norm(v1)
         v12 = (vn - v1)
-        p_te_new = p_te + np.array([v12[1], -v12[0]])/20
-        p1new = p1 - v12 * 0.4 
-        pnnew = pn + v12 * 0.4
+        p_te_new = p_te + np.array([v12[1], -v12[0]])/70
 
 
         # Initializing Laplaze solver
@@ -174,6 +173,7 @@ class PotentialFlowSolver:
             ys = self.kwargs.get("fs_DBC")
             model.impose_DBC(interp1d(xs,ys), self.kwargs.get("fs", 4), "only_x")
         
+        # Raise the tolorance for to see whether the solver can converge under a less strict tolorance
         converged = False
         while not converged:
             try:
@@ -198,7 +198,8 @@ class PotentialFlowSolver:
         velocity = fd.Function(model.W, name="velocity")
         velocity.project(fd.as_vector((velocityPotential.dx(0), velocityPotential.dx(1))))
         vortex = fd.Function(model.W, name="vortex")
-
+        
+        # Prepare for writing the results in a ovd file
         if self.write:
             self.velocity_output.write(velocity)
 
@@ -212,29 +213,33 @@ class PotentialFlowSolver:
         
         # Main loop
         for it, _ in enumerate(range(self.kwargs.get("max_iter", 20) + 1)):
+            # Start time
             time_it = time()
+
+            # 
             if __name__ == "__main__" or self.kwargs.get("print_iter", False):
                 print(f"Starting iteration {it}")
             else:
                 print(f"Starting PotentialFLowSolver iteration {it}", end="\r")
 
-            # Computing the vortex strength
+            # Computing the vortex strength at the point a little out from the trailing edge
             vte = velocity.at(p_te_new)
-            #vte = velocity.at(p1new) + velocity.at(pnnew)
+
+            # Using the vortex strength a little out from the trailing estimate a new vortex strength
             Gamma = self.compute_vortex_strength(v12, vte, p_te_new)
             Gammas.append(Gamma)
+
+            # Use an adaptive method to do feedback controlled scaling of the strength of the vortex
             Gamma /= self.__compute_Gamma_div(Gammas)
             
+            # Redifine Gamma as the scaled version
             Gammas[-1] = Gamma
             self.Gamma += Gamma
 
             # Compute the vortex
             vortex = self.compute_vortex(Gamma, model, center_of_vortex, vortex)
 
-            ######## REMOVE WHEN DONE TESTING ########
-            if it == 1:
-                self.vortex = vortex
-
+            # Sum velocity and the vortex to add circulation to the flow
             velocity += vortex
             vortex_sum += vortex
 
@@ -243,7 +248,7 @@ class PotentialFlowSolver:
             velocity += velocityBC
             velocityBC_sum += velocityBC
             
-            # Check for convergence
+            # Check for convergence and printing appropriate data
             if np.abs(np.dot(v12, vte)) < self.kwargs.get("dot_tol", 1e-6):
                 print(f"PoissonSolver converged in {it} iterations")
                 print(f"\t Total time: {time() - time_total}")
@@ -252,7 +257,7 @@ class PotentialFlowSolver:
                 print(f"\n")
                 break
 
-            # Checking for Stagnation
+            # Checking for Stagnation and printing appropriate data
             if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
                 print(f"PoissonSolver stagnated in {it-1} iterations")
                 print(f"\t Total time: {time() - time_total}")
@@ -261,7 +266,7 @@ class PotentialFlowSolver:
                 print(f"\n")
                 break
 
-            # Checking for divergence
+            # Checking for divergence and printing appropriate data
             if np.abs(Gamma - old_Gamma) > 1e4:
                 print(f"PoissonSolver diverged in {it} iterations")
                 print(f"\t Total time: {time() - time_total}")
@@ -270,7 +275,7 @@ class PotentialFlowSolver:
                 print(f"\n")
                 break
 
-            # Updating the vortex strength
+            # Updating the vortex strength and printing appropriate data
             if __name__ == "__main__" or self.kwargs.get("print_iter", False):
                 print(f"\t dGamma: {Gamma - old_Gamma}")
                 print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
@@ -287,13 +292,16 @@ class PotentialFlowSolver:
 
             # END OF MAIN LOOP
 
+        # Compute lift based on circulation given the formula in the Kutta Jacowski theorem
         self.lift = -self.Gamma * self.V_inf * self.kwargs.get("rho", 1.225)
         self.lift_coeff = self.lift / (1/2 * self.kwargs.get("rho", 1.225) * self.V_inf**2)
 
+        # Compute pressure coefficients
         self.__compute_pressure_coefficients(velocity, model)
 
         self.velocity = velocity
 
+        # Print relevant information if solver did not converge
         if it == self.kwargs.get("max_iter", 20):
             print(f"PoissonSolver did not converge in {it} iterations")
             print(f"\t dGamma: {dgamma}")
@@ -318,13 +326,15 @@ class PotentialFlowSolver:
         return v_in, v_out
 
     def __compute_Gamma_div(self, Gammas : list) -> float:
+        # Adaptive stepsize controller for Gamma described in the report
+        used = False
         if len(Gammas) <4:
             self.g_div = self.kwargs.get("g_div", 7)
             return self.g_div
         else:
             self.g_div = self.g_div*(Gammas[-3] - Gammas[-2] - Gammas[-2] + Gammas[-1]/self.g_div)/(Gammas[-3] - Gammas[-2])
             return self.g_div
-        return self.kwargs.get("g_div", 7)
+
 
     def get_edge_info(self):
         """
@@ -375,10 +385,10 @@ class PotentialFlowSolver:
         Wx_rot = Wx * np.cos(-alpha) - Wy * np.sin(-alpha)
         Wy_rot = Wx * np.sin(-alpha) + Wy * np.cos(-alpha)
 
-        spherical_cow = np.pi*(3*(a+b) - np.sqrt(3*(a+b)**2+4*a*b))
+        ellipse_circumference = np.pi*(3*(a+b) - np.sqrt(3*(a+b)**2+4*a*b))
 
         # Computing the vortex strength
-        Gamma = -spherical_cow*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
+        Gamma = -ellipse_circumference*(v12[0]*vte[0] + v12[1]*vte[1])/(Wx_rot*v12[0] + Wy_rot*v12[1])
 
         return Gamma
 
@@ -394,20 +404,22 @@ class PotentialFlowSolver:
         a = fd.Constant(self.a)
         b = fd.Constant(self.b)
         
-        # Transform coordinates
+        # Translate coordinates
         x_translated = model.x - center_of_vortex[0]
         y_translated = model.y - center_of_vortex[1]
-
+        
+        # rotate the coordinates
         x_bar = (x_translated) * fd.cos(alpha) - (y_translated) * fd.sin(alpha)
         y_bar = (x_translated) * fd.sin(alpha) + (y_translated) * fd.cos(alpha)
         
+        # Calculate the approximated circumference of the ellipse
+        ellipse_circumference = fd.pi*(3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b))
 
-        spherical_cow = fd.pi*(3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b))
+        # Compute the unrotated elliptical vortex field
+        u_x = -Gamma / ellipse_circumference * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
+        u_y = Gamma / ellipse_circumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
 
-        # Compute the unrotated vortex velocity field
-        u_x = -Gamma / spherical_cow * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
-        u_y = Gamma / spherical_cow * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
-
+        # Rotate the final vectors
         u_x = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
         u_y = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
 
@@ -431,7 +443,7 @@ class PotentialFlowSolver:
         correction_model.impose_NBC( -vortex, self.kwargs.get("naca", 5))
 
 
-        # Solving the correction model
+        # Solving the correction model and highering the tolorance if nessisary
         converged = False
         while not converged:
             try:
@@ -444,6 +456,7 @@ class PotentialFlowSolver:
                 if self.solver_params["ksp_rtol"] > 1:
                     correction_model.solve(self.solver_params)
         
+        # standardize the result such that the minimum is 0 (this does nothing to the gradient and thus does nothing to the flow)
         velocityPotential = correction_model.u_sol
         velocityPotential -= correction_model.u_sol.dat.data.min()
 
@@ -454,10 +467,14 @@ class PotentialFlowSolver:
         return velocityBC
     
     def __compute_pressure_coefficients(self, velocity, model):
+        # Defining the firedrake function
         pressure = fd.Function(model.V, name = "Pressure_coeff")
 
+        # Defining pressure coefficents in all of the domain from the formula given in the report.
         pressure.interpolate(1 - (fd.sqrt(fd.dot(velocity, velocity))/self.V_inf) ** 2)
         self.pressure_coeff = pressure
+
+        # Write the results
         if self.write:
             pressure_output = fd.VTKFile(self.VisualisationPath + "pressure_output.pvd")
             pressure_output.write(self.pressure_coeff)
@@ -482,13 +499,17 @@ if __name__ == "__main__":
         Data is in the form of [alpha, cl]
         NASA data is in degrees"""
 
-        P = 2
-
+        # Fetch data from nasa
         nasa_data = np.loadtxt("0012.abbottdata.cl.txt")
+
+        # Create arrays to hold data
         eliptic_data = np.empty_like(nasa_data)
         eliptic_data[:,0] = nasa_data[:,0]
         circular_data = np.empty_like(nasa_data)
         circular_data[:,0] = nasa_data[:,0]
+
+        # Set parameters for solver using circular vortex and solver using elliptical vortex
+        P = 2
         kwargs_eliptic = {"ylim":[-10,10], "V_inf": 10, "g_div": 100, "write":False,
                "n_airfoil": 800,
                "n_fs": 100,
@@ -505,7 +526,8 @@ if __name__ == "__main__":
                "a": 1,
                "b": 1,
                "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14},}
-
+        
+        # solve models and note down the result of the lift
         for i,val in enumerate(nasa_data[:,0]):
             print(f"{i+1}/{len(nasa_data[:,0])}")
             print("Elliptic model")
@@ -520,7 +542,7 @@ if __name__ == "__main__":
             circular_data[i,1] = circular_model.lift_coeff
             del(circular_model)
             
-        
+        # Ask if user wants to save data
         while True:
             save_results = input("Save results? (y/n) \n This will overwrite the existing files: ").lower()
             if save_results not in ["y" , "y " , " y", "n", " n", "n "]:
@@ -528,39 +550,27 @@ if __name__ == "__main__":
                 continue
             else:
                 break
-        
+        # Save data
         if save_results.lower() in ["y" , "y " , " y"]:
             print(os.getcwd())
             np.savetxt("../../Visualisation/LiftCoeffPlot/circular_cl_point.txt",circular_data)
             np.savetxt("../../Visualisation/LiftCoeffPlot/eliptic_cl_point.txt",eliptic_data)
     
     elif task == "2":
-        kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 1, "write":True,
-               "n_airfoil": 1000,
-               "n_fs": 30,
-               "n_bed": 30,
-               "n_inlet": 10,
-               "n_outlet": 10,
-               "g_div": 20, 
-               "a": 1,
-               "b": 1,
-               "center_of_airfoil": (0,0),
-               "min_tol": 1e-14,
-               "solver_params": {"ksp_type": "preonly", "pc_type": "lu", "ksp_rtol": 1e-14}}
+        # Defining a model and solving it
+        kwargs = {"ylim":[-10,10], "V_inf": 10, "write":True,
+           "n_airfoil": 1000,
+           "n_fs": 50,
+           "n_bed": 50,
+           "n_inlet": 50,
+           "n_outlet": 50,
+           "dot_tol": 1e-4}
         
-        kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 5, "write":True,
-           "n_airfoil": 200,
-           "n_fs": 80,
-           "n_bed": 80,
-           "n_inlet": 30,
-           "n_outlet": 30,
-           "dot_tol": 1e-4,
-           "a":1, "b":1}
-
-        model = PotentialFlowSolver("0012", P = 2, alpha = 15, kwargs=kwargs)
+        model = PotentialFlowSolver("0012", P = 2, alpha = 30, kwargs=kwargs)
         model.solve()
     
     elif task == "3":
+        # Fetch relevant data for 
         nasa_9mil_10AoA = np.array([
             [.9483 ,  .1147],
             [.9000 ,  .0684],
@@ -608,21 +618,29 @@ if __name__ == "__main__":
             [.8993 , -.0021],
             [.9489 ,  .0795],
         ])
-        # n convergence
+        # Define arrays that include the values for n_airfoil and which polynomial orders we want to use in our convergence 
         points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
         np.savetxt(f"../../Visualisation/P_Coeff_Convergence/n_airfoil.txt",points_around_airfoil)
         ps = np.array([1,2,3,4])
         np.savetxt(f"../../Visualisation/P_Coeff_Convergence/ps.txt",ps)
 
+        # Do a loop changing value of p
         for P in ps:
             P = int(P)
-            for mode in ["c"]:
+
+            # Do a loop changing between circular and elliptical vortex
+            for mode in ["c","e"]:
+
+                # Prepare arrays to save data
                 infnorm = np.zeros_like(points_around_airfoil, dtype=float)
                 meannorm = np.zeros_like(points_around_airfoil, dtype=float)
                 l2norm = np.zeros_like(points_around_airfoil, dtype=float)
                 times = np.zeros_like(points_around_airfoil, dtype=float)
 
+                # Do a loop for different values of n_airfoil
                 for i,val in enumerate(points_around_airfoil):
+
+                    # Define parameters for solver
                     kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":False,
                             "n_airfoil": val,
                             "n_fs": 40,
@@ -633,9 +651,14 @@ if __name__ == "__main__":
                     if mode == "c":
                         kwargs["a"] = 1
                         kwargs["b"] = 1
+                    
+                    # Initialize solver
                     model = PotentialFlowSolver("0012", alpha = 10.0228, P=P, kwargs = kwargs)
+
+                    # Start time
                     it_time = time()
 
+                    # Solve if possible, else put placeholders on the results
                     try:
                         model.solve()
                     except:
@@ -645,49 +668,67 @@ if __name__ == "__main__":
                         l2norm[i] = np.nan
                         continue
 
+                    # End time
                     times[i] = time() - it_time
 
+                    # Get information about airfoil position
                     p1, p_te, p_leading_edge, pn= model.get_edge_info()
 
+                    # Construct the cord
                     cord = p_te-p_leading_edge
+
+                    # Construct a vector orthorgonal to the cord
                     orthcord = np.array([-cord[1],cord[0]])
                     
+                    # Map x values from the nasa data to the cord
                     xvals = nasa_9mil_10AoA[:,0]
-
                     all_coords = p_leading_edge + np.array([cord * i for i in xvals])
-                    pressure = np.zeros_like(xvals)
-                    OnLower = True
 
+                    # Prepare array for data
+                    pressure = np.zeros_like(xvals)
+
+                    # Start a loop going through the different x values on the lower side of the airfoil
+                    OnLower = True
                     for j in range(len(pressure)):
+
+                        # Check whether the x value is at 0, and the points transition to the top halv of the airfoil in the data from nasa
                         if nasa_9mil_10AoA[j,0] == 0:
+                            # Mark that the rest of the points is on the upper surface of the airfoil
                             OnLower = False
+                            # Note the pressure at the leading edge
                             pressure[j] = model.pressure_coeff.at(p_leading_edge)
                             continue
                         if OnLower:
+                            # Use cord and the vector orthogonal to the cord to map the x values from the data from nasa to a point on the lower airfoil surface
                             coords = all_coords[j,:]
                             coords -= 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
                             while True:
                                 try:
+                                    # Start at the halfwaypoint towards the surface of the airfoil and walk towards the airfoil in small increments to make sure the pressure is taken exactly at the surface
                                     pressure[j] = model.pressure_coeff.at(coords)
                                     break
                                 except:
                                     coords -= 1e-5 * orthcord
                         else:
+                            # Use cord and the vector orthogonal to the cord to map the x values from the data from nasa to a point on the upper airfoil surface
                             coords = all_coords[j,:]
                             coords += 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
                             while True:
                                 try:
+                                    # Start at the halfwaypoint towards the surface of the airfoil and walk towards the airfoil in small increments to make sure the pressure is taken exactly at the surface
                                     pressure[j] = model.pressure_coeff.at(coords)
                                     break
                                 except:
                                     coords += 1e-5 * orthcord
                     
-
+                    # Create the vector noting the absolute difference between the pressure in the data from nasa and the found pressure
                     abs_distance = abs(nasa_9mil_10AoA[:,1] - pressure)
 
+                    # Save the different norms in their respective arrays
                     infnorm[i] = abs_distance.max()
                     meannorm[i] = abs_distance.mean()
                     l2norm[i] = np.linalg.norm(abs_distance)
+                # Save the results
                 results = np.vstack((infnorm, meannorm, l2norm, times), dtype=float)
                 if mode == "e":
                     np.savetxt(f"../../Visualisation/P_Coeff_Convergence/P_Coeffs_errors_ellipse_P:{P}.txt",results)
@@ -695,6 +736,7 @@ if __name__ == "__main__":
                     np.savetxt(f"../../Visualisation/P_Coeff_Convergence/P_Coeffs_errors_circle_P:{P}.txt",results)
     
     elif task == "4":
+        # Gather the data from nasa as a baseline
         Truths = np.array([
             [-12.2535, -1.25912],
             [-11.2222, -1.18135],
@@ -716,21 +758,29 @@ if __name__ == "__main__":
             [11.0471, 1.19842]
         ])
         
-        #index = 1
+        # Loop through the indexes that you are interested in seeing the convergence of
         for index in [10,17]:
-            points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
-            #np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/n_airfoil.txt",points_around_airfoil)
-            ps = np.array([1,2,3,4])
-            #np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/ps.txt",ps)
-            
 
+            # Define arrays that include the values for n_airfoil and which polynomial orders we want to use in our convergence 
+            points_around_airfoil = np.array([20,40,50,70,100,150,200,300,400,600,800,1000,1400,1800,2400,3000])
+            np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/n_airfoil.txt",points_around_airfoil)
+            ps = np.array([1,2,3,4])
+            np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/ps.txt",ps)
+            
+            # Create a loop for the different values of p
             for P in ps:
                 P = int(P)
-                for mode in ["e"]:
+                
+                # Do a loop changing between circular and elliptical vortex
+                for mode in ["c","e"]:
+
+                    # Initialize arrays for saving error and time
                     error = np.zeros_like(points_around_airfoil, dtype=float)
                     times = np.zeros_like(points_around_airfoil, dtype=float)
 
+                    # Do a loop for different values of n_airfoil
                     for i,val in enumerate(points_around_airfoil):
+                        # Set solver settings
                         kwargs = {"ylim":[-4,4], "V_inf": 10, "g_div": 70, "write":False,
                                 "n_airfoil": val,
                                 "n_fs": 40,
@@ -741,8 +791,14 @@ if __name__ == "__main__":
                         if mode == "c":
                             kwargs["a"] = 1
                             kwargs["b"] = 1
+
+                        # Initialize model
                         model = PotentialFlowSolver("0012", alpha = Truths[index,0], P=P, kwargs = kwargs)
+
+                        # Start time
                         it_time = time()
+
+                        # Solve if possible, else put placeholders on the results
                         try:
                             model.solve()
                         except:
@@ -750,15 +806,19 @@ if __name__ == "__main__":
                             error[i] = np.nan
                             continue
 
+                        # Note the time the model took to solve, and the distance from the correct lift coefficient.
                         times[i] = time() - it_time
                         error[i] = (Truths[index,1] - model.lift_coeff)
                     results = np.vstack((error, times), dtype=float)
+
+                    # Save the files
                     if mode == "e":
                         np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/L_Coeffs_errors_ellipse_P:{P}_AOA:{Truths[index,0]}.txt",results)
                     else:
                         np.savetxt(f"../../Visualisation/L_Coeff_Convergence/data/L_Coeffs_errors_circle_P:{P}_AOA:{Truths[index,0]}.txt",results)
 
     elif task == "5":
+        # Fetch data from nasa
         nasa_9mil_10AoA = np.array([
             [.9483 ,  .1147],
             [.9000 ,  .0684],
@@ -806,7 +866,8 @@ if __name__ == "__main__":
             [.8993 , -.0021],
             [.9489 ,  .0795],
         ])
-        # n convergence
+        
+        # Gather values of n_airfoil, P and whether the vortex should be circular or elliptical
         n_airfoil = int(input("What should the value of n_airfoil be?: "))
         P = int(input("What should the value of P be?: "))
         circle_answer = input("Should the vortex be circular? [Y/n]: ").lower()
@@ -817,7 +878,7 @@ if __name__ == "__main__":
         else:
             raise ValueError("Not a valid answer")
         
-
+        # Set solver settings
         kwargs = {"ylim":[-10,10], "V_inf": 10, "g_div": 70, "write":False,
                 "n_airfoil": n_airfoil,
                 "n_fs": 100,
@@ -828,44 +889,63 @@ if __name__ == "__main__":
         if circle:
             kwargs["a"] = 1
             kwargs["b"] = 1
+
+        # Initialize solver
         model = PotentialFlowSolver("0012", alpha = 10.0228, P=P, kwargs = kwargs)
 
+        # Solve
         model.solve()
 
+        # Get information about airfoil position
         p1, p_te, p_leading_edge, pn= model.get_edge_info()
 
+        # Construct the cord
         cord = p_te-p_leading_edge
+
+        # Construct a vector orthorgonal to the cord
         orthcord = np.array([-cord[1],cord[0]])
         
+        # Map x values from the nasa data to the cord
         xvals = nasa_9mil_10AoA[:,0]
-
         all_coords = p_leading_edge + np.array([cord * i for i in xvals])
-        pressure = np.zeros_like(xvals)
-        OnLower = True
 
+        # Prepare array for data
+        pressure = np.zeros_like(xvals)
+
+        # Start a loop going through the different x values on the lower side of the airfoil
+        OnLower = True
         for j in range(len(pressure)):
+
+            # Check whether the x value is at 0, and the points transition to the top halv of the airfoil in the data from nasa
             if nasa_9mil_10AoA[j,0] == 0:
+                # Mark that the rest of the points is on the upper surface of the airfoil
                 OnLower = False
+                # Note the pressure at the leading edge
                 pressure[j] = model.pressure_coeff.at(p_leading_edge)
                 continue
             if OnLower:
+                # Use cord and the vector orthogonal to the cord to map the x values from the data from nasa to a point on the lower airfoil surface
                 coords = all_coords[j,:]
                 coords -= 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
                 while True:
                     try:
+                        # Start at the halfwaypoint towards the surface of the airfoil and walk towards the airfoil in small increments to make sure the pressure is taken exactly at the surface
                         pressure[j] = model.pressure_coeff.at(coords)
                         break
                     except:
                         coords -= 1e-5 * orthcord
             else:
+                # Use cord and the vector orthogonal to the cord to map the x values from the data from nasa to a point on the upper airfoil surface
                 coords = all_coords[j,:]
                 coords += 0.5 * orthcord * 0.12/0.2*(0.2969 * np.sqrt(coords[0]) - 0.1260 * coords[0] - 0.3516 * coords[0]**2 + 0.2843 * coords[0]**3 - 0.1036 * coords[0]**4)
                 while True:
                     try:
+                        # Start at the halfwaypoint towards the surface of the airfoil and walk towards the airfoil in small increments to make sure the pressure is taken exactly at the surface
                         pressure[j] = model.pressure_coeff.at(coords)
                         break
                     except:
                         coords += 1e-5 * orthcord
+        # Save results
         if circle:
             np.savetxt(f"../../Visualisation/P_Coeff_plot/data/P_Coeffs_pressure_circle_P:{P}_POA:{n_airfoil}.txt",pressure)
         else:
