@@ -38,16 +38,28 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str, xlim: list 
     gridtype : str
         The gridtype is "triangle" if you want the grid to be made up of triangles, or "quad" if you want your grid to be made of squares
     '''
+    # Repeat a list [1,2,3] in the xlim range, N_row times. example [1,2,3,1,2,3,1,2,3]
     first_list = np.tile(np.linspace(xlim[0], xlim[1],N_cols),N_rows)
+
+    # Repeat entries of a list [1,2,3] in the xlim range, N_row times. example: [1,1,1,2,2,2,3,3,3]
     second_list = np.repeat(np.linspace(ylim[0], ylim[1],N_rows),N_cols)
+
+    # Define point coordinates
     points = np.array(((first_list,second_list,np.zeros(N_cols*N_rows)))).T
+    
+    # If grid should be made of squares
     if gridtype.lower() == "quad":
+
+        # Calculate amount of squares and an array to hold the information
         amount_of_squares = (N_cols-1)*(N_rows-1)
         squares = np.zeros((amount_of_squares,4), dtype=int)
+
+        # Create the squares from the indecies of their cornerpoints
         for i in range(N_cols-1):
             for j in range(N_rows-1):
                 squares[(N_cols-1)*j+i,:] = [i+j*N_cols, i+1+j*N_cols, i+1+(j+1)*N_cols, i+(j+1)*N_cols]
         
+        # Create lines for the boundaries
         lines = np.zeros((2*(N_cols-1) + 2*(N_rows-1),2), dtype=int)
         for j in range(2):
             for i in range(N_rows-1):
@@ -55,24 +67,33 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str, xlim: list 
         for j in range(2):
             for i in range(N_cols-1):
                 lines[2*(N_rows-1)+i+j*(N_cols-1),:] = np.array([i,i+1]) + j*(N_cols)*(N_rows-1)
+
+        # Save the lines and squares such that meshio can save it
         cells = [("line",lines),(gridtype, squares)]
         mesh = meshio.Mesh(points=points, cells=cells)
         mesh.cell_data["gmsh:physical"] = [
             np.hstack((np.repeat(1,N_rows-1), np.repeat(2,N_rows-1), np.repeat(3,N_cols-1),np.repeat(4,N_cols-1))),
             np.repeat(6,amount_of_squares)
         ]
+
+        # Add irrelevant information such that meshio mesh can be converted into a firedrake mesh
         mesh = add_dummy_geometrical_data(mesh)
         return mesh
         
-    
+    # If the mesh should be made of triangles
     elif gridtype.lower() == "triangle":
+
+        # Calculate amount of triangles, and initialize array to hold information
         amount_of_triangles = (N_cols-1)*(N_rows-1)*2
         triangles = np.zeros((amount_of_triangles,3), dtype=int)
+        
+        # Define triangles from the indicies of their cornerpoints
         for i in range(N_cols-1):
             for j in range(N_rows-1):
                 triangles[((N_cols-1)*j+i)*2,:] = [i+j*N_cols, i+1+j*N_cols, i+1+(j+1)*N_cols]
                 triangles[((N_cols-1)*j+i)*2+1,:] = [i+j*N_cols, i+1+(j+1)*N_cols, i+(j+1)*N_cols]
         
+        # Define lines at the boundaries from the indecies of their cornerpoints
         lines = np.zeros((2*(N_cols-1) + 2*(N_rows-1),2), dtype=int)
         for j in range(2):
             for i in range(N_rows-1):
@@ -80,14 +101,20 @@ def mesh_gen_uniform_2D_grid(N_rows: int, N_cols: int,gridtype: str, xlim: list 
         for j in range(2):
             for i in range(N_cols-1):
                 lines[2*(N_rows-1)+i+j*(N_cols-1),:] = np.array([i,i+1]) + j*(N_cols)*(N_rows-1)
+
+        # Save information such that a meshio mesh can be created
         cells = [("line",lines), (gridtype, triangles)]
         mesh = meshio.Mesh(points=points, cells=cells)
         mesh.cell_data["gmsh:physical"] = [
             np.hstack((np.repeat(1,N_rows-1), np.repeat(2,N_rows-1), np.repeat(3,N_cols-1),np.repeat(4,N_cols-1))),
             np.repeat(6,amount_of_triangles)
         ]
+
+        # Add irrelevant information such that meshio mesh can be converted into a firedrake mesh
         mesh = add_dummy_geometrical_data(mesh)
         return mesh
+    
+    # Return error if gridtype was neither quad or triangle
     else:
         raise ValueError("That is not a valid gridtype, it should either be triangle or quad")
 
@@ -114,7 +141,7 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     point_color = "black"
     point_size = 0
 
-    # Set y and x lim
+    # Set y and x lim based on minimum and maximum x and y value
     yrange = y_max - y_min
     margin = 0.03
     if xlim == [-3,3]:
@@ -123,25 +150,36 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
         ylim = [y_min-margin*yrange, y_max+margin*yrange]
     xrange = xlim[1] - xlim[0]
     yrange = ylim[1] - ylim[0]
+
+    # Set figsize
     ranges = np.array([xrange,yrange])
     a = 20/xrange ; b = 20/yrange
     ranges *= min(a,b)
+
+    # Create the plot if plot mesh should not be a part of a subplot
     if axes:
         ax = axes
     else:
         fig, ax = plt.subplots(figsize=ranges, dpi=dpi)
     
+    # Loop through different cell types
     for celltype in cell_dict:
+
+        # If cell is an element
         if celltype in ["quad","triangle", "polygon"]:
             cells = mesh.cells_dict[celltype]  # Extract cells
-            # Extract actual coordinates for plotting
+
+            # Extract actual coordinates for plotting and plot them with a lightblue facecolor
             if len(cells.shape) > 1:
                 cell_coords = [[points[point] for point in cell] for cell in cells]
                 pc = PolyCollection(cell_coords, edgecolor="black", facecolor="lightblue", alpha=0.5)
             elif len(cells.shape) == 1:
                 cell_coords = [[points[point] for point in cells]]
                 pc = PolyCollection(cell_coords, edgecolor="black", facecolor="lightblue", alpha=0.5)
+
+        # If cell is a line
         if celltype == "line":
+            # Classify lines into different boundaries
             lines = mesh.cells_dict[celltype]
             line_clasifications = mesh.cell_data_dict["gmsh:physical"]["line"]
             in_lines = lines[np.where(line_clasifications == BC_dict["in"])[0]]
@@ -149,6 +187,8 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
             deck_lines = lines[np.where(line_clasifications == BC_dict["deck"])[0]]
             fs_lines = lines[np.where(line_clasifications == BC_dict["fs"])[0]]
             naca_lines = lines[np.where(line_clasifications == BC_dict["naca"])[0]]
+
+            # Plot lines on the inlet with the right color
             for i in range(len(in_lines)):
                 line = points[in_lines[i], :]
                 x_vals = line[:,0]
@@ -157,6 +197,8 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["in"], label=f"{BC_dict['in']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["in"])
+
+            # Plot lines on the outlet with the correct color
             for i in range(len(out_lines)):
                 line = points[out_lines[i], :]
                 x_vals = line[:,0]
@@ -165,6 +207,8 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["out"], label=f"{BC_dict['out']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["out"])
+
+            # Plot lines on the bed with the correct color
             for i in range(len(deck_lines)):
                 line = points[deck_lines[i], :]
                 x_vals = line[:,0]
@@ -173,6 +217,8 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["deck"], label=f"{BC_dict['deck']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["deck"])
+
+            # Plot lines on the free surface with correct color
             for i in range(len(fs_lines)):
                 line = points[fs_lines[i], :]
                 x_vals = line[:,0]
@@ -181,6 +227,8 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["fs"], label=f"{BC_dict['fs']}")
                 else:
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["fs"])
+
+            # Plot lines on the NACA-airfoil with the correct color
             for i in range(len(naca_lines)):
                 line = points[naca_lines[i], :]
                 x_vals = line[:,0]
@@ -191,14 +239,19 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
                     ax.plot(x_vals,y_vals, linewidth = boundary_linew, color=BC_colors["naca"])
     
 
-    
+    # Add the elements to the plot
     ax.add_collection(pc)
-    ax.scatter(points[:, 0], points[:, 1], color=point_color, s=point_size)  # Plot nodes
+
+    # Add nodes in the mesh
+    ax.scatter(points[:, 0], points[:, 1], color=point_color, s=point_size)
+
+    # Set x and y limits, and include legend if relevant
     ax.set_xlim(xlim[0], xlim[1])
     ax.set_ylim(ylim[0], ylim[1])
     if legend:
         ax.legend()
     
+    # Plot
     plt.xlabel("X")
     plt.ylabel("Y")
     if not axes:
@@ -208,29 +261,35 @@ def plot_mesh(mesh: meshio.Mesh,xlim : list = [-3,3], ylim : list = [-2,2], lege
     return None
 
 
-
 def shift_surface(mesh : meshio.Mesh, func_b : callable, func_a : callable) -> meshio.Mesh:
+    
+    # Locate points a part of the airfoil
     line_clasifications = mesh.cell_data_dict["gmsh:physical"]["line"]
     airfoil_lines = mesh.cells_dict["line"][np.where(line_clasifications == 5)[0]]
     airfoil_points = np.unique(airfoil_lines)
 
-    
+    # Find concrete coordinates for the points on the airfoil
     point = mesh.points.copy()
     airfoil_values = point[airfoil_points]
 
-    # Mask all points above airfoil
+    # Mask all points above the largest value of the airfoil
     point_mask = np.where((point[:,1] > np.max(airfoil_values[:,1])))
-    min_point_val = np.min(point[point_mask,1])
+    
+    # Define the largest y val of the airfoil as a new "minimum"
+    min_point_val = np.max(airfoil_values[:,1])
 
+    # Manipulate functions
     func_before = lambda x: func_b(x)-min_point_val
     func_after = lambda x: func_a(x)-min_point_val
     func_before = np.vectorize(func_before)
     func_after = np.vectorize(func_after)
     
+    # Manipulate point values as stated in the report under methodology for free surface.
     point[point_mask,1] -= min_point_val
     point[point_mask,1] = point[point_mask,1] * (func_after(point[point_mask,0]) /  func_before(point[point_mask,0]))
     point[point_mask,1] += min_point_val
 
+    # Copy the mesh and set new points to return a new mesh.
     copy_mesh = mesh.copy()
     copy_mesh.points = point
     return copy_mesh
@@ -246,42 +305,84 @@ def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : n
     n : int
         The number of points you want to modulate the airfoil with
     """
+
+    # Raise error if name of NACA-airfoil is not 4 long
     if len(string) != 4:
         raise IndexError("The string needs to have the length 4")
+    
+    # Fetch information from the name of the airfoil
     m = int(string[0])/100
     p = int(string[1])/10 if string[1] != "0" else 0.1
     t = int(string[2] + string[3])/100
 
+    # If there should be an equal amount of nodes on the airfoil
     if (n//2)*2 == n:
 
+        # Create a linspace with points spaced equally between 0 and pi for the upper and lower surface of the airfoil
         beta = np.linspace(0,np.pi,(n//2)+1)
+
+        # Convert this linspace to an array with points that are the most concentrated at the edges of the airfoil.
         x = (1-np.cos(beta))/2
+
+        # Define the thickness of the airfoil distrebution in terms of x
         yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4)
+
+        # Define the camber in terms of x
         yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
+
+        # Create the lower and upper part of the airfoil
         lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1][:-1]
         upper = np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))[:-1]
+
+    # If there should be an odd amount of nodes on the airfoil
     elif (n//2)*2 != n:
+
+        # Create a linspace with points spaced equally between 0 and pi for the lower surface of the airfoil with one more point than for the upper part
         beta = np.linspace(0,np.pi,(n//2)+2)
+
+        # Convert this linspace to an array with points that are the most concentrated at the edges of the airfoil.
         x = (1-np.cos(beta))/2
+        
+        # Define the thickness of the airfoil distrebution in terms of x
         yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4)
+
+        # Define the camber in terms of x
         yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
+
+        # Define the lower part of the airfoil
         lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1][:-1]
 
+        # Create a linspace with points spaced equally between 0 and pi for the upper surface of the airfoil
         beta = np.linspace(0,np.pi,(n//2)+1)
+
+        # Convert this linspace to an array with points that are the most concentrated at the edges of the airfoil.
         x = (1-np.cos(beta))/2
+        
+        # Define the thickness of the airfoil distrebution in terms of x
         yt = 5 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4)
+
+        # Define the camber in terms of x
         yc = np.where(x < p, m/p**2 * (2*p*x - x**2), m/(1-p)**2 * ((1-2*p) + 2*p*x - x**2))
+
+        # Define the upper part of the airfoil
         upper = np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))[:-1]
+    
+    # Stack the points of the lower surface on top of the points from the upper surface
     points = np.vstack((lower, upper))
 
-    # rotatig the airfoil
+    # Relocate the airfoil such that it haves its center at the origin
     points -= np.array([0.5,0])
+
+    # Rotate the airfoil
     alpha = np.deg2rad(alpha)
     rot_matrix = np.array([[np.cos(alpha), -np.sin(alpha)], [np.sin(alpha), np.cos(alpha)]])
     points = np.dot(points, rot_matrix)
-    points += position_of_center
-    return points
 
+    # Relocate the airfoil such that it haves its center as desired
+    points += position_of_center
+
+    # Return points defining the airfoil
+    return points
 
 
 def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple = (-2,1), **kwargs):
@@ -434,14 +535,22 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
 
     return mesh
 
+
 def meshio_to_fd(mesh: meshio.Mesh):
     """
     Converts a meshio mesh to a firedrake mesh
     """
+
+    # Write a temperary gmsh file from meshio mesh
     meshio.write("temp.msh", mesh, file_format="gmsh22")
+
+    # Read that gmsh file as a firedrake mesh
     fd_mesh = fd.Mesh("temp.msh")
+
+    # Delete the temperary gmsh file
     os.system("rm temp.msh")
 
+    # Return the firedrake mesh
     return fd_mesh
 
 
