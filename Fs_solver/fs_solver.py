@@ -132,7 +132,7 @@ class FsSolver:
         self.etas = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
         self.phis = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
         self.fs_xs_array = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
-        self.residual_array = np.zeros(self.kwargs.get("max_iter_fs", 10))
+        self.residual_array = np.zeros((self.kwargs.get("max_iter_fs", 10), 2))
         
         # Handeling output files
         if self.write:
@@ -190,10 +190,8 @@ class FsSolver:
             kwargs_for_Kutta_kondition["mesh"] = self.mesh
             kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
 
-            self.etas[i, :] = new_eta.copy()
-            self.phis[i, :] = self.PhiTilde.copy()
-            self.fs_xs_array[i, :] = self.fs_xs.copy()
-            self.residual_array[i] = residuals.copy()
+            # Save result data while Loop is running
+            self.__save_results__(new_eta, residuals, i)
 
             # Solve model and kutta kondition again with new condition at the free surface
             model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
@@ -357,6 +355,16 @@ class FsSolver:
             print(f"\t iteration time: {time() - iter_time}\n")
             return False          
     
+    def __save_results__(self, new_eta, residuals, iter):
+        self.etas[iter, :] = new_eta.copy()
+        self.phis[iter, :] = self.PhiTilde.copy()
+        self.fs_xs_array[iter, :] = self.fs_xs.copy()
+        self.residual_array[iter] = np.array([residuals.copy(), self.dt*(iter+1)])
+        np.savetxt("./results/eta.txt", self.etas)
+        np.savetxt("./results/phiTilde.txt", self.phis)
+        np.savetxt("./results/fs_xs.txt", self.fs_xs_array)
+        np.savetxt("./results/residuals.txt", self.residual_array)
+
     def __update_mesh_data__(self, old_eta : np.ndarray, new_eta : np.ndarray) -> None:
         # Shift surface of the mesh and set this as new mesh
 
@@ -387,11 +395,11 @@ if __name__ == "__main__":
     kwargs = {"ylim":[-2,1], "xlim":[-6,12], 
             "xd_in": -3, "xd_out": 10,
 
-            "V_inf": 50, 
+            "V_inf": 10, 
             "g_div": 7, 
             "write":True,
             "n_airfoil": 550,
-            "n_fs": 350,
+            "n_fs": 450,
             "n_bed": 70,
             "n_in": 30,
             "n_out": 30,
@@ -400,21 +408,21 @@ if __name__ == "__main__":
             "max_iter": 50,
             "dot_tol": 1e-4,
 
-            "fs_rtol": 1e-6,
+            "fs_rtol": 1e-7,
             "max_iter_fs":3,
             
             "dt": 5e-3,
             "damp":200}
     
-    FS = FsSolver("0012", alpha = 5, P=1, kwargs = kwargs)
+    FS = FsSolver("0012", alpha = 5, P=2, kwargs = kwargs)
     FS.solve()
-    etas = np.array(FS.etas)
-    phis = np.array(FS.phis)
-    fs_xs = np.array(FS.fs_xs_array)
-    residuals = np.array(FS.residual_array)
-
-    print(os.getcwd(), "\n")
-    np.savetxt("./results/eta.txt", etas)
-    np.savetxt("./results/phiTilde.txt", phis)
-    np.savetxt("./results/fs_xs.txt", fs_xs)
-    np.savetxt("./results/residuals.txt", residuals)
+    # etas = np.array(FS.etas)
+    # phis = np.array(FS.phis)
+    # fs_xs = np.array(FS.fs_xs_array)
+    # residuals = np.array(FS.residual_array)
+# 
+    # print(os.getcwd(), "\n")
+    # np.savetxt("./results/eta.txt", etas)
+    # np.savetxt("./results/phiTilde.txt", phis)
+    # np.savetxt("./results/fs_xs.txt", fs_xs)
+    # np.savetxt("./results/residuals.txt", residuals)
