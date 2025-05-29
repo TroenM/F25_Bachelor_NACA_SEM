@@ -106,8 +106,8 @@ class FsSolver:
                               n_airfoil = self.kwargs.get("n_airfoil"),
                               n_fs = self.kwargs.get("n_fs"),
                               n_bed = self.kwargs.get("n_bed"),
-                              n_inlet = self.kwargs.get("n_inlet"),
-                              n_outlet = self.kwargs.get("n_outlet"))
+                              n_in = self.kwargs.get("n_in"),
+                              n_out = self.kwargs.get("n_out"))
         
         self.etas = []
 
@@ -261,8 +261,8 @@ class FsSolver:
         dt = fd.Constant(self.dt)
 
         # Constants relevant for dampening
-        xd_in = fd.Constant(-6.0)
-        xd_out = fd.Constant(10.5)
+        xd_in = fd.Constant(self.kwargs.get("xd_in",-4.0))
+        xd_out = fd.Constant(self.kwargs.get("xd_out", 10))
         x = fd.SpatialCoordinate(fs_mesh)[0]
         A = fd.Constant(self.kwargs.get("damp", 100))
 
@@ -277,13 +277,16 @@ class FsSolver:
         bcs = [bcs_eta]
 
         a1 = fd.inner(eta_n1 - eta_n, v_1)*fd.dx + fd.inner(eta_damp_in, v_1)*fd.dx + fd.inner(eta_damp_out, v_1)*fd.dx
-        L1 = dt*(fd.inner(w_n, v_1)*fd.dx - fd.inner(u_n*eta_n1.dx(0), v_1)*fd.dx)
+        #L1 = dt*(fd.inner(w_n, v_1)*fd.dx - fd.inner(u_n*eta_n1.dx(0), v_1)*fd.dx)
+        L1 = dt * (-fd.inner(fd.dot(eta_n1.dx(0),phi_n1.dx(0)),v_1)*fd.dx + 
+                   fd.inner(w_n * (fd.Constant(1) + fd.dot(eta_n1.dx(0), eta_n1.dx(0))), v_1)*fd.dx)
         F1 = a1 - L1
 
-        F2 = fd.inner(phi_n1 - phi_n, v_2)*fd.dx + dt*(
-            fd.inner(g*eta_n1, v_2)*fd.dx +
-            fd.Constant(0.5)*fd.inner(u_n**2 + w_n**2, v_2)*fd.dx
-        )
+        a2 = fd.inner(phi_n1 - phi_n, v_2)*fd.dx
+        L2 = dt*(-fd.inner(g*eta_n1, v_2)*fd.dx -
+            fd.Constant(0.5)*fd.inner(phi_n1.dx(0)**2, v_2)*fd.dx + 
+            fd.Constant(0.5)*fd.inner(w_n**2 * (fd.Constant(1) + eta_n1.dx(0)**2), v_2)*fd.dx)
+        F2 = a2 - L2
 
         F = F1 + F2
 
@@ -319,90 +322,6 @@ class FsSolver:
         print(f"\t free surface equations done")
 
         return eta_new, phi_new, residuals
-
-#    def __compute_fs_equations_weak1d__(self) -> tuple:
-        """
-        Updates the free surface and corresponding dirichlet boundary condition
-        """
-        #print("\t Computing free surface equations using EE")
-
-        # Initialize mesh on the free surface only
-        number_of_points = self.fs_points.shape[0]
-        fs_mesh = fd.IntervalMesh(number_of_points-1, self.xlim[0], self.xlim[1])
-
-        # Ensure the mesh coordinates are spaced correctly
-        fs_mesh.coordinates.dat.data[:] = self.fs_points[:,0]
-
-        # Set firedrake functionspaces at the free surfce
-        V_eta = fd.FunctionSpace(fs_mesh, "CG", 1)
-        V_phi = fd.FunctionSpace(fs_mesh, "CG", 1)
-
-        # Defining unknown functions
-        eta_n1 = fd.TrialFunction(V_eta)
-        phi_n1 = fd.TrialFunction(V_phi)
-
-        # Define test functions
-        v_eta = fd.TestFunction(V_eta)
-        v_phi = fd.TestFunction(V_phi)
-
-        # Defining known functions and constants
-        eta_n = fd.Function(V_eta)
-        eta_n.dat.data[:] = self.fs_points[:, 1] - self.ylim[1]
-        phi_n = fd.Function(V_phi)
-        phi_n.dat.data[:] = self.PhiTilde
-        u_n = fd.Function(V_phi)
-        u_n.dat.data[:] = np.array(self.velocity.at(self.fs_points))[:, 0]
-        w_n = fd.Function(V_phi)
-        w_n.dat.data[:] = np.array(self.velocity.at(self.fs_points))[:, 1]
-        g = fd.Constant(9.82)
-        dt = fd.Constant(self.dt)
-        V_inf = fd.Constant(self.V_inf)
-
-        # Constants relevant for dampening
-        xd_in = fd.Constant(-6.0)
-        xd_out = fd.Constant(10.5)
-        x = fd.SpatialCoordinate(fs_mesh)[0]
-        A = fd.Constant(100)
-
-        # Dampen eta towards the "normal" height of the domain at the edges
-        eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (self.xlim[0]  - xd_in))**2, 0)*eta_n1
-        eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2, 0)*eta_n1
-
-        # A try of dampening phi towards the edge of the domain
-        #phi_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (self.xlim[0]  - xd_in))**2, 0) * (phi_n1 - V_inf*x)
-        #phi_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2, 0) * (phi_n1 - V_inf*x) 
-
-        # Weak form EE schemes of the updating eta
-        F_eta_lhs = fd.inner(eta_n1, v_eta)*fd.dx + fd.inner(eta_damp_in, v_eta)*fd.dx + fd.inner(eta_damp_out, v_eta)*fd.dx
-        F_eta_rhs = fd.inner(eta_n, v_eta)*fd.dx + dt * (fd.inner(w_n, v_eta)*fd.dx - fd.inner(u_n*eta_n.dx(0), v_eta)*fd.dx)
-        
-        # Set DBC for eta weak scheme
-        dbc_eta = fd.DirichletBC(V_eta, 0, "on_boundary")
-
-        # Define eta^n+1 and solve the weak scheme to find it
-        eta_new = fd.Function(V_eta)
-        fd.solve(F_eta_lhs == F_eta_rhs, eta_new, bcs = dbc_eta, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
-
-        # Weak form EE schemes of the updating phi
-        F_phi_lhs = fd.inner(phi_n1, v_phi)*fd.dx #+ fd.inner(phi_damp_in, v_phi)*fd.dx + fd.inner(phi_damp_out, v_phi)*fd.dx
-        F_phi_rhs = fd.inner(phi_n, v_phi)*fd.dx + dt * (-fd.Constant(0.5)*fd.inner(u_n**2 + w_n**2, v_phi)*fd.dx-g*fd.inner(eta_n, v_phi)*fd.dx) + fd.inner((eta_new - eta_n)*w_n, v_phi)* fd.dx
-        
-        # Set DBC to the phi weak scheme
-        dbc_phi = []# [fd.DirichletBC(V_phi, self.PhiTilde[0], 1)]#, fd.DirichletBC(V_phi, self.PhiTilde[-1], 2)]
-
-        # Define phi^n+1 and solve the weak scheme to find it
-        phi_new = fd.Function(V_phi)
-        fd.solve(F_phi_lhs == F_phi_rhs, phi_new, bcs = dbc_phi, solver_parameters={"ksp_type": "preonly", "pc_type": "lu"})
-
-        # Update old eta
-        old_eta = self.fs_points[:, 1]
-
-        # Add domain height to new eta, and calculate residuals
-        eta_new.dat.data[:] += self.ylim[1]
-        residuals = np.linalg.norm(eta_new.dat.data[:] - old_eta, np.inf)
-
-        # Return new eta, new phi and residuals
-        return eta_new.dat.data[:], phi_new.dat.data[:], residuals
 
     def __check_status__(self, residuals, iter, iter_time, solve_time) -> bool:
         # If convergence kriteria is met print relevant information
@@ -463,20 +382,20 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-10,23], "V_inf": 10, "g_div": 70, "write":True,
-           "n_airfoil": 500,
+    kwargs = {"ylim":[-2,1], "xlim":[-6,12], "V_inf": 10, "g_div": 70, "write":True,
+           "n_airfoil": 750,
            "n_fs": 300,
            "n_bed": 75,
-           "n_inlet": 15,
-           "n_outlet": 15,
+           "n_in": 30,
+           "n_out": 30,
            "rtol": 1e-8,
            "fs_rtol": 1e-3,
-           "max_iter_fs": 30,
+           "max_iter_fs":100,
            "max_iter": 50,
            "dt": 5e-3,
            "a":1, "b":1,
            "dot_tol": 1e-4,
            "damp":200}
     
-    FS = FsSolver("0012", alpha = 10, P=3, kwargs = kwargs)
+    FS = FsSolver("0012", alpha = 10, P=2, kwargs = kwargs)
     FS.solve()
