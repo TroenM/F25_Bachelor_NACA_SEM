@@ -392,13 +392,13 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-2,1], "xlim":[-6,12], 
-            "xd_in": -3, "xd_out": 10,
+    kwargs = {"ylim":[-4,1], "xlim":[-10,20], 
+            "xd_in": -8, "xd_out": 18,
 
-            "V_inf": 10, 
+            "V_inf": 1, 
             "g_div": 7, 
             "write":True,
-            "n_airfoil": 550,
+            "n_airfoil": 350,
             "n_fs": 450,
             "n_bed": 70,
             "n_in": 30,
@@ -409,10 +409,10 @@ if __name__ == "__main__":
             "dot_tol": 1e-4,
 
             "fs_rtol": 1e-7,
-            "max_iter_fs":3,
+            "max_iter_fs":1500,
             
             "dt": 5e-3,
-            "damp":200}
+            "damp":100}
     
     FS = FsSolver("0012", alpha = 5, P=2, kwargs = kwargs)
     FS.solve()
