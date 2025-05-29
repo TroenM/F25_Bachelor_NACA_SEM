@@ -282,7 +282,6 @@ class FsSolver:
         bcs = [bcs_eta]
 
         a1 = fd.inner(eta_n1 - eta_n, v_1)*fd.dx + fd.inner(eta_damp_in, v_1)*fd.dx + fd.inner(eta_damp_out, v_1)*fd.dx
-        #L1 = dt*(fd.inner(w_n, v_1)*fd.dx - fd.inner(u_n*eta_n1.dx(0), v_1)*fd.dx)
         L1 = dt * (-fd.inner(fd.dot(eta_n1.dx(0),phi_n1.dx(0)),v_1)*fd.dx + 
                    fd.inner(w_n * (fd.Constant(1) + fd.dot(eta_n1.dx(0), eta_n1.dx(0))), v_1)*fd.dx)
         F1 = a1 - L1
