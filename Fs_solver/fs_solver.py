@@ -230,7 +230,6 @@ class FsSolver:
         """
         Updates the free surface by solving the free surface equations using firedrake
         """
-        print("\t Computing free surface equations using IE")
         # Mesh and function spaces
         number_of_points = self.fs_sorted.shape[0]
         fs_mesh = fd.IntervalMesh(number_of_points-1, self.xlim[0], self.xlim[1])
@@ -277,7 +276,6 @@ class FsSolver:
         bcs = [bcs_eta]
 
         a1 = fd.inner(eta_n1 - eta_n, v_1)*fd.dx + fd.inner(eta_damp_in, v_1)*fd.dx + fd.inner(eta_damp_out, v_1)*fd.dx
-        #L1 = dt*(fd.inner(w_n, v_1)*fd.dx - fd.inner(u_n*eta_n1.dx(0), v_1)*fd.dx)
         L1 = dt * (-fd.inner(fd.dot(eta_n1.dx(0),phi_n1.dx(0)),v_1)*fd.dx + 
                    fd.inner(w_n * (fd.Constant(1) + fd.dot(eta_n1.dx(0), eta_n1.dx(0))), v_1)*fd.dx)
         F1 = a1 - L1
@@ -318,8 +316,6 @@ class FsSolver:
         self.fs_xs.sort()
 
         residuals = np.linalg.norm(eta_new - old_eta, np.inf)
-
-        print(f"\t free surface equations done")
 
         return eta_new, phi_new, residuals
 
@@ -382,20 +378,23 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-2,1], "xlim":[-6,12], "V_inf": 10, "g_div": 70, "write":True,
-           "n_airfoil": 750,
-           "n_fs": 300,
-           "n_bed": 75,
-           "n_in": 30,
-           "n_out": 30,
-           "rtol": 1e-8,
-           "fs_rtol": 1e-3,
-           "max_iter_fs":100,
-           "max_iter": 50,
-           "dt": 5e-3,
-           "a":1, "b":1,
-           "dot_tol": 1e-4,
-           "damp":200}
+    kwargs = {"ylim":[-2,1], "xlim":[-6,12], "V_inf": 10, "g_div": 7, "write":True, 
+            
+            "max_iter_fs":300, "dt": 5e-3,
+
+            "xd_in":-2, "xd_out":10,
+
+            "n_airfoil": 750,
+            "n_fs": 300,
+            "n_bed": 75,
+            "n_in": 30,
+            "n_out": 30,
+            "rtol": 1e-8,
+            "fs_rtol": 1e-3,
+            "max_iter": 50,
+            "a":1, "b":1,
+            "dot_tol": 1e-4,
+            "damp":300}
     
     FS = FsSolver("0012", alpha = 10, P=2, kwargs = kwargs)
     FS.solve()
