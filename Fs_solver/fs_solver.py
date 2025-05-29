@@ -108,8 +108,6 @@ class FsSolver:
                               n_bed = self.kwargs.get("n_bed"),
                               n_in = self.kwargs.get("n_in"),
                               n_out = self.kwargs.get("n_out"))
-        
-        self.etas = []
 
         self.a = self.kwargs.get("a", 1)
         self.b = self.kwargs.get("b", int(self.airfoil[2:])/100)
@@ -130,6 +128,11 @@ class FsSolver:
         self.fs_points = (fd.Function(self.W).interpolate(self.fd_mesh.coordinates).dat.data)[fs_indecies,:]
         self.fs_sorted = self.fs_points[np.argsort(self.fs_points[:,0])]
         self.fs_xs = self.fs_sorted[:,0]
+
+        self.etas = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
+        self.phis = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
+        self.fs_xs_array = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
+        self.residual_array = np.zeros(self.kwargs.get("max_iter_fs", 10))
         
         # Handeling output files
         if self.write:
@@ -187,7 +190,10 @@ class FsSolver:
             kwargs_for_Kutta_kondition["mesh"] = self.mesh
             kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
 
-            self.etas.append(new_eta.copy())
+            self.etas[i, :] = new_eta.copy()
+            self.phis[i, :] = self.PhiTilde.copy()
+            self.fs_xs_array[i, :] = self.fs_xs.copy()
+            self.residual_array[i] = residuals.copy()
 
             # Solve model and kutta kondition again with new condition at the free surface
             model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
@@ -230,7 +236,6 @@ class FsSolver:
         """
         Updates the free surface by solving the free surface equations using firedrake
         """
-        print("\t Computing free surface equations using IE")
         # Mesh and function spaces
         number_of_points = self.fs_sorted.shape[0]
         fs_mesh = fd.IntervalMesh(number_of_points-1, self.xlim[0], self.xlim[1])
@@ -319,13 +324,11 @@ class FsSolver:
 
         residuals = np.linalg.norm(eta_new - old_eta, np.inf)
 
-        print(f"\t free surface equations done")
-
         return eta_new, phi_new, residuals
 
     def __check_status__(self, residuals, iter, iter_time, solve_time) -> bool:
         # If convergence kriteria is met print relevant information
-        if residuals < self.kwargs.get("rtol", 1e-5):
+        if residuals < self.kwargs.get("fs_rtol", 1e-5):
             print("\n ============================")
             print(" Fs converged")
             print(f" residuals norm {np.linalg.norm(residuals)} after {iter} iterations")
@@ -382,20 +385,37 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-2,1], "xlim":[-6,12], "V_inf": 10, "g_div": 70, "write":True,
-           "n_airfoil": 750,
-           "n_fs": 300,
-           "n_bed": 75,
-           "n_in": 30,
-           "n_out": 30,
-           "rtol": 1e-8,
-           "fs_rtol": 1e-3,
-           "max_iter_fs":100,
-           "max_iter": 50,
-           "dt": 5e-3,
-           "a":1, "b":1,
-           "dot_tol": 1e-4,
-           "damp":200}
+    kwargs = {"ylim":[-2,1], "xlim":[-6,12], 
+            "xd_in": -3, "xd_out": 10,
+
+            "V_inf": 50, 
+            "g_div": 7, 
+            "write":True,
+            "n_airfoil": 550,
+            "n_fs": 350,
+            "n_bed": 70,
+            "n_in": 30,
+            "n_out": 30,
+            "rtol": 1e-8,
+            "a":1, "b":1,
+            "max_iter": 50,
+            "dot_tol": 1e-4,
+
+            "fs_rtol": 1e-6,
+            "max_iter_fs":3,
+            
+            "dt": 5e-3,
+            "damp":200}
     
-    FS = FsSolver("0012", alpha = 10, P=2, kwargs = kwargs)
+    FS = FsSolver("0012", alpha = 5, P=1, kwargs = kwargs)
     FS.solve()
+    etas = np.array(FS.etas)
+    phis = np.array(FS.phis)
+    fs_xs = np.array(FS.fs_xs_array)
+    residuals = np.array(FS.residual_array)
+
+    print(os.getcwd(), "\n")
+    np.savetxt("./results/eta.txt", etas)
+    np.savetxt("./results/phiTilde.txt", phis)
+    np.savetxt("./results/fs_xs.txt", fs_xs)
+    np.savetxt("./results/residuals.txt", residuals)
