@@ -93,6 +93,8 @@ class PotentialFlowSolver:
         self.xlim = self.kwargs.get("xlim", [-7, 13])
         self.ylim = self.kwargs.get("ylim", [-2, 1])
 
+        self.c0 = self.kwargs.get("g_div", 7)
+
         if "mesh" in self.kwargs:
             self.mesh = self.kwargs["mesh"]
         else:
@@ -208,7 +210,7 @@ class PotentialFlowSolver:
         velocityBC_sum = fd.Function(model.W, name="Boundary correction")
         time_total = time()
         self.Gamma = 0
-        Gammas = [0]
+        Gammas = []
         
         # Main loop
         for it, _ in enumerate(range(self.kwargs.get("max_iter", 20) + 1)):
@@ -229,7 +231,7 @@ class PotentialFlowSolver:
             Gammas.append(Gamma)
 
             # Use an adaptive method to do feedback controlled scaling of the strength of the vortex
-            Gamma /= self.__compute_Gamma_div(Gammas)
+            Gamma = self.__compute_updated_Gamma__(Gammas)
             
             # Redifine Gamma as the scaled version
             Gammas[-1] = Gamma
@@ -324,15 +326,16 @@ class PotentialFlowSolver:
         v_out = avg_height_of_domain * self.V_inf / (np.max(boundary_coords[:,1]) - np.min(boundary_coords[:,1]))
         return v_in, v_out
 
-    def __compute_Gamma_div(self, Gammas : list) -> float:
+    def __compute_updated_Gamma__(self, Gammas : list) -> float:
         # Adaptive stepsize controller for Gamma described in the report
-        used = False
-        if len(Gammas) <4:
-            self.g_div = self.kwargs.get("g_div", 7)
-            return self.g_div
+        c0 = self.c0
+        if len(Gammas) % 2 != 0:
+            return Gammas[-1]/c0
         else:
-            self.g_div = self.g_div*(Gammas[-3] - Gammas[-2] - Gammas[-2] + Gammas[-1]/self.g_div)/(Gammas[-3] - Gammas[-2])
-            return self.g_div
+            a = Gammas[-1]/c0/Gammas[-2]
+            c1 = c0*(1-a)/(1-a**(len(Gammas)+1))
+            self.c0 = c1
+            return Gammas[-1]/c1
 
 
     def get_edge_info(self):
@@ -557,15 +560,13 @@ if __name__ == "__main__":
     
     elif task == "2":
         # Defining a model and solving it
-        kwargs = {"ylim":[-4,4], "V_inf": 1, "write":True,
-           "n_airfoil": 300,
+        kwargs = {"ylim":[-4,4], "V_inf": 10, "write":True,
+           "n_airfoil": 750,
            "n_fs": 50,
            "n_bed": 50,
            "n_inlet": 20,
            "n_outlet": 20,
-           "dot_tol": 1e-4,
-           "fs_xs": np.linspace(-7,13, 100),
-           "fs_DBC": -np.cos(np.linspace(-7,13, 100))}
+           "dot_tol": 1e-4, "a":1, "b":1}
         
         model = PotentialFlowSolver("0012", P = 2, alpha = 10, kwargs=kwargs)
         model.solve()
