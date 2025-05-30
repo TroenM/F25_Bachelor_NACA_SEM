@@ -278,8 +278,7 @@ class FsSolver:
         eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (self.xlim[1] - xd_out))**2, 0)*eta_n1
 
         bcs_eta = fd.DirichletBC(W.sub(0), 0, "on_boundary") # Dirichlet BC for eta
-        #bcs_phi1 = fd.DirichletBC(W.sub(1), self.PhiTilde[0], 1) # Dirichlet BC for phi
-        bcs_phi2 = fd.DirichletBC(W.sub(1), self.PhiTilde[-1], 2) # Dirichlet BC for phi
+        #bcs_phi_in = fd.DirichletBC(W.sub(1), 0.0, 1) # Dirichlet BC for phi
 
         bcs = [bcs_eta]
 
@@ -396,18 +395,18 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-8,30], 
-            "xd_in": -6, "xd_out": 28,
+    kwargs = {"ylim":[-4,1], "xlim":[-8,27], 
+            "xd_in": -6, "xd_out": 25,
 
             "write":True, "save_results": True,
-            "V_inf": 10, 
+            "V_inf": 1, 
             "g_div": 7, 
             "write":True,
-            "n_airfoil": 100,
-            "n_fs": 400,
+            "n_airfoil": 501,
+            "n_fs": 350,
             "n_bed": 120,
-            "n_in": 40,
-            "n_out": 40,
+            "n_in": 30,
+            "n_out": 30,
             "rtol": 1e-8,
             "a":1, "b":1,
             "max_iter": 50,
