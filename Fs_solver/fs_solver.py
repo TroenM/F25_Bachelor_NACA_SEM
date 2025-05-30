@@ -89,6 +89,7 @@ class FsSolver:
         self.Gamma = 0
 
         self.write = self.kwargs.get("write", True)
+        self.save_results = self.kwargs.get("save_results", True)
         self.rot_mat = np.array([
             [np.cos(self.alpha), -np.sin(self.alpha)],
             [np.sin(self.alpha), np.cos(self.alpha)]
@@ -129,8 +130,8 @@ class FsSolver:
         self.fs_sorted = self.fs_points[np.argsort(self.fs_points[:,0])]
         self.fs_xs = self.fs_sorted[:,0]
 
-        self.etas = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
-        self.phis = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
+        self.etas = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)), dtype=np.float32)
+        self.phis = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)), dtype=np.float32)
         self.fs_xs_array = np.zeros((self.kwargs.get("max_iter_fs", 10), len(self.fs_xs)))
         self.residual_array = np.zeros((self.kwargs.get("max_iter_fs", 10), 2))
         
@@ -180,8 +181,11 @@ class FsSolver:
             # Start iteration time
             iter_time = time()
             
-            # Update eta and dirichlet boundary condition
-            new_eta, self.PhiTilde, residuals = self.__compute_fs_equations_weak1d__()
+            # Update eta and dirichlet boundary condition and notify if the dolve does not converge
+            try:
+                new_eta, self.PhiTilde, residuals = self.__compute_fs_equations_weak1d__()
+            except:
+                raise BrokenPipeError("Free surface equations did not konverge")
             kwargs_for_Kutta_kondition["fs_DBC"] = self.PhiTilde
             kwargs_for_Kutta_kondition["fs_xs"] = self.fs_xs
 
@@ -191,7 +195,8 @@ class FsSolver:
             kwargs_for_Kutta_kondition["fd_mesh"] = self.fd_mesh
 
             # Save result data while Loop is running
-            self.__save_results__(new_eta, residuals, i)
+            if self.save_results:
+                self.__save_results__(new_eta, residuals, i)
 
             # Solve model and kutta kondition again with new condition at the free surface
             model = PotentialFlowSolver(self.airfoil , self.P, self.alpha, kwargs=kwargs_for_Kutta_kondition)
@@ -228,7 +233,6 @@ class FsSolver:
         # eta[mask] = np.sin(omega*(x[mask]))/100 + self.ylim[1]
 
         return eta
-
 
     def __compute_fs_equations_weak1d__(self) -> None:
         """
@@ -360,10 +364,10 @@ class FsSolver:
         self.phis[iter, :] = self.PhiTilde.copy()
         self.fs_xs_array[iter, :] = self.fs_xs.copy()
         self.residual_array[iter] = np.array([residuals.copy(), self.dt*(iter+1)])
-        np.savetxt("./results/eta.txt", self.etas)
-        np.savetxt("./results/phiTilde.txt", self.phis)
-        np.savetxt("./results/fs_xs.txt", self.fs_xs_array)
-        np.savetxt("./results/residuals.txt", self.residual_array)
+        np.save("./results/eta.npy", self.etas)
+        np.save("./results/phiTilde.npy", self.phis)
+        np.save("./results/fs_xs.npy", self.fs_xs_array)
+        np.save("./results/residuals.npy", self.residual_array)
 
     def __update_mesh_data__(self, old_eta : np.ndarray, new_eta : np.ndarray) -> None:
         # Shift surface of the mesh and set this as new mesh
@@ -392,27 +396,28 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-10,20], 
-            "xd_in": -8, "xd_out": 18,
+    kwargs = {"ylim":[-4,1], "xlim":[-8,30], 
+            "xd_in": -6, "xd_out": 28,
 
-            "V_inf": 1, 
+            "write":True, "save_results": True,
+            "V_inf": 10, 
             "g_div": 7, 
             "write":True,
-            "n_airfoil": 350,
-            "n_fs": 450,
-            "n_bed": 70,
-            "n_in": 30,
-            "n_out": 30,
+            "n_airfoil": 100,
+            "n_fs": 400,
+            "n_bed": 120,
+            "n_in": 40,
+            "n_out": 40,
             "rtol": 1e-8,
             "a":1, "b":1,
             "max_iter": 50,
             "dot_tol": 1e-4,
 
             "fs_rtol": 1e-7,
-            "max_iter_fs":1500,
+            "max_iter_fs":5000,
             
             "dt": 5e-3,
-            "damp":100}
+            "damp":50}
     
     FS = FsSolver("0012", alpha = 5, P=2, kwargs = kwargs)
     FS.solve()
