@@ -1124,7 +1124,7 @@ class FsSolver:
             except:
                 pass
             
-            self.velocity_output = fd.VTKFile(self.visualisationpath + "velocity_10K.pvd")
+            self.velocity_output = fd.VTKFile(self.visualisationpath + "velocity_wide.pvd")
 
 
     def solve(self) -> None:
@@ -1186,7 +1186,7 @@ class FsSolver:
 
             # Save velocity within the solver and write it
             self.velocity = model.velocity
-            if self.write:
+            if self.write and (i%25 == 0):
                 self.velocity_output.write(self.velocity)
             
             # If solver is converged or diverged to a certain extend, stop solver
@@ -1373,28 +1373,28 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-10,27], 
-            "xd_in": -8, "xd_out": 25,
+    kwargs = {"ylim":[-4,1], "xlim":[-12,27], 
+            "xd_in": -10, "xd_out": 25,
 
             "write":True, "save_results": True,
-            "V_inf": 1, 
+            "V_inf": 10, 
             "g_div": 7, 
             "write":True,
-            "n_airfoil": 500,
+            "n_airfoil": 350,
             "n_fs": 450,
             "n_bed": 120,
-            "n_in": 35,
-            "n_out": 34,
+            "n_in": 30,
+            "n_out": 30,
             "rtol": 1e-8,
             "a":1, "b":1,
             "max_iter": 100,
             "dot_tol": 1e-4,
 
-            "fs_rtol": 1e-7,
+            "fs_rtol": 1e-8,
             "max_iter_fs":10000,
             
-            "dt": 5e-3,
-            "damp":50}
+            "dt": 1e-4,
+            "damp":100}
     
     FS = FsSolver("0012", alpha = 5, P=2, kwargs = kwargs)
     FS.solve()

@@ -3,7 +3,7 @@
 ### -- specify queue --
 #BSUB -q gpuv100
 ### -- set the job Name --
-#BSUB -J FS_10K
+#BSUB -J FS_wide3
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 8 
 ### -- specify that the cores MUST BE on a single host --
@@ -11,7 +11,7 @@
 ### -- Select the resources: 1 gpu in exclusive process mode --
 #BSUB -gpu "num=1:mode=exclusive_process"
 ### -- set walltime limit: hh:mm --  maximum 24 hours for GPU-queues right now
-#BSUB -W 8:00
+#BSUB -W 24:00
 # request 5GB of system-memory
 #BSUB -R "rusage[mem=10GB]"
 ### -- set the email address --
@@ -24,8 +24,8 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o FS_10K_%J.out
-#BSUB -e FS_10K_%J.err
+#BSUB -o FS_wide3_%J.out
+#BSUB -e FS_wide3_%J.err
 # -- end of LSF options --
 #here load the modules, and activate the environment if needed
 

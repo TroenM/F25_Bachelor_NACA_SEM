@@ -1,0 +1,430 @@
+Python 3.12.2
+
+dof: 58312
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 8.609466552734375
+	 dGamma: 0.24278322589229248
+	 dot product: 7.572216493565189e-05
+
+
+initialization done
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.9348533153533936
+	 dGamma: 0.24451194169968185
+	 dot product: 2.3229275606092393e-06
+
+
+	 iteration: 1
+	 residual norm 7.766347875914903e-08
+	 iteration time: 10.98645567893982
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 7.038184881210327
+	 dGamma: 0.24534802229686822
+	 dot product: 2.497623077548656e-05
+
+
+	 iteration: 2
+	 residual norm 9.944923984317455e-08
+	 iteration time: 9.567634105682373
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.653019905090332
+	 dGamma: 0.0001857026316283173
+	 dot product: -4.183529643857448e-08
+
+
+	 iteration: 3
+	 residual norm 1.6070917918664662e-07
+	 iteration time: 11.170859098434448
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 7.0277934074401855
+	 dGamma: 0.2505921840604337
+	 dot product: 6.482581356858523e-05
+
+
+	 iteration: 4
+	 residual norm 2.312810427618217e-07
+	 iteration time: 9.556753158569336
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.811321973800659
+	 dGamma: 0.24656961346176015
+	 dot product: -3.42113819155132e-05
+
+
+	 iteration: 5
+	 residual norm 2.851602864950564e-07
+	 iteration time: 9.347792148590088
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.750864267349243
+	 dGamma: 0.0005029182197470722
+	 dot product: -1.1353407444996483e-07
+
+
+	 iteration: 6
+	 residual norm 3.669923537286124e-07
+	 iteration time: 11.316736221313477
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.644559621810913
+	 dGamma: 0.00031947410685186285
+	 dot product: -6.729297187296544e-07
+
+
+	 iteration: 7
+	 residual norm 4.101594184291457e-07
+	 iteration time: 11.164426803588867
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.89362645149231
+	 dGamma: 0.00018689953301914315
+	 dot product: -3.3179472113941293e-09
+
+
+	 iteration: 8
+	 residual norm 4.46181459001771e-07
+	 iteration time: 11.418042421340942
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.850127935409546
+	 dGamma: 0.24492927998878122
+	 dot product: 9.687983317508721e-05
+
+
+	 iteration: 9
+	 residual norm 5.336199309091683e-07
+	 iteration time: 9.371212482452393
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 9.062268495559692
+	 dGamma: 0.0007842219260162405
+	 dot product: 3.0261870882081267e-06
+
+
+	 iteration: 10
+	 residual norm 5.843737903576951e-07
+	 iteration time: 11.601593971252441
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.899930715560913
+	 dGamma: 0.24719065420451736
+	 dot product: 6.793446771399833e-05
+
+
+	 iteration: 11
+	 residual norm 7.854338887058887e-07
+	 iteration time: 9.439849376678467
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.688805341720581
+	 dGamma: 0.00017969631348454965
+	 dot product: 6.723033903194733e-08
+
+
+	 iteration: 12
+	 residual norm 7.159237687126563e-07
+	 iteration time: 11.219359397888184
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.801851749420166
+	 dGamma: 0.25273348309541593
+	 dot product: -9.58836875249738e-05
+
+
+	 iteration: 13
+	 residual norm 7.834995575661807e-07
+	 iteration time: 9.499995708465576
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.941653490066528
+	 dGamma: 0.2446373466582713
+	 dot product: 5.3033767733093914e-05
+
+
+	 iteration: 14
+	 residual norm 8.425710319448498e-07
+	 iteration time: 9.494094848632812
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 7.07087779045105
+	 dGamma: 0.24584100899662642
+	 dot product: -2.8454878706225033e-05
+
+
+	 iteration: 15
+	 residual norm 9.002828833537535e-07
+	 iteration time: 9.587339878082275
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.606759786605835
+	 dGamma: 0.00036244030574259124
+	 dot product: -1.7336527186252012e-07
+
+
+	 iteration: 16
+	 residual norm 9.558229281392272e-07
+	 iteration time: 11.128619194030762
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.618884563446045
+	 dGamma: 0.00023904522424988826
+	 dot product: -2.626109909103058e-07
+
+
+	 iteration: 17
+	 residual norm 1.0361743310038918e-06
+	 iteration time: 11.14748477935791
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 9.086729526519775
+	 dGamma: 0.00026522568478393595
+	 dot product: -3.312347443094148e-08
+
+
+	 iteration: 18
+	 residual norm 1.1374870416691607e-06
+	 iteration time: 11.623366832733154
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 7.10840916633606
+	 dGamma: 0.25040053770982224
+	 dot product: 2.6014916900174606e-05
+
+
+	 iteration: 19
+	 residual norm 1.1479805224201556e-06
+	 iteration time: 9.712087631225586
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.775370836257935
+	 dGamma: 0.24104544099078473
+	 dot product: 5.9692616122232745e-05
+
+
+	 iteration: 20
+	 residual norm 1.202953798684625e-06
+	 iteration time: 9.357780694961548
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.807771682739258
+	 dGamma: 0.24717074149636054
+	 dot product: -6.985557104333679e-05
+
+
+	 iteration: 21
+	 residual norm 1.2649641063511297e-06
+	 iteration time: 9.526798963546753
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.7740638256073
+	 dGamma: 0.24409317958640322
+	 dot product: 1.2215501980720435e-05
+
+
+	 iteration: 22
+	 residual norm 1.3426150979878315e-06
+	 iteration time: 9.381623029708862
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.847400188446045
+	 dGamma: 0.24474493186127316
+	 dot product: -1.1442576658698885e-05
+
+
+	 iteration: 23
+	 residual norm 1.391941091943849e-06
+	 iteration time: 9.362019062042236
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.638246774673462
+	 dGamma: 0.0005538021663982083
+	 dot product: -2.0077051613431363e-07
+
+
+	 iteration: 24
+	 residual norm 1.4514172685942128e-06
+	 iteration time: 11.339988231658936
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.878664970397949
+	 dGamma: 0.24574785258582563
+	 dot product: -2.021631546221542e-05
+
+
+	 iteration: 25
+	 residual norm 1.5350871276353928e-06
+	 iteration time: 9.417185544967651
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.851781606674194
+	 dGamma: 0.0002003578854964395
+	 dot product: -2.4567598984076985e-08
+
+
+	 iteration: 26
+	 residual norm 1.5863773368263168e-06
+	 iteration time: 11.451444387435913
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.941920280456543
+	 dGamma: 0.24032525705706526
+	 dot product: 6.070601873175042e-05
+
+
+	 iteration: 27
+	 residual norm 1.6359149865863287e-06
+	 iteration time: 9.468757390975952
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.612699270248413
+	 dGamma: 0.000790287610815141
+	 dot product: 9.754775358536347e-07
+
+
+	 iteration: 28
+	 residual norm 1.7029431880200008e-06
+	 iteration time: 11.1920166015625
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 7.091358423233032
+	 dGamma: 0.2388424671203178
+	 dot product: 6.850613336638842e-05
+
+
+	 iteration: 29
+	 residual norm 1.7414614237321047e-06
+	 iteration time: 9.620729684829712
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.655857801437378
+	 dGamma: 0.0004399395598705224
+	 dot product: -6.172833128604641e-07
+
+
+	 iteration: 30
+	 residual norm 1.8294079583425216e-06
+	 iteration time: 11.172746896743774
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.8439106941223145
+	 dGamma: 0.242541479096587
+	 dot product: 7.870624476942917e-05
+
+
+	 iteration: 31
+	 residual norm 1.895688720554567e-06
+	 iteration time: 9.367308855056763
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 7.1151978969573975
+	 dGamma: 0.2639898258362033
+	 dot product: 8.755145378894688e-05
+
+
+	 iteration: 32
+	 residual norm 1.9543877952665767e-06
+	 iteration time: 9.651572942733765
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 9.084054708480835
+	 dGamma: 0.00046658519975096023
+	 dot product: -2.3110367634779085e-07
+
+
+	 iteration: 33
+	 residual norm 2.021227667459158e-06
+	 iteration time: 11.61813759803772
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.885633707046509
+	 dGamma: 0.241889753997321
+	 dot product: 2.848080794454282e-05
+
+
+	 iteration: 34
+	 residual norm 2.0512598962740825e-06
+	 iteration time: 9.52658748626709
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.843065023422241
+	 dGamma: 0.0011803313496469951
+	 dot product: 3.1733341247049873e-07
+
+
+	 iteration: 35
+	 residual norm 2.1364104060284106e-06
+	 iteration time: 11.37636661529541
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.798377990722656
+	 dGamma: 0.24385616373886038
+	 dot product: 7.078913783685202e-05
+
+
+	 iteration: 36
+	 residual norm 2.2233283105688173e-06
+	 iteration time: 9.309092998504639
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.59688949584961
+	 dGamma: 0.00021288121363590508
+	 dot product: -5.2712319733107355e-08
+
+
+	 iteration: 37
+	 residual norm 2.261756830601591e-06
+	 iteration time: 11.149207592010498
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.929274797439575
+	 dGamma: 0.0001703868260583125
+	 dot product: -9.775012522120344e-09
+
+
+	 iteration: 38
+	 residual norm 2.3216101722178806e-06
+	 iteration time: 11.45219874382019
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.680480480194092
+	 dGamma: 0.0001874257989529704
+	 dot product: 4.957298288628809e-10
+
+
+	 iteration: 39
+	 residual norm 2.3870641908674273e-06
+	 iteration time: 11.213062524795532
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2PoissonSolver converged in 2 iterations
+	 Total time: 6.803767442703247
+	 dGamma: 0.24519207168122661
+	 dot product: 2.259073612185018e-05
+
+
+	 iteration: 40
+	 residual norm 2.4495074697483687e-06
+	 iteration time: 9.331146478652954
+
+Starting PotentialFLowSolver iteration 0Starting PotentialFLowSolver iteration 1Starting PotentialFLowSolver iteration 2Starting PotentialFLowSolver iteration 3PoissonSolver converged in 3 iterations
+	 Total time: 8.825794696807861
+	 dGamma: 0.0004281274661820496
+	 dot product: -3.9380661589445573e-07
+
+
+	 iteration: 41
+	 residual norm 2.5034822446201588e-06
+	 iteration time: 11.347088813781738
+
+Starting PotentialFLowSolver iteration 0Solver did not converge, increasing ksp_rtol to 1e-13
+Solver did not converge, increasing ksp_rtol to 1e-12
+Solver did not converge, increasing ksp_rtol to 1e-11
+Solver did not converge, increasing ksp_rtol to 9.999999999999999e-11
+Solver did not converge, increasing ksp_rtol to 9.999999999999999e-10
+Solver did not converge, increasing ksp_rtol to 9.999999999999999e-09
+Solver did not converge, increasing ksp_rtol to 9.999999999999998e-08
+Solver did not converge, increasing ksp_rtol to 9.999999999999997e-07
+Solver did not converge, increasing ksp_rtol to 9.999999999999997e-06
+Solver did not converge, increasing ksp_rtol to 9.999999999999998e-05
