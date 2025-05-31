@@ -3,7 +3,7 @@
 ### -- specify queue --
 #BSUB -q gpuv100
 ### -- set the job Name --
-#BSUB -J FS_wide3
+#BSUB -J FS_wide600
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 8 
 ### -- specify that the cores MUST BE on a single host --
@@ -24,8 +24,8 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o FS_wide3_%J.out
-#BSUB -e FS_wide3_%J.err
+#BSUB -o FS_wide600_%J.out
+#BSUB -e FS_wide600_%J.err
 # -- end of LSF options --
 #here load the modules, and activate the environment if needed
 

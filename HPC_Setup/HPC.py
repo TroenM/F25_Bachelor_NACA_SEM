@@ -1381,7 +1381,7 @@ if __name__ == "__main__":
             "g_div": 7, 
             "write":True,
             "n_airfoil": 350,
-            "n_fs": 450,
+            "n_fs": 600,
             "n_bed": 120,
             "n_in": 30,
             "n_out": 30,
