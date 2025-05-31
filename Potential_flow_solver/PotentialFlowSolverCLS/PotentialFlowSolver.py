@@ -163,7 +163,10 @@ class PotentialFlowSolver:
 
 
         # Initializing Laplaze solver
-        model = PoissonSolver(self.fd_mesh, P=self.P)
+        if not self.kwargs.get("fs_DBC", np.array([0])).any():
+            model = PoissonSolver(self.fd_mesh, P=self.P, nullspace=True)
+        else:
+            model = PoissonSolver(self.fd_mesh, P=self.P)
         v_in, v_out = self.__get_bcflux__()
         model.impose_NBC(fd.Constant(-v_in), self.kwargs.get("inlet", 1))
         model.impose_NBC(fd.Constant(v_out), self.kwargs.get("outlet", 2))
@@ -176,21 +179,23 @@ class PotentialFlowSolver:
         
         # Raise the tolorance for to see whether the solver can converge under a less strict tolorance
         converged = False
-        while not converged:
-            try:
-                model.solve(self.solver_params)
-                self.solver_params["ksp_rtol"] = self.kwargs.get("min_rtol", 1e-14)
-                converged = True
-            except:
-                self.solver_params["ksp_rtol"] *= 10
-                print(f"Solver did not converge, increasing ksp_rtol to {self.solver_params['ksp_rtol']}")
-                if self.solver_params["ksp_rtol"] > 0.9:
+        try:
+            while not converged:
+                try:
                     model.solve(self.solver_params)
-
+                    self.solver_params["ksp_rtol"] = self.kwargs.get("min_rtol", 1e-14)
+                    converged = True
+                except:
+                    self.solver_params["ksp_rtol"] *= 10
+                    print(f"Solver did not converge, increasing ksp_rtol to {self.solver_params['ksp_rtol']}")
+                    if self.solver_params["ksp_rtol"] > 0.9:
+                        model.solve(self.solver_params)
+        except:
+            raise BrokenPipeError("Potential flow solver initialization did not converge")
 
         # Standardizing the velocity potential to avoid overflow
         velocityPotential = model.u_sol
-        velocityPotential -= model.u_sol.dat.data.min()
+        velocityPotential -= np.min(velocityPotential.dat.data)
 
         # For exposing initial velocity potential for fs solver
         self.init_phi = velocityPotential.copy()
@@ -310,6 +315,7 @@ class PotentialFlowSolver:
             print(f"\t Total time: {time() - time_total}")
             print(f"\n")
         
+
     def __get_bcflux__(self):
         # Find the length of the vectors that ensures that the ingoing and outgoind flux is v_inf * avg height of domain
         avg_height_of_domain = self.ylim[1] - self.ylim[0]
@@ -329,14 +335,13 @@ class PotentialFlowSolver:
     def __compute_updated_Gamma__(self, Gammas : list) -> float:
         # Adaptive stepsize controller for Gamma described in the report
         c0 = self.c0
-        if len(Gammas) % 2 != 0:
+        if len(Gammas) == 1:
             return Gammas[-1]/c0
         else:
             a = Gammas[-1]/c0/Gammas[-2]
             c1 = c0*(1-a)/(1-a**(len(Gammas)+1))
             self.c0 = c1
             return Gammas[-1]/c1
-
 
     def get_edge_info(self):
         """
@@ -435,7 +440,7 @@ class PotentialFlowSolver:
         Computes the boundary correction for the velocity field
         """
         # Initializing the correction model
-        correction_model = PoissonSolver(self.fd_mesh, self.P)
+        correction_model = PoissonSolver(self.fd_mesh, self.P, nullspace=True)
 
         # Imposing the Neumann boundary conditions
         correction_model.impose_NBC( -vortex, self.kwargs.get("inlet", 1))
@@ -447,20 +452,22 @@ class PotentialFlowSolver:
 
         # Solving the correction model and highering the tolorance if nessisary
         converged = False
-        while not converged:
-            try:
-                correction_model.solve(self.solver_params)
-                self.solver_params["ksp_rtol"] = self.kwargs.get("min_rtol", 1e-14)
-                converged = True
-            except:
-                self.solver_params["ksp_rtol"] *= 10
-                print(f"Solver did not converge, increasing ksp_rtol to {self.solver_params['ksp_rtol']}")
-                if self.solver_params["ksp_rtol"] > 1:
+        try:
+            while not converged:
+                try:
                     correction_model.solve(self.solver_params)
-        
+                    self.solver_params["ksp_rtol"] = self.kwargs.get("min_rtol", 1e-14)
+                    converged = True
+                except:
+                    self.solver_params["ksp_rtol"] *= 10
+                    print(f"Solver did not converge, increasing ksp_rtol to {self.solver_params['ksp_rtol']}")
+                    if self.solver_params["ksp_rtol"] > 1e-5:
+                        correction_model.solve(self.solver_params)
+        except:
+            raise BrokenPipeError("Boundary correction scheme did not converge")
         # standardize the result such that the minimum is 0 (this does nothing to the gradient and thus does nothing to the flow)
         velocityPotential = correction_model.u_sol
-        velocityPotential -= correction_model.u_sol.dat.data.min()
+        velocityPotential -= np.min(velocityPotential.dat.data)
 
         # Computing the boundary correcting velocity field
         velocityBC = fd.Function(correction_model.W)

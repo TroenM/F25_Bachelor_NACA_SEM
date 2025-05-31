@@ -42,10 +42,11 @@ class PoissonSolver:
 
 
     ########## SETUP METHODS ##########
-    def __init__(self, mesh: fd.Mesh, P = 1):
+    def __init__(self, mesh: fd.Mesh, P = 1, nullspace=False):
         """Initializing solver befor BC are given"""
         self.mesh = mesh
         self.P = P
+        self.has_nullspace = nullspace
 
         self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
         self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
@@ -127,7 +128,7 @@ class PoissonSolver:
 
 
     ########## BOUNDARY METHODS ##########
-    def impose_DBC(self, bc_func: callable, bc_idx: int|list[int], func_type = "fd"):
+    def impose_DBC(self, bc_func: callable, bc_idx: int|list[int], func_type = "fd", target_point = np.array([0,0])):
         """Impose Dirichlet boundary conditions
         
         Args:
@@ -159,8 +160,16 @@ class PoissonSolver:
             bc.dat.data[boundary_indecies] = bc_func(x_vals)
 
             self.DirBCs.append(fd.DirichletBC(self.V, bc, bc_idx))
-            
-
+        
+        elif func_type == "single_point":
+            bc = fd.Function(self.V)
+            bc.interpolate(bc_func(self.x, self.y))
+            coords = fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data
+            idx = np.argmin(np.linalg.norm(coords - target_point, axis=1))
+            # Create DirichletBC by passing a list of dof indices
+            idx = int(idx)  # convert from numpy.int64
+            bc_point = fd.DirichletBC(self.V, bc, [idx])
+            self.DirBCs.append(bc_point)
 
         
         else:
@@ -205,7 +214,13 @@ class PoissonSolver:
     ########## SOLUTION AND PLOTTING METHODS ##########
     def solve(self, solver_params: dict = {"ksp_type": "cg"}):
         """Solve the Poisson problem"""
-        fd.solve(self.a == self.L, self.u_sol, bcs=self.DirBCs, solver_parameters=solver_params)
+        if self.has_nullspace:
+            nullspace = fd.VectorSpaceBasis(constant=True, comm=self.V.mesh().comm)  # nullspace = span{1}
+            # (Optional but recommended)
+            nullspace.orthonormalize()
+            fd.solve(self.a == self.L, self.u_sol, bcs=self.DirBCs, solver_parameters=solver_params, nullspace=nullspace)
+        else:
+            fd.solve(self.a == self.L, self.u_sol, bcs=self.DirBCs, solver_parameters=solver_params)
         # except:
         #     # Create a function in the same space as the solution
         #     const_mode = fd.Function(self.V)
