@@ -1,13 +1,17 @@
 import numpy as np
 import firedrake as fd
+import gmsh
+import os
+import meshio
+import matplotlib.pyplot as plt
+from time import time
+import shutil
+from scipy.interpolate import interp1d
+
 
 #==========================================================
 #====================== MESHING ===========================
 #==========================================================
-
-import gmsh
-import os
-import meshio
 
 
 def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : np.ndarray = np.array([0.5,0])) -> np.ndarray:
@@ -311,8 +315,6 @@ def shift_surface(mesh : fd.Mesh, func_b : callable, func_a : callable) -> meshi
 #=================== POISSON SOLVER =======================
 #==========================================================
 
-import matplotlib.pyplot as plt
-
 class PoissonSolver:
 
     ###### Attributes ######
@@ -534,9 +536,7 @@ class PoissonSolver:
 #==========================================================
 #=================== POTENTIALFLOW SOLVER =================
 #==========================================================
-from time import time
-import shutil
-from scipy.integrate import interp1d
+
 
 class PotentialFlowSolver:
     """
@@ -1094,7 +1094,7 @@ class FsSolver:
         self.dt = self.kwargs.get("dt", 0.001)
         self.fs_rtol = kwargs.get("fs_rtol", 1e-5)
 
-        self.visualisationpath = "../HPC_RESULTS/paraview"
+        self.visualisationpath = "./HPC_RESULTS/paraview/"
 
         # Create relevant firedrake meshes and functionspaces
         self.fd_mesh = meshio_to_fd(self.mesh)
@@ -1124,7 +1124,7 @@ class FsSolver:
             except:
                 pass
             
-            self.velocity_output = fd.VTKFile(self.visualisationpath + "velocity_output.pvd")
+            self.velocity_output = fd.VTKFile(self.visualisationpath + "velocity_10K.pvd")
 
 
     def solve(self) -> None:
@@ -1373,25 +1373,25 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-8,27], 
-            "xd_in": -6, "xd_out": 25,
+    kwargs = {"ylim":[-4,1], "xlim":[-10,27], 
+            "xd_in": -8, "xd_out": 25,
 
             "write":True, "save_results": True,
             "V_inf": 1, 
             "g_div": 7, 
             "write":True,
-            "n_airfoil": 501,
-            "n_fs": 350,
+            "n_airfoil": 500,
+            "n_fs": 450,
             "n_bed": 120,
-            "n_in": 30,
-            "n_out": 30,
+            "n_in": 35,
+            "n_out": 34,
             "rtol": 1e-8,
             "a":1, "b":1,
-            "max_iter": 50,
+            "max_iter": 100,
             "dot_tol": 1e-4,
 
             "fs_rtol": 1e-7,
-            "max_iter_fs":5000,
+            "max_iter_fs":10000,
             
             "dt": 5e-3,
             "damp":50}
