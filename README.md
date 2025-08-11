@@ -1,11 +1,11 @@
 # F25_Bachelor_NACA_SEM
-Last updated: 12. Aug 2025
+Last updated: 12. Aug 2025.\
 The project is no longer maintained.
 
-This is the code for the bachelor thesis: Spectral element methods for potential flow around bodies.
-By Magnus Troen and Morten Rønn Østergaard
-Supervised by Allan P. Ensig-Karap
-Co-supervised by Jans Visbech
+This is the code for the bachelor thesis: Spectral element methods for potential flow around bodies.\
+By Magnus Troen and Morten Rønn Østergaard\
+Supervised by Allan P. Ensig-Karap\
+Co-supervised by Jens Visbech\
 DTU compute
 
 The project builds a free surface solver for a 2d naca-airfoil submerged just under the surface of steady water.
@@ -14,10 +14,10 @@ Note that both `PoissonSolver` and `PotentialFlowSolver` are stable and can be p
 
 Requirements
 ---
-Firedrake 0.14.dev0
-gmsh 4.13.1
-meshio 5.3.5
-vtk 9.4.1
+Firedrake 0.14.dev0 \
+gmsh 4.13.1 \
+meshio 5.3.5 \
+vtk 9.4.1 \
 matplotlib 3.10.0
 
 
