@@ -142,8 +142,11 @@ def __compute_updated_Gamma__(self, Gammas : list) -> float:
 
 def applyKuttaCondition():
     """ Applies one iteration of the Kutta condition by adding and adjusting for a vortex at centerOfAirfoil.
-
     """
+    # Find the circulation strength Gamma that makes the velocity at the trailing edge zero
+    # This is done using a simple bisection method
+    
+
 
     return
 
@@ -159,17 +162,15 @@ def week1DWaveEquations():
 #=================================================================#
 #=========================== Main Loop ===========================#
 #=================================================================#
-LE, TE = findLEandTE(alpha)
+if __name__ == "__main__":
+    LE, TE = findLEandTE(alpha)
 
 
 
-naca_coords = mesh.coordinates.dat.data[V.boundary_nodes(5)]
-plt.scatter(naca_coords[:, 0], naca_coords[:, 1])
-plt.scatter(LE[0], LE[1], color='red') # Leading edge
-plt.scatter(TE[0], TE[1], color='yellow') # Trailing edge
-plt.axis('equal')
-plt.show()
-
-
-
+    naca_coords = mesh.coordinates.dat.data[V.boundary_nodes(5)]
+    plt.scatter(naca_coords[:, 0], naca_coords[:, 1])
+    plt.scatter(LE[0], LE[1], color='red') # Leading edge
+    plt.scatter(TE[0], TE[1], color='yellow') # Trailing edge
+    plt.axis('equal')
+    plt.show()
 
