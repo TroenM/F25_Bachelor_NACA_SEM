@@ -103,7 +103,8 @@ def PoissonSolver(mesh, V, rhs = fd.Constant(0.0), DBC=[], NBC=[(1, V_inf), (2, 
 #=================================================================#
 
 def findLEandTE(alpha): #Find the leading and trailing edge of the airfoil
-    ''' Find the leading and trailing edge of the airfoil by centering and rotating the airfoil to alpha = 0 
+    '''
+    Find the leading and trailing edge of the airfoil by centering and rotating the airfoil to alpha = 0 
     and finding the min and max x-coordinates, then rotating back to the original angle of attack and shifting back to the original center.
 
     THIS IS ONLY NECESSARY ONCE, AT THE START OF THE SIMULATION.
@@ -130,22 +131,21 @@ def findLEandTE(alpha): #Find the leading and trailing edge of the airfoil
 
     return LE, TE
 
-def __compute_updated_Gamma__(self, Gammas : list) -> float:
-        # Adaptive stepsize controller for Gamma described in the report
-        if len(Gammas) == 1:
-            return Gammas[-1]/c0
-        else:
-            a = Gammas[-1]/c0/Gammas[-2]
-            c1 = c0*(1-a)/(1-a**(len(Gammas)+1))
-            c0 = c1
-            return Gammas[-1]/c1
+def __compute_updated_Gamma__(Gammas : list) -> float:
+    # Adaptive stepsize controller for Gamma described in the report
+    if len(Gammas) == 1:
+        return Gammas[-1]/c0
+    else:
+        a = (Gammas[-1]/c0) / Gammas[-2]
+        c1 = c0 * (1-a)
+        return Gammas[-1]/c1
 
 def applyKuttaCondition():
-    """ Applies one iteration of the Kutta condition by adding and adjusting for a vortex at centerOfAirfoil.
+    """
+    Applies one iteration of the Kutta condition by adding and adjusting for a vortex at centerOfAirfoil.
     """
     # Find the circulation strength Gamma that makes the velocity at the trailing edge zero
-    # This is done using a simple bisection method
-    
+    # This is done using a simple bisection method 
 
 
     return
@@ -154,7 +154,7 @@ def applyKuttaCondition():
 #======================= Free Surface ============================#
 #=================================================================#
 
-def week1DWaveEquations():
+def weak1DWaveEquations():
     return
 
 
