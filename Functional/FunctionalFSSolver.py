@@ -8,6 +8,7 @@ import firedrake as fd
 from firedrake.pyplot import tripcolor
 import numpy as np
 import matplotlib.pyplot as plt
+from time import time
 
 """
 IMPORTANT: The boundaries should be indexed as follows:
@@ -144,9 +145,108 @@ def applyKuttaCondition():
     """
     Applies one iteration of the Kutta condition by adding and adjusting for a vortex at centerOfAirfoil.
     """
+    LE, TE = findLEandTE(alpha)
     # Find the circulation strength Gamma that makes the velocity at the trailing edge zero
     # This is done using a simple bisection method 
+    Gammas = []
+    for it, _ in enumerate(range(maxItKutta + 1)):
+        # Start time
+        time_it = time()
 
+        # Computing the vortex strength at the point a little out from the trailing edge
+        vte = velocity.at(p_te_new)
+
+        # Using the vortex strength a little out from the trailing estimate a new vortex strength
+        Gamma = compute_vortex_strength(v12, vte, p_te_new)
+        Gammas.append(Gamma)
+
+        # Use an adaptive method to do feedback controlled scaling of the strength of the vortex
+        Gamma = self.__compute_updated_Gamma__(Gammas)
+        
+        # Redifine Gamma as the scaled version
+        Gammas[-1] = Gamma
+        self.Gamma += Gamma
+
+        # Compute the vortex
+        vortex = self.compute_vortex(Gamma, model, center_of_vortex, vortex)
+
+        # Sum velocity and the vortex to add circulation to the flow
+        velocity += vortex
+        vortex_sum += vortex
+
+        # Computing the boundary correction
+        velocityBC = self.compute_boundary_correction(vortex)
+        velocity += velocityBC
+        velocityBC_sum += velocityBC
+        
+        # Check for convergence and printing appropriate data
+        if np.abs(np.dot(v12, vte)) < self.kwargs.get("dot_tol", 1e-6):
+            print(f"PoissonSolver converged in {it} iterations")
+            print(f"\t Total time: {time() - time_total}")
+            print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
+            print(f"\t dot product: {np.dot(v12, vte)}")
+            print(f"\n")
+            break
+
+        # Checking for Stagnation and printing appropriate data
+        if np.abs(Gamma - old_Gamma) < self.kwargs.get("gamma_tol", 1e-6):
+            print(f"PoissonSolver stagnated in {it-1} iterations")
+            print(f"\t Total time: {time() - time_total}")
+            print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
+            print(f"\t dot product: {np.dot(v12, vte)}")
+            print(f"\n")
+            break
+
+        # Checking for divergence and printing appropriate data
+        if np.abs(Gamma - old_Gamma) > 1e4:
+            print(f"PoissonSolver diverged in {it} iterations")
+            print(f"\t Total time: {time() - time_total}")
+            print(f"\t dGamma: {np.abs(Gamma - old_Gamma)}")
+            print(f"\t dot product: {np.dot(v12, vte)}")
+            print(f"\n")
+            break
+
+        # Updating the vortex strength and printing appropriate data
+        if __name__ == "__main__" or self.kwargs.get("print_iter", False):
+            print(f"\t dGamma: {Gamma - old_Gamma}")
+            print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
+            print(f"\t Iteration time: {time() - time_it} seconds\n")
+        dgamma = np.abs(Gamma - old_Gamma)
+        old_Gamma = Gamma
+
+        # Write to file
+        if self.write:
+            self.velocity_output.write(velocity)
+            self.vortex_output.write(vortex)
+            vortex += velocityBC
+            self.BC_output.write(vortex)
+
+        # END OF MAIN LOOP
+
+    # Compute lift based on circulation given the formula in the Kutta Jacowski theorem
+    self.lift = -self.Gamma * self.V_inf * self.kwargs.get("rho", 1.225)
+    self.lift_coeff = self.lift / (1/2 * self.kwargs.get("rho", 1.225) * self.V_inf**2)
+
+    # Compute pressure coefficients
+    self.__compute_pressure_coefficients(velocity, model)
+
+    self.velocity = velocity
+
+    # Print relevant information if solver did not converge
+    if it == maxItKutta:
+        print(f"PoissonSolver did not converge in {it} iterations")
+        print(f"\t dGamma: {dgamma}")
+        print(f"\t dot product: {np.dot(velocity.at(p_te_new), v12)}")
+        print(f"\t Total time: {time() - time_total}")
+        print(f"\n")
+
+    Gammas.append(Gamma)
+
+    # Use an adaptive method to do feedback controlled scaling of the strength of the vortex
+    Gamma = __compute_updated_Gamma__(Gammas)
+    
+    # Redifine Gamma as the scaled version
+    Gammas[-1] = Gamma
 
     return
 
