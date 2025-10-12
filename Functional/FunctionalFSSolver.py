@@ -19,12 +19,38 @@ IMPORTANT: The boundaries should be indexed as follows:
 5: Airfoil
 """
 
+#================================================================#
+#======================= Hyper parameters =======================#
+#================================================================#
+
+P = 1 # Polynomial_Order
+V_inf = fd.as_vector((1.0, 0.0)) # Free-stream velocity
+rho = 1.225
+
+# Mesh settings
+airfoilNumber = "0012"
+alpha_deg = 45 # Angle of attack in degrees
+centerOfAirfoil = (0.0,0)
+circle = True
+xlim = (-7, 13)
+ylim = (-4, 2)
+nIn = 20
+nOut = 20
+nBed = 50
+nFS = 50 
+nAirfoil = 100
+
+# Solver settings
+maxItKutta = 50
+maxItFreeSurface = 50
+c0 = 7 # Initial Damping of Vortex Strength
+
 
 #=================================================================#
 #================== Function Spaces and Meshes ===================#
 #=================================================================#
 
-def __initialise_relevant_mesh_data__():
+def __initialiseRelevantMeshData__():
     alpha = np.deg2rad(alpha_deg)
     a = 1
     b = 1 if circle else int(airfoilNumber[2:])/100
@@ -35,11 +61,11 @@ def __initialise_relevant_mesh_data__():
     W = fd.VectorFunctionSpace(mesh, "CG", P)
     coordsFS = (fd.Function(W).interpolate(mesh.coordinates).dat.data)[fs_indecies,:]
     return alpha, a, b, mesh, V, fs_indecies, W, coordsFS
-
+alpha, a, b, mesh, V, fs_indecies, W, coordsFS = __initialiseRelevantMeshData__()
 #=================================================================#
 #======================== Poisson Solver =========================#
 #=================================================================#
-def PoissonSolver(mesh, V, rhs = fd.Constant(0.0), DBC=[], NBC=[(1, V_inf), (2, V_inf)]):
+def __poissonSolver__(mesh, V, rhs = fd.Constant(0.0), DBC=[], NBC=[(1, V_inf), (2, V_inf)]):
     """ Solves the Poisson equation:
         -Δφ = rhs in Ω
         φ = DBCfunc on DBCidx
@@ -84,7 +110,7 @@ def PoissonSolver(mesh, V, rhs = fd.Constant(0.0), DBC=[], NBC=[(1, V_inf), (2, 
 #======================= Kutta Condition =========================#
 #=================================================================#
 
-def __normalize_vector__(vector : np.ndarray) -> np.ndarray:
+def __normaliseVector__(vector : np.ndarray) -> np.ndarray:
     if type(vector) != np.ndarray or np.linalg.norm(vector) == 0:
         raise TypeError("The vector has to be a numpy array of length more than 0")
     return vector/np.linalg.norm(vector)
@@ -106,12 +132,12 @@ def __findAirfoilDetails__(airfoilNumber : str, nAirfoil : int, alpha : float, c
     pn = naca_coords[-1]
 
     # Calculate a normalised vector going from p1 to TE and a normalizes vector going from pn to TE
-    v1 = __normalize_vector__(TE - p1)
-    vn = __normalize_vector__(TE - pn)
+    v1 = __normaliseVector__(TE - p1)
+    vn = __normaliseVector__(TE - pn)
 
     # Using these vectors to calculate the normalized vector that is orthorgonal 
     # to the direction of the trailing edge (vPerp)
-    vPerp = __normalize_vector__(v1 - vn)
+    vPerp = __normaliseVector__(v1 - vn)
 
     # Using vPerp to find a point that is just outside the trailing edge in the direction of the trailing edge
     pointAtTE = TE + np.array([vPerp[1], -vPerp[0]])/70
@@ -127,7 +153,7 @@ def __FBCS__(Gammas : list) -> float: # Applies the FBCS-scheme discussed in the
         c0 *= (1-a)
         return Gammas[-1]/c0
 
-def __compute_vortex_strength__(vPerp, VelocityAtTE, PointAtTE) -> float:
+def __computeVortexStrength__(vPerp, VelocityAtTE, PointAtTE, alpha, a, b) -> float:
     """
     Computes the vortex strength for the given iteration
     """
@@ -143,7 +169,7 @@ def __compute_vortex_strength__(vPerp, VelocityAtTE, PointAtTE) -> float:
     x_bar = x_t * np.cos(alpha) - y_t * np.sin(alpha)
     y_bar = x_t * np.sin(alpha) + y_t * np.cos(alpha)
 
-    # Computing vortex at trailing edge without  the scaling factor Gamma/ellipse_circumference
+    # Computing vortex at trailing edge without  the scaling factor Gamma/ellipseCircumference
     Wx = -(y_bar/b) / (x_bar**2/a + y_bar**2/b)
     Wy = (x_bar/a) / (x_bar**2/a + y_bar**2/b)
 
@@ -153,14 +179,14 @@ def __compute_vortex_strength__(vPerp, VelocityAtTE, PointAtTE) -> float:
     Wy_rot = Wx * np.sin(-alpha) + Wy * np.cos(-alpha)
 
     # Calculating the circumference of the ellipse (scaling factor)
-    ellipse_circumference = np.pi*(3*(a+b) - np.sqrt(3*(a+b)**2+4*a*b))
+    ellipseCircumference = np.pi*(3*(a+b) - np.sqrt(3*(a+b)**2+4*a*b))
 
     # Computing the vortex strength Gamma
-    Gamma = -ellipse_circumference*(vPerp[0]*VelocityAtTE[0] + vPerp[1]*VelocityAtTE[1])/(Wx_rot*vPerp[0] + Wy_rot*vPerp[1])
+    Gamma = -ellipseCircumference*(vPerp[0]*VelocityAtTE[0] + vPerp[1]*VelocityAtTE[1])/(Wx_rot*vPerp[0] + Wy_rot*vPerp[1])
 
     return Gamma
 
-def __compute_vortex__(Gamma, center_of_vortex, vortex) -> fd.Function:
+def __computeVortex__(mesh, Gamma, centerOfVortex, W) -> fd.Function:
     """
     Computes the vortex field for the given vortex strength
     """
@@ -173,41 +199,38 @@ def __compute_vortex__(Gamma, center_of_vortex, vortex) -> fd.Function:
     fd_x, fd_y = fd.SpatialCoordinate(mesh)
 
     # Translate coordinates such that they have their center in origo
-    x_translated = fd_x - center_of_vortex[0]
-    y_translated = fd_y - center_of_vortex[1]
+    x_translated = fd_x - centerOfVortex[0]
+    y_translated = fd_y - centerOfVortex[1]
     
     # rotate the coordinates such that they are aranged as "unrotated coordinates"
     x_bar = (x_translated) * fd.cos(alpha) - (y_translated) * fd.sin(alpha)
     y_bar = (x_translated) * fd.sin(alpha) + (y_translated) * fd.cos(alpha)
     
     # Calculate the approximated circumference of the ellipse (scaling factor)
-    ellipse_circumference = fd.pi*(3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b))
+    ellipseCircumference = fd.pi*(3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b))
 
     # Compute the unrotated elliptical vortex field onto the "unrotated" coordinates
-    u_x = -Gamma / ellipse_circumference * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
-    u_y = Gamma / ellipse_circumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
+    u_x = -Gamma / ellipseCircumference * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
+    u_y = Gamma / ellipseCircumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
 
     # Rotate the final vectors in the vortex field
-    u_x_final = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
-    u_y_final = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
+    u_xFinal = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
+    u_yFinal = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
 
     # project the final vectorfunction onto the original coordinates of the mesh
-    vortex.project(fd.as_vector([u_x_final, u_y_final]))
+    vortex = fd.Function(W)
+    vortex.project(fd.as_vector([u_xFinal, u_yFinal]))
 
     return vortex
 
-def applyKuttaCondition():
+def applyKuttaCondition(alpha : float, a : float, b : float, mesh : fd.Mesh, V : fd.FunctionSpace, W : fd.VectorFunctionSpace):
     """
     Applies one iteration of the Kutta condition by adding and adjusting for a vortex at centerOfAirfoil.
     """
-    alpha, a, b, mesh, V, fs_indecies, W, coordsFS = __initialise_relevant_mesh_data__()
-
     # Find the circulation strength Gamma that makes the velocity at the trailing edge zero
-    # This is done using a simple bisection method
-    LE, TE, vPerp, PointAtTE = __findAirfoilDetails__(mesh, alpha)
-    vortex = fd.Function(W, name="vortex")
+    LE, TE, vPerp, PointAtTE = __findAirfoilDetails__(airfoilNumber, nAirfoil, alpha, centerOfAirfoil)
     # Calculate initial velocity
-    phi = PoissonSolver(mesh, V)
+    phi = __poissonSolver__(mesh, V)
     velocity = fd.Function(W).interpolate(fd.grad(phi))
     Gammas = []
 
@@ -216,7 +239,7 @@ def applyKuttaCondition():
         velocityAtTE = velocity.at(PointAtTE)
 
         # Using the vortex strength a little out from the trailing estimate a new vortex strength
-        Gamma = __compute_vortex_strength__(vPerp, velocityAtTE, PointAtTE)
+        Gamma = __computeVortexStrength__(vPerp, velocityAtTE, PointAtTE, alpha, a, b)
         Gammas.append(Gamma)
 
         # Use an adaptive method to do feedback controlled scaling of the strength of the vortex
@@ -226,13 +249,13 @@ def applyKuttaCondition():
         Gammas[-1] = Gamma
 
         # Compute the vortex
-        vortex = __compute_vortex__(Gamma, centerOfAirfoil, vortex)
+        vortex = __computeVortex__(mesh, Gamma, centerOfAirfoil, W)
 
         # Sum velocity and the vortex to add circulation to the flow
         velocity += vortex
 
         # Computing the boundary correction
-        BoundaryCorrection = __compute_boundary_correction__(vortex)
+        BoundaryCorrection = __computeBoundaryCorrection__(vortex)
         velocity += BoundaryCorrection
 
     # Compute lift based on circulation given the formula in the Kutta Jacowski theorem
@@ -240,7 +263,7 @@ def applyKuttaCondition():
     lift_coeff = lift / (1/2 * rho * V_inf**2)
 
     # Compute pressure coefficients
-    C_p = __compute_pressure_coefficients(velocity)
+    C_p = __computePressureCoefficients__(velocity)
     return velocity, C_p, Gammas, lift_coeff
 
 #=================================================================#
@@ -255,33 +278,8 @@ def weak1DWaveEquations():
 #=================================================================#
 #=========================== Main Loop ===========================#
 #=================================================================#
+
 if __name__ == "__main__":
-    #================================================================#
-    #======================= Hyper parameters =======================#
-    #================================================================#
-
-    P = 1 # Polynomial_Order
-    V_inf = fd.as_vector((1.0, 0.0)) # Free-stream velocity
-    rho = 1.225
-
-    # Mesh settings
-    airfoilNumber = "0012"
-    alpha_deg = 45 # Angle of attack in degrees
-    centerOfAirfoil = (0.0,0)
-    circle = True
-    xlim = (-7, 13)
-    ylim = (-4, 2)
-    nIn = 20
-    nOut = 20
-    nBed = 50
-    nFS = 50 
-    nAirfoil = 100
-
-    # Solver settings
-    maxItKutta = 50
-    maxItFreeSurface = 50
-    c0 = 7 # Initial Damping of Vortex Strength
-
 
 
     naca_coords = naca_4digit(airfoilNumber,nAirfoil, alpha, centerOfAirfoil)
