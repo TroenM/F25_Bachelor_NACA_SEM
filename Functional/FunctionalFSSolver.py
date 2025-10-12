@@ -62,6 +62,7 @@ def __initialiseRelevantMeshData__():
     coordsFS = (fd.Function(W).interpolate(mesh.coordinates).dat.data)[fs_indecies,:]
     return alpha, a, b, mesh, V, fs_indecies, W, coordsFS
 alpha, a, b, mesh, V, fs_indecies, W, coordsFS = __initialiseRelevantMeshData__()
+
 #=================================================================#
 #======================== Poisson Solver =========================#
 #=================================================================#
@@ -144,7 +145,7 @@ def __findAirfoilDetails__(airfoilNumber : str, nAirfoil : int, alpha : float, c
 
     return LE, TE, vPerp, pointAtTE
 
-def __FBCS__(Gammas : list) -> float: # Applies the FBCS-scheme discussed in the report
+def __FBCS__(Gammas : list, c0 = c0) -> float: # Applies the FBCS-scheme discussed in the report
     # Adaptive stepsize controller for Gamma described in the report
     if len(Gammas) == 1:
         return Gammas[-1]/c0
@@ -186,7 +187,7 @@ def __computeVortexStrength__(vPerp, VelocityAtTE, PointAtTE, alpha, a, b) -> fl
 
     return Gamma
 
-def __computeVortex__(mesh, Gamma, centerOfVortex, W) -> fd.Function:
+def __computeVortex__(mesh, Gamma, centerOfVortex, W, alpha = alpha) -> fd.Function:
     """
     Computes the vortex field for the given vortex strength
     """
@@ -222,6 +223,34 @@ def __computeVortex__(mesh, Gamma, centerOfVortex, W) -> fd.Function:
     vortex.project(fd.as_vector([u_xFinal, u_yFinal]))
 
     return vortex
+
+def __computeBoundaryCorrection__(mesh: fd.Mesh, V: fd.FunctionSpace, W: fd.VectorFunctionSpace, vortex: fd.Function) -> fd.Function:
+    """
+    Computes the boundary correction to ensure that the boundary condition on the airfoil is satisfied.
+    """
+    # Solve a poisson equation with the vortex as the right-hand side and Dirichlet BC on the airfoil
+    rhs = -fd.div(vortex)
+    DBC = []
+    NBC = [(i+1, V_inf) for i in range(5)]
+    phi_correction = __poissonSolver__(mesh, V, rhs, DBC, NBC)
+
+    # Compute the gradient of the correction potential
+    BoundaryCorrection = fd.Function(W).interpolate(fd.grad(phi_correction))
+
+    return BoundaryCorrection
+
+def __computePressureCoefficients__(velocity : fd.Function) -> fd.Function:
+    """
+    Computes the pressure coefficients on the airfoil surface.
+    """
+    # Compute the magnitude of the velocity
+    velocity_magnitude = fd.sqrt(fd.dot(velocity, velocity))
+
+    # Compute the pressure coefficient using Bernoulli's equation
+    C_p = 1 - (velocity_magnitude / fd.sqrt(fd.dot(V_inf, V_inf)))**2
+
+    return C_p
+
 
 def applyKuttaCondition(alpha : float, a : float, b : float, mesh : fd.Mesh, V : fd.FunctionSpace, W : fd.VectorFunctionSpace):
     """
@@ -278,19 +307,17 @@ def weak1DWaveEquations():
 #=================================================================#
 #=========================== Main Loop ===========================#
 #=================================================================#
+def main():
+    phi_init = __poissonSolver__(mesh, V)
+    velocity = fd.Function(W).interpolate(fd.grad(phi_init))
+
+    phi, C_p, Gammas, lift_coeff = applyKuttaCondition(alpha, a, b, mesh, V, W)
+    print(f"Lift coefficient: {lift_coeff}")
+    tripcolor(velocity)
+    fd.interactive()
+    return
+
 
 if __name__ == "__main__":
-
-
-    naca_coords = naca_4digit(airfoilNumber,nAirfoil, alpha, centerOfAirfoil)
-    print(naca_coords[0])
-    print(naca_coords[1])
-    print(naca_coords[-1])
-    print(LE)
-    print(TE)
-    # plt.scatter(naca_coords[:, 0], naca_coords[:, 1])
-    # plt.scatter(LE[0], LE[1], color='red') # Leading edge
-    # plt.scatter(TE[0], TE[1], color='yellow') # Trailing edge
-    # plt.axis('equal')
-    # plt.show()
+    main()
 
