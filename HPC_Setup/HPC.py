@@ -1,7 +1,8 @@
+import os; os.system('cls||clear'); os.environ["OMP_NUM_THREADS"] = "1"
+
 import numpy as np
 import firedrake as fd
 import gmsh
-import os
 import meshio
 import matplotlib.pyplot as plt
 from time import time
@@ -897,8 +898,8 @@ class PotentialFlowSolver:
         y_bar = x_t * np.sin(alpha) + y_t * np.cos(alpha)
 
         # Computing vortex at trailing edge without Gamma/2pi
-        Wx = -(y_bar/b) / (x_bar**2/a + y_bar**2/b)
-        Wy = (x_bar/a) / (x_bar**2/a + y_bar**2/b)
+        Wx = -(y_bar/b) / ((x_bar/a)**2 + (y_bar/b)**2)
+        Wy = (x_bar/a) / ((x_bar/a)**2 + (y_bar/b)**2)
 
         
         # Rotating back to global coordinates
@@ -940,8 +941,9 @@ class PotentialFlowSolver:
         u_y = Gamma / ellipse_circumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
 
         # Rotate the final vectors
+        u_x_old = -Gamma / ellipse_circumference * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
         u_x = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
-        u_y = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
+        u_y = u_x_old * fd.sin(-alpha) + u_y * fd.cos(-alpha)
 
         # Convert to firedrake vector function
         vortex.project(fd.as_vector([u_x, u_y]))
@@ -1158,6 +1160,9 @@ class FsSolver:
         for i in range(self.kwargs.get("max_iter_fs", 10)):
             # Start iteration time
             iter_time = time()
+
+            if i%100 == 0 and self.dt > 1.25e-4:
+                self.dt *= 0.5
             
             # Update eta and dirichlet boundary condition and notify if the dolve does not converge
             try:
@@ -1306,7 +1311,7 @@ class FsSolver:
 
     def __check_status__(self, residuals, iter, iter_time, solve_time) -> bool:
         # If convergence kriteria is met print relevant information
-        if residuals < self.kwargs.get("fs_rtol", 1e-5):
+        if residuals < self.kwargs.get("fs_rtol", 1e-5) and iter > 1000:
             print("\n ============================")
             print(" Fs converged")
             print(f" residuals norm {np.linalg.norm(residuals)} after {iter} iterations")
@@ -1381,21 +1386,23 @@ if __name__ == "__main__":
             "g_div": 7, 
             "write":True,
             "n_airfoil": 350,
-            "n_fs": 600,
+            "n_fs": 520,
             "n_bed": 120,
             "n_in": 30,
             "n_out": 30,
             "rtol": 1e-8,
-            "a":1, "b":1,
             "max_iter": 100,
             "dot_tol": 1e-4,
+
+            # "a": 1,
+            # "b": 1,
 
             "fs_rtol": 1e-8,
             "max_iter_fs":10000,
             
-            "dt": 1e-4,
+            "dt": 2e-3,
             "damp":100}
     
-    FS = FsSolver("0012", alpha = 5, P=2, kwargs = kwargs)
+    FS = FsSolver("0012", alpha = 3, P=3, kwargs = kwargs)
     FS.solve()
 
