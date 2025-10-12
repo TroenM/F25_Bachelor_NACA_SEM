@@ -63,6 +63,8 @@ def __initialise_relevant_mesh_data__():
     coordsFS = (fd.Function(W).interpolate(mesh.coordinates).dat.data)[fs_indecies,:]
     return alpha, a, b, mesh, V, fs_indecies, W, coordsFS
 
+alpha, a, b, mesh, V, fs_indecies, W, coordsFS = __initialise_relevant_mesh_data__()
+
 #=================================================================#
 #======================== Poisson Solver =========================#
 #=================================================================#
