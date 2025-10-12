@@ -403,9 +403,8 @@ class PotentialFlowSolver:
         """
         Computes the vortex field for the given vortex strength
         """
-
-        alpha = self.alpha  # Convert angle of attack to radians
-        alpha = fd.Constant(alpha)
+        # Define alpha as a firedrake constant
+        alpha = fd.Constant(self.alpha)
 
         # Extract airfoil scaling parameters
         a = fd.Constant(self.a)
@@ -427,11 +426,11 @@ class PotentialFlowSolver:
         u_y = Gamma / ellipse_circumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
 
         # Rotate the final vectors
-        u_x = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
-        u_y = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
+        u_x_final = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
+        u_y_final = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
 
         # Convert to firedrake vector function
-        vortex.project(fd.as_vector([u_x, u_y]))
+        vortex.project(fd.as_vector([u_x_final, u_y_final]))
 
         return vortex
         
@@ -573,7 +572,7 @@ if __name__ == "__main__":
            "n_bed": 50,
            "n_inlet": 20,
            "n_outlet": 20,
-           "dot_tol": 1e-4, "a":1, "b":1}
+           "dot_tol": 1e-4}
         
         model = PotentialFlowSolver("0012", P = 2, alpha = 10, kwargs=kwargs)
         model.solve()
