@@ -23,7 +23,7 @@ def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : n
     p = int(string[1])/10 if string[1] != "0" else 0.1
     t = int(string[2] + string[3])/100
 
-    # If there should be an equal amount of nodes on the airfoil
+    # If an equal amount of nodes is used to approximate the airfoil
     if (n//2)*2 == n:
 
         # Create a linspace with points spaced equally between 0 and pi for the upper and lower surface of the airfoil
@@ -42,11 +42,11 @@ def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : n
         lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1][:-1]
         upper = np.hstack((x.reshape(-1,1), (yc + yt).reshape(-1,1)))[:-1]
 
-    # If there should be an odd amount of nodes on the airfoil
+    # If an odd amount of nodes is used to approximate the airfoil
     elif (n//2)*2 != n:
 
         # Create a linspace with points spaced equally between 0 and pi for the lower surface of the airfoil with one more point than for the upper part
-        beta = np.linspace(0,np.pi,(n//2)+2)
+        beta = np.linspace(0,np.pi,(n//2)+1)
 
         # Convert this linspace to an array with points that are the most concentrated at the edges of the airfoil.
         x = (1-np.cos(beta))/2
@@ -61,7 +61,7 @@ def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : n
         lower = np.hstack((x.reshape(-1,1), (yc - yt).reshape(-1,1)))[::-1][:-1]
 
         # Create a linspace with points spaced equally between 0 and pi for the upper surface of the airfoil
-        beta = np.linspace(0,np.pi,(n//2)+1)
+        beta = np.linspace(0,np.pi,(n//2)+2)
 
         # Convert this linspace to an array with points that are the most concentrated at the edges of the airfoil.
         x = (1-np.cos(beta))/2
