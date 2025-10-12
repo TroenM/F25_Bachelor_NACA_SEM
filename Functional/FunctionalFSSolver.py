@@ -20,33 +20,6 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 
-#================================================================#
-#======================= Hyper parameters =======================#
-#================================================================#
-
-P = 1 # Polynomial_Order
-V_inf = fd.as_vector((1.0, 0.0)) # Free-stream velocity
-rho = 1.225
-
-# Mesh settings
-airfoilNumber = "0012"
-alpha_deg = 45 # Angle of attack in degrees
-centerOfAirfoil = (0.0,0)
-circle = True
-xlim = (-7, 13)
-ylim = (-4, 2)
-nIn = 20
-nOut = 20
-nBed = 50
-nFS = 50 
-nAirfoil = 100
-
-# Solver settings
-maxItKutta = 50
-maxItFreeSurface = 50
-c0 = 7 # Initial Damping of Vortex Strength
-
-
 #=================================================================#
 #================== Function Spaces and Meshes ===================#
 #=================================================================#
@@ -62,8 +35,6 @@ def __initialise_relevant_mesh_data__():
     W = fd.VectorFunctionSpace(mesh, "CG", P)
     coordsFS = (fd.Function(W).interpolate(mesh.coordinates).dat.data)[fs_indecies,:]
     return alpha, a, b, mesh, V, fs_indecies, W, coordsFS
-
-alpha, a, b, mesh, V, fs_indecies, W, coordsFS = __initialise_relevant_mesh_data__()
 
 #=================================================================#
 #======================== Poisson Solver =========================#
@@ -229,6 +200,8 @@ def applyKuttaCondition():
     """
     Applies one iteration of the Kutta condition by adding and adjusting for a vortex at centerOfAirfoil.
     """
+    alpha, a, b, mesh, V, fs_indecies, W, coordsFS = __initialise_relevant_mesh_data__()
+
     # Find the circulation strength Gamma that makes the velocity at the trailing edge zero
     # This is done using a simple bisection method
     LE, TE, vPerp, PointAtTE = __findAirfoilDetails__(mesh, alpha)
@@ -283,7 +256,31 @@ def weak1DWaveEquations():
 #=========================== Main Loop ===========================#
 #=================================================================#
 if __name__ == "__main__":
-    LE, TE = findAirfoilDetails(mesh, alpha)
+    #================================================================#
+    #======================= Hyper parameters =======================#
+    #================================================================#
+
+    P = 1 # Polynomial_Order
+    V_inf = fd.as_vector((1.0, 0.0)) # Free-stream velocity
+    rho = 1.225
+
+    # Mesh settings
+    airfoilNumber = "0012"
+    alpha_deg = 45 # Angle of attack in degrees
+    centerOfAirfoil = (0.0,0)
+    circle = True
+    xlim = (-7, 13)
+    ylim = (-4, 2)
+    nIn = 20
+    nOut = 20
+    nBed = 50
+    nFS = 50 
+    nAirfoil = 100
+
+    # Solver settings
+    maxItKutta = 50
+    maxItFreeSurface = 50
+    c0 = 7 # Initial Damping of Vortex Strength
 
 
 
