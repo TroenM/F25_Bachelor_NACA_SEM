@@ -8,7 +8,13 @@ from firedrake.pyplot import tripcolor
 import numpy as np
 import matplotlib.pyplot as plt
 from time import time
+import shutil
 import copy
+
+import os
+if not os.getcwd().endswith("Functional"):
+    raise InterruptedError("""ClassFSSolver.py must be run from Functional folder, 
+                           because Magnus is too laze to fix relative import/export paths""")
 
 """
 IMPORTANT: The boundaries should be indexed as follows:
@@ -20,28 +26,28 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 1, # Polynomial degree
-    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
+    "P": 3, # Polynomial degree
+    "V_inf": fd.as_vector((10.0, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
 
 meshSettings = {
     "airfoilNumber": "0012", # NACA airfoil number
-    "alpha_deg": 3, # Angle of attack in degrees
-    "centerOfAirfoil": (0.0, 0), # Center of airfoil (x,y)
+    "alpha_deg": 10, # Angle of attack in degrees
+    "centerOfAirfoil": (0.5, 0), # Center of airfoil (x,y)
     "circle": True, # Whether to use a circular or elliptical vortex
     "xlim": (-7, 13), # x-limits of the domain
-    "ylim": (-4, 2), # y-limits of the domain
+    "ylim": (-4, 4), # y-limits of the domain
     "nIn": 20, # Number of external nodes on inlet boundary 
     "nOut": 20, # Number of external nodes on outlet boundary
-    "nBed": 50, # Number of external nodes on bed boundary
-    "nFS": 300, # Number of external nodes on free surface boundary
-    "nAirfoil": 100 # Number of external nodes on airfoil boundary
+    "nBed": 150, # Number of external nodes on bed boundary
+    "nFS": 150, # Number of external nodes on free surface boundary
+    "nAirfoil": 300 # Number of external nodes on airfoil boundary
 }
 
 solverSettings = {
     "maxItKutta": 50,
-    "tolKutta": 1e-6,
+    "tolKutta": 1e-10,
     "maxItFreeSurface": 50,
     "tolFreeSurface": 1e-6,
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
@@ -49,7 +55,7 @@ solverSettings = {
 }
 
 outputSettings = {
-    "outputPath": "./Results/",
+    "outputPath": "./TestResults/",
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
@@ -72,6 +78,7 @@ class FSSolver:
         # Mesh parameters
         self.airfoilNumber = meshSettings["airfoilNumber"]
         self.centerOfAirfoil = meshSettings["centerOfAirfoil"]
+        self.centerOfVortex = meshSettings.get("centerOfVortex", self.centerOfAirfoil) # Default to centerOfAirfoil if not provided
         self.alpha = np.deg2rad(meshSettings["alpha_deg"])
         self.circle = meshSettings["circle"]
         self.xlim = meshSettings["xlim"]
@@ -114,8 +121,11 @@ class FSSolver:
         self.outputIntervalKutta = outputSettings["outputIntervalKutta"]
         self.outputIntervalFS = outputSettings["outputIntervalFS"]
 
-        print("Initialized FSSolver with:\n" + f"P={self.P}\n" + f"alpha={np.round(np.rad2deg(self.alpha), 2)} deg\n" + 
-              f"V_inf={self.V_inf}\n" + f"Degrees of freedom: {self.V.dof_count}")
+        print("Initialized FSSolver with:\n" + f"P={self.P}\n" + 
+              f"alpha={np.round(np.rad2deg(self.alpha), 2)} deg\n" + 
+              f"V_inf={self.V_inf}\n" + 
+              f"Degrees of freedom: {self.V.dof_count}")
+        
         print(f"Initialization time: {np.round(time() - time_init, 2)} s")
         print("-"*50 + "\n")
         return None
@@ -134,7 +144,7 @@ class FSSolver:
         THIS IS ONLY NECESSARY ONCE, AT THE START OF THE SIMULATION.
         '''
         # Calculate airfoil coordinates
-        naca_coords = naca_4digit(self.airfoilNumber,self.nAirfoil, self.alpha, self.centerOfAirfoil)
+        naca_coords = naca_4digit(self.airfoilNumber,self.nAirfoil, np.rad2deg(self.alpha), self.centerOfAirfoil)
         # Gathering position of Leading edge, Trailing edge, 
         # the first point on the bottom surface from the trailing edge (p1) and the first on the top surface (pn)
         TE = naca_coords[0]
@@ -152,6 +162,10 @@ class FSSolver:
 
         # Using vPerp to find a point that is just outside the trailing edge in the direction of the trailing edge
         pointAtTE = TE + np.array([vPerp[1], -vPerp[0]])/70
+
+        if self.circle:
+            self.centerOfVortex = np.array(self.centerOfVortex)
+            self.centerOfVortex -= np.array([vPerp[1], -vPerp[0]])/4
 
         return LE, TE, vPerp, pointAtTE
     
@@ -172,16 +186,16 @@ class FSSolver:
     
         for _ in NBC:
             bcidx, NBCfunc = _
-            L += fd.dot(NBCfunc, fd.FacetNormal(self.mesh)) * v * fd.ds(bcidx) # Set NBC = [fd.as_vector(V_inf, 0)]*2 for far-field
+            L += fd.dot(NBCfunc, fd.FacetNormal(self.mesh)) * v * fd.ds(bcidx) # Set NBC = [fd.as_vector(V_inf, 0)] for far-field
 
         phi = fd.Function(self.V) # Consider whether phi should be an input instead.
-        fd.solve(a == L, phi, bcs=DBCs)
-
+        
+        fd.solve(a == L, phi, bcs=DBCs)#, solver_parameters={"pc_type": "hypre", "pc_hypre_type": "boomeramg", "ksp_rtol": 1e-10})
+        
         if len(DBCs) == 0: # Normalize phi if there are no Dirichlet BCs
             phi -= np.min(phi.dat.data)
         
         u = fd.Function(self.W).interpolate(fd.grad(phi))
-
         return phi, u
     
     #=================================================================#
@@ -207,12 +221,12 @@ class FSSolver:
         a = self.a
         b = self.b
         # Get the coordinates of the point just outside of the trailing edge
-        p_x = PointAtTE[0]
-        p_y = PointAtTE[1]
+        p_x = self.pointAtTE[0]
+        p_y = self.pointAtTE[1]
 
         # Translating the trailing edge coordinates to have the center at the origin
-        x_t = p_x - centerOfAirfoil[0]
-        y_t = p_y - centerOfAirfoil[1]
+        x_t = p_x - self.centerOfAirfoil[0]
+        y_t = p_y - self.centerOfAirfoil[1]
 
         # Rotating the trailing edge coordinates to align with "not-rotated" coordinates
         x_bar = x_t * np.cos(alpha) - y_t * np.sin(alpha)
@@ -231,9 +245,206 @@ class FSSolver:
         ellipseCircumference = np.pi*(3*(a+b) - np.sqrt(3*(a+b)**2+4*a*b))
 
         # Computing the vortex strength Gamma
-        Gamma = -ellipseCircumference*(vPerp[0]*VelocityAtTE[0] + vPerp[1]*VelocityAtTE[1])/(Wx_rot*vPerp[0] + Wy_rot*vPerp[1])
+        vPerp = self.vPerp
+        velocityAtTE = self.u.at(self.pointAtTE) # Requires that self.u is computed before calling this function
+        Gamma = -ellipseCircumference*(vPerp[0]*velocityAtTE[0] + vPerp[1]*velocityAtTE[1])/(Wx_rot*vPerp[0] + Wy_rot*vPerp[1])
 
         return Gamma
+    
+    def __computeVortex__(self) -> fd.Function:
+        """
+        Computes the vortex field for the given vortex strength
+        """
+        # Define alpha, a and b as firedrake coordinates
+        alpha = fd.Constant(self.alpha)
+        a = fd.Constant(self.a)
+        b = fd.Constant(self.b)
+
+        # Gather coordinates from fd mesh
+        fd_x, fd_y = fd.SpatialCoordinate(self.mesh)
+
+        # Translate coordinates such that they have their center in origo
+        x_translated = fd_x - self.centerOfVortex[0]
+        y_translated = fd_y - self.centerOfVortex[1]
+
+        # rotate the coordinates such that they are aranged as "unrotated coordinates"
+        x_bar = (x_translated) * fd.cos(alpha) - (y_translated) * fd.sin(alpha)
+        y_bar = (x_translated) * fd.sin(alpha) + (y_translated) * fd.cos(alpha)
+
+        # Calculate the approximated circumference of the ellipse (scaling factor)
+        ellipseCircumference = fd.pi*(3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b))
+
+        # Compute the unrotated elliptical vortex field onto the "unrotated" coordinates
+        Gamma = self.Gammas[-1]
+        u_x = -Gamma / ellipseCircumference * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
+        u_y = Gamma / ellipseCircumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
+
+        # Rotate the final vectors in the vortex field
+        u_xFinal = u_x * fd.cos(-alpha) - u_y * fd.sin(-alpha)
+        u_yFinal = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
+
+        # project the final vectorfunction onto the original coordinates of the mesh
+        vortex = fd.Function(self.W)
+        vortex.project(fd.as_vector([u_xFinal, u_yFinal]))
+        self.vortex = vortex
+
+        return None
+    
+    def __boundaryCorrection__(self):
+        """
+        Computes the necessary boundary correction to cancle out current vortex field on the boundaries.
+        This is done by solving a Poisson equation with NBC = -vortex on the boundaries.
+        """
+        vortex = self.vortex
+        NBCs = [(i, -vortex) for i in range(1,6)] # Set NBC = [fd.as_vector(V_inf, 0)]*2 for far-field
+        phiBC, uBC = self.__poissonSolver__(NBC = NBCs)
+
+        return phiBC, uBC
+
+    def __applyKuttaCondition__(self):
+        """
+        Applies the Kutta condition to the current velocity field
+        1. Compute vortex strength
+        2. Compute vortex field
+        3. Add vortex field to velocity field
+        4. Apply boundary correction
+        5. Check convergence
+        6. Repeat until convergence, stagnation or max iterations reached
+        """
+        t1 = time()
+        # Ensure Gammas is reset
+        self.Gammas = []
+
+        if self.writeKutta:
+            if os.path.exists(self.outputPath + "kuttaIterations"):
+                shutil.rmtree(self.outputPath + "kuttaIterations")
+
+            try:
+                os.remove(self.outputPath + "kuttaIterations.pvd")
+            except:
+                pass
+
+            outfile = fd.VTKFile(self.outputPath + "kuttaIterations.pvd")
+            self.u.rename("Velocity")
+
+        for it in range(self.maxItKutta):
+            # Compute vortex strength and correct it using FBCS
+            Gamma = self.__computeVortexStrength__()
+            self.Gammas.append(Gamma)
+            Gamma = self.__FBCS__()
+            self.Gammas[-1] = Gamma
+
+            # Compute vortex field
+            self.__computeVortex__()
+            self.u += self.vortex
+
+            # Apply boundary correction
+            phiBC, uBC = self.__boundaryCorrection__()
+            self.u += uBC
+
+            if self.writeKutta and it % self.outputIntervalKutta == 0:
+                outfile.write(self.u, time = it)
+
+            # Check convergence
+            if self.__checkKuttaConvergence__(it):
+                print(f"Kutta solver time: {np.round(time() - t1, 4)} s")
+                print("-"*50 + "\n")
+                break
+
+        return None
+
+    def __checkKuttaConvergence__(self, it):
+        """
+        Checks whether the Kutta condition has converged
+        """
+        velocityAtTE = self.__normaliseVector__(self.u.at(self.pointAtTE))
+        dotProductTE = np.dot(velocityAtTE, self.vPerp)
+        GammaDiff = np.inf if len(self.Gammas) < 2 else abs(self.Gammas[-1] - self.Gammas[-2])
+        if abs(dotProductTE) < self.tolKutta:
+            print(f"Kutta condition applied in {it+1} iterations")
+            print(f"Dot product at TE: {dotProductTE}")
+            return True
+        elif GammaDiff < self.tolKutta:
+            print(f"Kutta condition stagnated after {it+1} iterations")
+            print(f"Gamma difference: {GammaDiff}")
+            print(f"Dot product at TE: {dotProductTE}")
+            return True
+        elif it >= self.maxItKutta-1:
+            print(f"Kutta condition was not applied in {it+1} iterations")
+            print(f"Dot product at TE: {dotProductTE}")
+            return True
+        else:
+            return False
+    
+    def getLiftCoefficient(self):
+        # Compute lift based on circulation given the formula in the Kutta Jacowski theorem
+        Gamma = np.sum(np.array(self.Gammas))
+        V_inf = np.linalg.norm(np.array(self.V_inf, dtype=float))
+        lift = -Gamma * V_inf * self.rho
+        lift_coeff = lift / (1/2 * self.rho * V_inf**2)
+        return lift_coeff
+
+    #=================================================================#
+    #======================== Free Surface Update ====================#
+    #=================================================================#
+
+    def __weak1dFsEq__(self):
+        return None
+
+    def solve(self):
+        return None
+
+    #=================================================================#
+    #====================== Plotting Tools ===========================#
+    #=================================================================#
+
+    def plotVelocityField(self, xlim = None, ylim = None):
+        fig, ax = plt.subplots()
+        
+        # Plot domain boundaries
+        for i in range(1, 5):
+            boundaryNodes = self.V.boundary_nodes(i)
+            coords = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[boundaryNodes,:]
+            ax.plot(coords[:,0], coords[:,1], 'k-')
+        
+        # plot airfoil
+        airfoilCoords = naca_4digit(self.airfoilNumber, self.nAirfoil, np.rad2deg(self.alpha), self.centerOfAirfoil)
+        ax.plot(airfoilCoords[:,0], airfoilCoords[:,1], 'k-')
+
+        # Plot quiver vPerp and velocity at TE
+        ax.quiver(self.pointAtTE[0], self.pointAtTE[1], self.vPerp[0], self.vPerp[1], color='r', scale=10, label='vPerp at TE')
+        velocityAtTE = self.u.at(self.pointAtTE)
+        ax.quiver(self.pointAtTE[0], self.pointAtTE[1], velocityAtTE[0], velocityAtTE[1], color='b', scale=10, label='Velocity at TE')
+
+        # p1 = airfoilCoords[1]
+        # pn = airfoilCoords[-1]
+        # v1 = (self.TE - p1)
+        # vn = (self.TE - pn)
+        # ax.quiver(p1[0], p1[1], v1[0], v1[1], color='g', scale=1e-2, label='v1 at TE')
+        # ax.quiver(pn[0], pn[1], vn[0], vn[1], color='m', scale=1e-2, label='vn at TE')
+
+        if xlim is not None:
+            ax.set_xlim(xlim)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        
+        ax.set_aspect('equal')
+
 
 if __name__ == "__main__":
     solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
+    phi, u = solver.__poissonSolver__(NBC = [(i, solver.V_inf) for i in range(1, 3)])
+    solver.u = u
+    solver.__applyKuttaCondition__()
+
+
+
+    #solver.plotVelocityField(xlim = (-2, 2), ylim = (-1, 1))
+    #plt.show()
+
+
+
+
+
+
+

@@ -1,52 +1,18 @@
 
 import os
 if not os.getcwd().endswith("Functional"):
-    raise InterruptedError("TestScripts.py must be run from Functional folder")
+   raise InterruptedError("TestScripts.py must be run from Functional folder")
 
-from ClassFSSolver import FSSolver
+from ClassFSSolver import *
 import firedrake as fd
 import numpy as np
-
-hypParams = {
-    "P": 1, # Polynomial degree
-    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
-    "rho": 1.225 # Density of air [kg/m^3]
-}
-
-meshSettings = {
-    "airfoilNumber": "0012", # NACA airfoil number
-    "alpha_deg": 3, # Angle of attack in degrees
-    "centerOfAirfoil": (0.0, 0), # Center of airfoil (x,y)
-    "circle": True, # Whether to use a circular or elliptical vortex
-    "xlim": (-7, 13), # x-limits of the domain
-    "ylim": (-4, 2), # y-limits of the domain
-    "nIn": 20, # Number of external nodes on inlet boundary 
-    "nOut": 20, # Number of external nodes on outlet boundary
-    "nBed": 50, # Number of external nodes on bed boundary
-    "nFS": 300, # Number of external nodes on free surface boundary
-    "nAirfoil": 100 # Number of external nodes on airfoil boundary
-}
-
-solverSettings = {
-    "maxItKutta": 50,
-    "tolKutta": 1e-6,
-    "maxItFreeSurface": 50,
-    "tolFreeSurface": 1e-6,
-    "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 1e-3 # Time step for free surface update
-}
-
-outputSettings = {
-    "outputPath": "./Results/",
-    "writeKutta": True, # Whether to write output for each Kutta iteration
-    "writeFreeSurface": True, # Whether to write output for each free surface iteration
-    "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 25, # Output interval in free surface time steps
-}
 
 option = input("""
 Select an option:
 1: MMS on Poisson Solver
+2: Pressure coefficient on NACA0012 airfoil (not implemented)
+3: Lift coefficient plot on NACA0012 airfoil (Abbot Re=6mil)
+4: Lift coefficient convergence on NACA0012 airfoil (not implemented)
                
 Enter option: """)
 
@@ -85,3 +51,49 @@ if option == "1":
         print("Errors written to MMS_Poisson_Errors.txt")
     else:
         print("Errors not written to file.")
+    
+elif option == "2":
+    raise NotImplementedError("Pressure coefficient on NACA0012 airfoil not implemented yet.")
+
+elif option == "3":
+    Abbot = np.loadtxt("./TestResults/LiftCoeff/AbbotRe6mil.txt")
+    alphas = Abbot[:,0]
+
+    computed_lift = np.empty_like(Abbot)
+
+    for it, alpha in enumerate(alphas):
+        hypParams["P"] = 2
+        hypParams["V_inf"] = fd.as_vector((10.0, 0.0))
+
+        meshSettings['alpha_deg'] = alpha
+        meshSettings["nIn"] = 20
+        meshSettings["nOut"] = 20
+        meshSettings["nFS"] = 150
+        meshSettings["nBed"] = 150
+        meshSettings["nAirfoil"] = 300
+        meshSettings["xlim"] = (-7, 13)
+        meshSettings["ylim"] = (-7, 7)
+        meshSettings["circle"] = False
+
+
+        outputSettings["writeKutta"] = True
+        outputSettings["writeFreeSurface"] = False
+        solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
+
+        phi, u = solver.__poissonSolver__(NBC = [(i, solver.V_inf) for i in range(1, 3)])
+        solver.u = u
+        solver.__applyKuttaCondition__()
+        lift_coeff = solver.getLiftCoefficient()
+        computed_lift[it] = np.array([alpha, lift_coeff])
+        print(f"Alpha: {alpha}, Lift Coefficient: {lift_coeff}")
+        print("-"*50)
+
+    write = input("Write lift coefficients to file? (y/n): ").lower()
+    if write == "y":
+        np.savetxt("./TestResults/LiftCoeff/CL" + "Circular"*solver.circle + "Elliptical"*(1 - solver.circle) +f"P{solver.P}.txt", computed_lift)
+        print("Lift coefficients written to CL" + "Circular"*solver.circle + "Elliptical"*(1 - solver.circle) +f"P{solver.P}.txt")
+    else:
+        print("Lift coefficients not written to file.")
+
+elif option == "4":
+    raise NotImplementedError("Lift coefficient convergence on NACA0012 airfoil not implemented yet.")
