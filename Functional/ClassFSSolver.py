@@ -503,7 +503,7 @@ class FSSolver:
 
         print("Initialization done")
         # Start main loop
-        for i in range(self.maxItFreeSurface):
+        for iteration in range(self.maxItFreeSurface):
             # Note time for start of iteration
             iteration_time = time()
 
@@ -520,7 +520,7 @@ class FSSolver:
             outfileFS.write(self.velocity)
 
             # Check solver status
-            if self.__checkStatus__(i, start_time, iteration_time):
+            if self.__checkStatus__(iteration, start_time, iteration_time):
                 break
         return None
 
