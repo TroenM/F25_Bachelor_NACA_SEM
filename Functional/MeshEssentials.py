@@ -242,14 +242,14 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
 
     return mesh
 
-def shift_surface(mesh : fd.Mesh, func_b : callable, func_a : callable) -> fd.MeshGeometry:
+def shiftSurface(mesh : fd.Mesh, func_b : fd.Function, func_a : fd.Function) -> fd.MeshGeometry:
     '''
     params
     ---
-    func_b: callable 
-        - Function before
-    func_a: callable
-        - Function after
+    etaCurrent: callable 
+        - eta of the current mesh
+    etaNext: callable
+        - eta of the outputtet mesh
     '''
     # Define p=1 functionspace
     V1 = fd.FunctionSpace(mesh, "CG", 1)

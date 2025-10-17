@@ -42,7 +42,7 @@ meshSettings = {
     "nOut": 20, # Number of external nodes on outlet boundary
     "nBed": 150, # Number of external nodes on bed boundary
     "nFS": 150, # Number of external nodes on free surface boundary
-    "nAirfoil": 300 # Number of external nodes on airfoil boundary
+    "nAirfoil": 200 # Number of external nodes on airfoil boundary
 }
 
 solverSettings = {
@@ -111,8 +111,8 @@ class FSSolver:
         self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
         self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
 
-        fs_indecies = self.V.boundary_nodes(4)
-        self.coordsFS = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[fs_indecies,:]
+        fSIndecies = self.V.boundary_nodes(4)
+        self.coordsFS = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
 
         # Output parameters
         self.outputPath = outputSettings["outputPath"]
@@ -201,17 +201,16 @@ class FSSolver:
     #=================================================================#
     #======================== Kutta Condition ========================#
     #=================================================================#
-    def __FBCS__(self) -> float: # Applies the FBCS-scheme discussed in the report
+    def __FBCS__(self, Gamma) -> float: # Applies the FBCS-scheme discussed in the report
         # Adaptive stepsize controller for Gamma described in the report
         Gammas = self.Gammas
-        c0 = copy.copy(self.c0)
-        if len(Gammas) == 1:
-            return Gammas[-1]/c0
+        c0 = self.c0
+        if not Gammas:
+            return Gamma/c0
         else:
-            a = (Gammas[-1]/c0) / Gammas[-2]
-            c0 *= (1-a)
-            self.c0 = c0
-            return Gammas[-1]/c0
+            a = (Gamma/c0) / Gammas[-1]
+            self.c0 = c0 = c0*(1-a)
+            return Gamma/c0
     
     def __computeVortexStrength__(self) -> float:
         """
@@ -301,58 +300,6 @@ class FSSolver:
 
         return phiBC, uBC
 
-    def __applyKuttaCondition__(self):
-        """
-        Applies the Kutta condition to the current velocity field
-        1. Compute vortex strength
-        2. Compute vortex field
-        3. Add vortex field to velocity field
-        4. Apply boundary correction
-        5. Check convergence
-        6. Repeat until convergence, stagnation or max iterations reached
-        """
-        t1 = time()
-        # Ensure Gammas is reset
-        self.Gammas = []
-
-        if self.writeKutta:
-            if os.path.exists(self.outputPath + "kuttaIterations"):
-                shutil.rmtree(self.outputPath + "kuttaIterations")
-
-            try:
-                os.remove(self.outputPath + "kuttaIterations.pvd")
-            except:
-                pass
-
-            outfile = fd.VTKFile(self.outputPath + "kuttaIterations.pvd")
-            self.u.rename("Velocity")
-
-        for it in range(self.maxItKutta):
-            # Compute vortex strength and correct it using FBCS
-            Gamma = self.__computeVortexStrength__()
-            self.Gammas.append(Gamma)
-            Gamma = self.__FBCS__()
-            self.Gammas[-1] = Gamma
-
-            # Compute vortex field
-            self.__computeVortex__()
-            self.u += self.vortex
-
-            # Apply boundary correction
-            phiBC, uBC = self.__boundaryCorrection__()
-            self.u += uBC
-
-            if self.writeKutta and it % self.outputIntervalKutta == 0:
-                outfile.write(self.u, time = it)
-
-            # Check convergence
-            if self.__checkKuttaConvergence__(it):
-                print(f"Kutta solver time: {np.round(time() - t1, 4)} s")
-                print("-"*50 + "\n")
-                break
-
-        return None
-
     def __checkKuttaConvergence__(self, it):
         """
         Checks whether the Kutta condition has converged
@@ -384,14 +331,152 @@ class FSSolver:
         lift_coeff = lift / (1/2 * self.rho * V_inf**2)
         return lift_coeff
 
+    def __applyKuttaCondition__(self):
+        """
+        Applies the Kutta condition to the current velocity field
+        1. Compute vortex strength
+        2. Compute vortex field
+        3. Add vortex field to velocity field
+        4. Apply boundary correction
+        5. Check convergence
+        6. Repeat until convergence, stagnation or max iterations reached
+        """
+        t1 = time()
+        # Ensure Gammas is reset
+        self.Gammas = []
+
+        if self.writeKutta:
+            if os.path.exists(self.outputPath + "kuttaIterations"):
+                shutil.rmtree(self.outputPath + "kuttaIterations")
+
+            try:
+                os.remove(self.outputPath + "kuttaIterations.pvd")
+            except:
+                pass
+
+            outfile = fd.VTKFile(self.outputPath + "kuttaIterations.pvd")
+            self.u.rename("Velocity")
+
+        for it in range(self.maxItKutta):
+            # Compute vortex strength and correct it using FBCS
+            Gamma = self.__computeVortexStrength__()
+            self.Gammas.append(self.__FBCS__(Gamma))
+
+            # Compute vortex field
+            self.__computeVortex__()
+            self.u += self.vortex
+
+            # Apply boundary correction
+            phiBC, uBC = self.__boundaryCorrection__()
+            self.u += uBC
+
+            if self.writeKutta and it % self.outputIntervalKutta == 0:
+                outfile.write(self.u, time = it)
+
+            # Check convergence
+            if self.__checkKuttaConvergence__(it):
+                print(f"Kutta solver time: {np.round(time() - t1, 4)} s")
+                print("-"*50 + "\n")
+                break
+
+        return None
+    
     #=================================================================#
     #======================== Free Surface Update ====================#
     #=================================================================#
-
-    def __weak1dFsEq__(self):
+    def __initPhiTilde__(self, phi) -> None:
+        self.phiTilde = phi.at(self.coordsFS)
+        return None
+    
+    def __initEta__(self):
+        self.eta = self.coordsFS[:,1]
         return None
 
+    def __weak1dFsEq__(self):
+
+
+        self.phiTilde = asd
+        self.newEta = asd
+        self.residuals = asd
+        return None
+    
+    def __shiftSurface__(self):
+
+        ########## Denne function er forget med chatten og har ingen hold i virkeligheden ##########
+        mesh = self.mesh
+        x, y = fd.SpatialCoordinate(mesh)
+        V = self.V
+        W = self.W
+
+        # Define maximal y value of coordinates on airfoil 
+        coords = mesh.coordinates.dat.data
+        naca_idx = V.boundary_nodes(5)
+        M = fd.Constant(np.max(coords[naca_idx][:,1])) 
+        
+        # scaling function
+        s = fd.interpolate(self.newEta/self.eta, V)
+
+        # Shift only coords above M
+        y_new = fd.conditional(fd.ge(y, M), M + s*(y-M), y)
+
+        # Set new coordinates of mesh
+        X_new = fd.project(fd.as_vector([x, y_new]), W)
+        mesh.coordinates.assign(X_new)
+
+        self.mesh.coordinates.dat.data[:] = mesh.coordinates.dat.data
+        return None
+
+    def __updateMeshData__(self):
+        # Update mesh
+        self.__shiftSurface__(self.fd_mesh, self.eta, self.newEta)
+
+        # Change the firedrake function spaces to match the new mesh
+        self.V = fd.FunctionSpace(self.fd_mesh, "CG", self.P)
+        self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
+
+        # Find points at free surface
+        fSIndecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
+        self.coordsFS = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
+
+        # Update eta
+        self.eta = self.newEta
+        return None
+    
+    def __checkStatus__(self, i : int):
+        return False
+    
     def solve(self):
+        # Initialize FS solver by applying kutta condition to a standard poisson solve
+        phi, u = self.__poissonSolver__(NBC = [(i, self.V_inf) for i in [1,2]])
+        self.u = u
+        self.__applyKuttaCondition__()
+
+        # Initialize phi tilde and eta
+        self.__initPhiTilde__(phi)
+        self.__initEta__()
+
+        print("Initialization done")
+
+        # Start main loop
+        for i in range(self.maxItFreeSurface):
+            # Calculate free surface
+            try:
+                self.__weak1dFsEq__()
+            except:
+                raise BrokenPipeError("Free surface equations did not konverge")
+            
+            # Update mesh data
+            self.__updateMeshData__()
+
+            # Impose Kutta on new mesh
+            phi, u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]], DBC=[(4, self.phiTilde)])
+
+            # Save result
+            self.velocityOutput.write(self.velocity)
+
+            # Check solver status
+            if self.__checkStatus__(i):
+                break
         return None
 
     #=================================================================#
