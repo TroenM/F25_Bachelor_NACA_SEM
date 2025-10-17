@@ -67,7 +67,6 @@ class FSSolver:
     #==================================================================#
     #======================== Initialization ==========================#
     #==================================================================#
-
     def __init__(self, hypParams: dict, meshSettings: dict, solverSettings: dict, outputSettings: dict) -> None:
         # Hyperparameters
         time_init = time()
@@ -130,7 +129,6 @@ class FSSolver:
         print("-"*50 + "\n")
         return None
     
-
     def __normaliseVector__(self, vector : np.ndarray) -> np.ndarray:
         if type(vector) != np.ndarray or np.linalg.norm(vector) == 0:
             raise TypeError("The vector has to be a numpy array of length more than 0")
@@ -172,7 +170,6 @@ class FSSolver:
     #=================================================================#
     #======================== Poisson Solver =========================#
     #=================================================================#
-
     def __poissonSolver__(self, rhs = fd.Constant(0), DBC = [], NBC = []):
         v = fd.TestFunction(self.V)
         phi = fd.TrialFunction(self.V)
@@ -384,6 +381,20 @@ class FSSolver:
     #=================================================================#
     #======================== Free Surface Update ====================#
     #=================================================================#
+    def __saveOutputPath__(self) -> None:
+        if self.writeFreeSurface:
+            if os.path.exists(self.outputPath + "FSIterations"):
+                shutil.rmtree(self.outputPath + "FSIterations")
+
+            try:
+                os.remove(self.outputPath + "FSIterations.pvd")
+            except:
+                pass
+
+            outfileFS = fd.VTKFile(self.outputPath + "FSIterations.pvd")
+            self.u.rename("Velocity")
+            return outfileFS
+
     def __initPhiTilde__(self, phi) -> None:
         self.phiTilde = phi.at(self.coordsFS)
         return None
@@ -401,26 +412,27 @@ class FSSolver:
         return None
     
     def __shiftSurface__(self):
-
-        ########## Denne function er forget med chatten og har ingen hold i virkeligheden ##########
+        from firedrake.__future__ import interpolate
         mesh = self.mesh
         x, y = fd.SpatialCoordinate(mesh)
+        V1 = fd.FunctionSpace(mesh, "CG", 1)
+        W1 = fd.VectorFunctionSpace(mesh, "CG", 1)
         V = self.V
         W = self.W
 
         # Define maximal y value of coordinates on airfoil 
         coords = mesh.coordinates.dat.data
-        naca_idx = V.boundary_nodes(5)
+        naca_idx = V1.boundary_nodes(5)
         M = fd.Constant(np.max(coords[naca_idx][:,1])) 
         
         # scaling function
-        s = fd.interpolate(self.newEta/self.eta, V)
+        s = interpolate(self.newEta/self.eta, V)
 
         # Shift only coords above M
         y_new = fd.conditional(fd.ge(y, M), M + s*(y-M), y)
 
         # Set new coordinates of mesh
-        X_new = fd.project(fd.as_vector([x, y_new]), W)
+        X_new = fd.project(fd.as_vector([x, y_new]), W1)
         mesh.coordinates.assign(X_new)
 
         self.mesh.coordinates.dat.data[:] = mesh.coordinates.dat.data
@@ -428,24 +440,58 @@ class FSSolver:
 
     def __updateMeshData__(self):
         # Update mesh
-        self.__shiftSurface__(self.fd_mesh, self.eta, self.newEta)
+        self.__shiftSurface__()
 
         # Change the firedrake function spaces to match the new mesh
-        self.V = fd.FunctionSpace(self.fd_mesh, "CG", self.P)
-        self.W = fd.VectorFunctionSpace(self.fd_mesh, "CG", self.P)
+        self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
+        self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
 
         # Find points at free surface
-        fSIndecies = self.V.boundary_nodes(self.kwargs.get("fs", 4))
+        fSIndecies = self.V.boundary_nodes(4)
         self.coordsFS = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
 
         # Update eta
         self.eta = self.newEta
         return None
     
-    def __checkStatus__(self, i : int):
-        return False
+    def __checkStatus__(self, i : int, start_time, iteration_time):
+        if self.residuals < self.kwargs.get("fs_rtol", 1e-5):
+            print("\n ============================")
+            print(" Fs converged")
+            print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
+            print(f" Total solve time: {time() - start_time}")
+            print("============================\n")
+            return True
+        # If divergence kriteria is met print relevant information
+        elif self.residuals > 10000:
+            print("\n ============================")
+            print(" Fs diverged")
+            print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
+            print(f" Total solve time: {time() - start_time}")
+            print("============================\n")
+            return True
+        # If the maximum amout of iterations is done print relevant information
+        elif iter >= self.kwargs.get("max_iter_fs", 10) - 1:
+            print("\n ============================")
+            print(" Fs did not converge")
+            print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
+            print(f" Total solve time: {time() - start_time}")
+            print("============================\n")
+            return True
+        # If none of the above, print relevant information about solver status
+        else:
+            print(f"\t iteration: {i+1}")
+            print(f"\t residual norm {self.residuals}")
+            print(f"\t iteration time: {time() - iteration_time}\n")
+            return False 
     
     def solve(self):
+        # Start time
+        start_time = time()
+
+        # Saving output path
+        outfileFS = self.__saveOutputPath__
+        
         # Initialize FS solver by applying kutta condition to a standard poisson solve
         phi, u = self.__poissonSolver__(NBC = [(i, self.V_inf) for i in [1,2]])
         self.u = u
@@ -456,14 +502,13 @@ class FSSolver:
         self.__initEta__()
 
         print("Initialization done")
-
         # Start main loop
         for i in range(self.maxItFreeSurface):
+            # Note time for start of iteration
+            iteration_time = time()
+
             # Calculate free surface
-            try:
-                self.__weak1dFsEq__()
-            except:
-                raise BrokenPipeError("Free surface equations did not konverge")
+            self.__weak1dFsEq__()
             
             # Update mesh data
             self.__updateMeshData__()
@@ -472,10 +517,10 @@ class FSSolver:
             phi, u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]], DBC=[(4, self.phiTilde)])
 
             # Save result
-            self.velocityOutput.write(self.velocity)
+            outfileFS.write(self.velocity)
 
             # Check solver status
-            if self.__checkStatus__(i):
+            if self.__checkStatus__(i, start_time, iteration_time):
                 break
         return None
 
@@ -518,6 +563,14 @@ class FSSolver:
 
 if __name__ == "__main__":
     solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
+
+    #changing mesh (Hopefully)
+    solver.eta = fd.Constant(4)
+    x, y = fd.SpatialCoordinate(solver.mesh)
+    solver.newEta = 1*fd.sin(x)*x/7 + fd.Constant(8)
+    solver.__updateMeshData__()
+
+
     phi, u = solver.__poissonSolver__(NBC = [(i, solver.V_inf) for i in range(1, 3)])
     solver.u = u
     solver.__applyKuttaCondition__()
