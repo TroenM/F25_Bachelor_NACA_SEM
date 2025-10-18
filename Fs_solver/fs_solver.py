@@ -402,11 +402,11 @@ if __name__ == "__main__":
             "V_inf": 1, 
             "g_div": 7, 
             "write":True,
-            "n_airfoil": 501,
-            "n_fs": 350,
-            "n_bed": 120,
-            "n_in": 30,
-            "n_out": 30,
+            "n_airfoil": 200,
+            "n_fs": 150,
+            "n_bed": 150,
+            "n_in": 20,
+            "n_out": 20,
             "rtol": 1e-8,
             "a":1, "b":1,
             "max_iter": 50,
@@ -418,7 +418,7 @@ if __name__ == "__main__":
             "dt": 5e-3,
             "damp":50}
     
-    FS = FsSolver("0012", alpha = 5, P=2, kwargs = kwargs)
+    FS = FsSolver("0012", alpha = 10, P=3, kwargs = kwargs)
     FS.solve()
     # etas = np.array(FS.etas)
     # phis = np.array(FS.phis)

@@ -36,8 +36,8 @@ meshSettings = {
     "alpha_deg": 10, # Angle of attack in degrees
     "centerOfAirfoil": (0.5, 0), # Center of airfoil (x,y)
     "circle": True, # Whether to use a circular or elliptical vortex
-    "xlim": (-7, 13), # x-limits of the domain
-    "ylim": (-4, 4), # y-limits of the domain
+    "xlim": (-8, 27), # x-limits of the domain
+    "ylim": (-4, 1), # y-limits of the domain
     "nIn": 20, # Number of external nodes on inlet boundary 
     "nOut": 20, # Number of external nodes on outlet boundary
     "nBed": 150, # Number of external nodes on bed boundary
@@ -47,7 +47,7 @@ meshSettings = {
 
 solverSettings = {
     "maxItKutta": 50,
-    "tolKutta": 1e-10,
+    "tolKutta": 1e-6,
     "maxItFreeSurface": 50,
     "tolFreeSurface": 1e-6,
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
@@ -394,9 +394,17 @@ class FSSolver:
             outfileFS = fd.VTKFile(self.outputPath + "FSIterations.pvd")
             self.u.rename("Velocity")
             return outfileFS
+    
+    def __doKuttaSolve__(self) -> None:
+        try:
+            self.phi, self.u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]], DBC=[(4, self.phiTilde)])
+        except:
+            self.phi, self.u = self.__poissonSolver__(NBC = [(i, self.V_inf) for i in [1,2]])
+        self.__applyKuttaCondition__()
+        return None
 
-    def __initPhiTilde__(self, phi) -> None:
-        self.phiTilde = phi.at(self.coordsFS)
+    def __initPhiTilde__(self) -> None:
+        self.phiTilde = self.phi.at(self.coordsFS)
         return None
     
     def __initEta__(self):
@@ -420,7 +428,7 @@ class FSSolver:
         V = self.V
         W = self.W
 
-        # Define maximal y value of coordinates on airfoil 
+        # Define maximal y value of coordinates on airfoil (M)
         coords = mesh.coordinates.dat.data
         naca_idx = V1.boundary_nodes(5)
         M = fd.Constant(np.max(coords[naca_idx][:,1])) 
@@ -456,49 +464,48 @@ class FSSolver:
     
     def __checkStatus__(self, i : int, start_time, iteration_time):
         if self.residuals < self.kwargs.get("fs_rtol", 1e-5):
-            print("\n ============================")
+            print("\n" + "="*50)
             print(" Fs converged")
             print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
             print(f" Total solve time: {time() - start_time}")
-            print("============================\n")
             return True
         # If divergence kriteria is met print relevant information
         elif self.residuals > 10000:
-            print("\n ============================")
             print(" Fs diverged")
             print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
             print(f" Total solve time: {time() - start_time}")
-            print("============================\n")
+            print("-"*50 + "\n")
             return True
         # If the maximum amout of iterations is done print relevant information
         elif iter >= self.kwargs.get("max_iter_fs", 10) - 1:
-            print("\n ============================")
             print(" Fs did not converge")
             print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
             print(f" Total solve time: {time() - start_time}")
-            print("============================\n")
+            print("-"*50 + "\n")
             return True
         # If none of the above, print relevant information about solver status
         else:
             print(f"\t iteration: {i+1}")
             print(f"\t residual norm {self.residuals}")
             print(f"\t iteration time: {time() - iteration_time}\n")
+            print("-"*50 + "\n")
             return False 
     
     def solve(self):
         # Start time
         start_time = time()
 
+        # Stop kutta condition from writing
+        self.writeKutta = False
+
         # Saving output path
         outfileFS = self.__saveOutputPath__
         
         # Initialize FS solver by applying kutta condition to a standard poisson solve
-        phi, u = self.__poissonSolver__(NBC = [(i, self.V_inf) for i in [1,2]])
-        self.u = u
-        self.__applyKuttaCondition__()
+        self.__doKuttaSolve__()
 
         # Initialize phi tilde and eta
-        self.__initPhiTilde__(phi)
+        self.__initPhiTilde__()
         self.__initEta__()
 
         print("Initialization done")
@@ -513,11 +520,11 @@ class FSSolver:
             # Update mesh data
             self.__updateMeshData__()
 
-            # Impose Kutta on new mesh
-            phi, u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]], DBC=[(4, self.phiTilde)])
+            # Apply kutta condition to a poisson solve on the new mesh
+            self.__doKuttaSolve__()
 
             # Save result
-            outfileFS.write(self.velocity)
+            outfileFS.write(self.u)
 
             # Check solver status
             if self.__checkStatus__(iteration, start_time, iteration_time):
@@ -563,7 +570,6 @@ class FSSolver:
 
 if __name__ == "__main__":
     solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
-
     #changing mesh (Hopefully)
     solver.eta = fd.Constant(4)
     x, y = fd.SpatialCoordinate(solver.mesh)
@@ -574,6 +580,8 @@ if __name__ == "__main__":
     phi, u = solver.__poissonSolver__(NBC = [(i, solver.V_inf) for i in range(1, 3)])
     solver.u = u
     solver.__applyKuttaCondition__()
+    
+    # solver.solve()
 
 
 
