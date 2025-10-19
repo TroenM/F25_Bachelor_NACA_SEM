@@ -27,7 +27,7 @@ IMPORTANT: The boundaries should be indexed as follows:
 
 hypParams = {
     "P": 3, # Polynomial degree
-    "V_inf": fd.as_vector((10.0, 0.0)), # Free stream velocity
+    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
 
@@ -36,12 +36,14 @@ meshSettings = {
     "alpha_deg": 10, # Angle of attack in degrees
     "centerOfAirfoil": (0.5, 0), # Center of airfoil (x,y)
     "circle": True, # Whether to use a circular or elliptical vortex
+
     "xlim": (-8, 27), # x-limits of the domain
     "ylim": (-4, 1), # y-limits of the domain
+
     "nIn": 20, # Number of external nodes on inlet boundary 
     "nOut": 20, # Number of external nodes on outlet boundary
     "nBed": 150, # Number of external nodes on bed boundary
-    "nFS": 150, # Number of external nodes on free surface boundary
+    "nFS": 300, # Number of external nodes on free surface boundary
     "nAirfoil": 200 # Number of external nodes on airfoil boundary
 }
 
@@ -50,8 +52,12 @@ solverSettings = {
     "tolKutta": 1e-6,
     "maxItFreeSurface": 50,
     "tolFreeSurface": 1e-6,
+
+    "maxItWeak1d": 5000, # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
+    "tolWeak1d": 1e-3, # Tolerance for free surface SNES solver
+
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 1e-3 # Time step for free surface update
+    "dt": 1e-4, # Time step for free surface update
 }
 
 outputSettings = {
@@ -101,6 +107,9 @@ class FSSolver:
         self.tolKutta = solverSettings["tolKutta"]
         self.maxItFreeSurface = solverSettings["maxItFreeSurface"]
         self.tolFreeSurface = solverSettings["tolFreeSurface"]
+        self.tolWeak1d = solverSettings["tolWeak1d"]
+        self.maxItWeak1d = solverSettings["maxItWeak1d"]
+
         self.c0 = solverSettings["c0"]
         self.Gammas = []
         self.dt = solverSettings["dt"]
@@ -187,8 +196,11 @@ class FSSolver:
 
         phi = fd.Function(self.V) # Consider whether phi should be an input instead.
         
-        fd.solve(a == L, phi, bcs=DBCs)#, solver_parameters={"pc_type": "hypre", "pc_hypre_type": "boomeramg", "ksp_rtol": 1e-10})
-        
+        if len(DBCs) == 0:
+            nullspace = fd.VectorSpaceBasis(constant=True, comm=self.V.mesh().comm)
+
+        fd.solve(a == L, phi, bcs=DBCs, nullspace=nullspace)
+
         if len(DBCs) == 0: # Normalize phi if there are no Dirichlet BCs
             phi -= np.min(phi.dat.data)
         
@@ -373,7 +385,7 @@ class FSSolver:
             # Check convergence
             if self.__checkKuttaConvergence__(it):
                 print(f"Kutta solver time: {np.round(time() - t1, 4)} s")
-                print("-"*50 + "\n")
+                print("-"*50*self.writeKutta + "\n")
                 break
 
         return None
@@ -405,6 +417,8 @@ class FSSolver:
 
     def __initPhiTilde__(self) -> None:
         self.phiTilde = self.phi.at(self.coordsFS)
+
+        self.inletValue = fd.Constant(self.phiTilde[self.coordsFS[:,0].argmin()]) # phiTilde = constant at inflow boundary
         return None
     
     def __initEta__(self):
@@ -412,11 +426,79 @@ class FSSolver:
         return None
 
     def __weak1dFsEq__(self):
+        '''
+        Solves the weak form backward Euler forumulation of the phi and eta at the free surface.
+        The equations are derived in the report.
+        '''
+
+        # Define 1D mesh along free surface
+        fsMesh = fd.IntervalMesh(len(self.coordsFS)-1, *self.xlim)
+        # Ensure nodes match the x-coordinates of free surface variables
+        fsMesh.coordinates.dat.data[:] = self.coordsFS[:,0]
+
+        # Define function spaces for eta and phiTilde
+        V_eta = fd.FunctionSpace(fsMesh, "CG", 1)
+        V_phi = fd.FunctionSpace(fsMesh, "CG", 1)
+        V_fs = V_eta*V_phi
+        fs_n1 = fd.Function(V_fs)
+        eta_n1, phi_n1 = fd.split(fs_n1)
+        v_eta, v_phi = fd.TestFunctions(V_fs)
+
+        # Define previous time step functions
+        eta_n = fd.Function(V_eta)
+        eta_n.dat.data[:] = self.eta - self.ylim[1] # Shift eta such that the bed is at y=0
+        phi_n = fd.Function(V_phi)
+        phi_n.dat.data[:] = self.phiTilde
+
+        # Initial guess for new time step
+        fs_n1.sub(0).assign(eta_n)   # eta^{n+1} initial guess
+        fs_n1.sub(1).assign(phi_n)   # phi^{n+1} initial guess
 
 
-        self.phiTilde = asd
-        self.newEta = asd
-        self.residuals = asd
+        # Define additional constants and parameters
+        dt = fd.Constant(self.dt)
+        g = fd.Constant(9.81)
+        w_n = fd.Function(V_eta)
+        w_n.dat.data[:] = np.array(self.u.at(self.coordsFS))[:,1] # Vertical velocity at free surface
+        One = fd.Constant(1)
+        point5 = fd.Constant(0.5)
+
+        # Define dampening parameters
+        xmin, xmax = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
+        xd_in = fd.Constant(-4.0)
+        xd_out = fd.Constant(20.0)
+        x = fd.SpatialCoordinate(fsMesh)[0]
+        A = fd.Constant(100)
+
+        # Dampen eta towards the "normal" height of the domain at the edges
+        eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin  - xd_in))**2, 0)*eta_n1
+        eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (xmax - xd_out))**2, 0)*eta_n1
+
+        # Define variational problem
+        a_eta = fd.inner((eta_n1 - eta_n), v_eta)*fd.dx + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx
+        L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) - w_n*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+        F_eta = a_eta - dt*fd.inner(L_eta, v_eta)*fd.dx
+
+        a_phi = fd.inner((phi_n1 - phi_n), v_phi) * fd.dx
+        L_phi = g*eta_n1 + point5*(fd.dot(phi_n1.dx(0), phi_n1.dx(0)) - (w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0))))
+        F_phi = a_phi - dt*fd.inner(L_phi, v_phi)*fd.dx
+
+        F = F_eta + F_phi
+
+        # Boundary conditions
+        DBC = []
+        DBC.append(fd.DirichletBC(V_fs.sub(0), fd.Constant(0), 1)) # eta = 0 at inflow
+        DBC.append(fd.DirichletBC(V_fs.sub(1), self.inletValue, 2)) # phiTilde = constant at outflow
+
+        # Solve variational problem
+        Jacobian = fd.derivative(F, fs_n1)
+        solver_parameters = {"snes_max_it": self.maxItWeak1d, "snes_rtol": self.tolWeak1d}
+
+        fd.solve(F == 0, fs_n1, bcs=DBC, J = Jacobian, solver_parameters=solver_parameters)
+
+        # Extract new eta and phiTilde
+        self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
+        self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
         return None
     
     def __shiftSurface__(self):
@@ -571,16 +653,15 @@ class FSSolver:
 if __name__ == "__main__":
     solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
     #changing mesh (Hopefully)
-    solver.eta = fd.Constant(4)
-    x, y = fd.SpatialCoordinate(solver.mesh)
-    solver.newEta = 1*fd.sin(x)*x/7 + fd.Constant(8)
-    solver.__updateMeshData__()
+    # solver.eta = fd.Constant(4)
+    # x, y = fd.SpatialCoordinate(solver.mesh)
+    # solver.newEta = 1*fd.sin(x)*x/7 + fd.Constant(8)
+    # solver.__updateMeshData__()
+    solver.solve()
 
 
-    phi, u = solver.__poissonSolver__(NBC = [(i, solver.V_inf) for i in range(1, 3)])
-    solver.u = u
-    solver.__applyKuttaCondition__()
-    
+
+
     # solver.solve()
 
 

@@ -3,6 +3,5 @@
 <Collection>
 <DataSet timestep="0" file="kuttaIterations/kuttaIterations_0.vtu" />
 <DataSet timestep="1" file="kuttaIterations/kuttaIterations_1.vtu" />
-<DataSet timestep="2" file="kuttaIterations/kuttaIterations_2.vtu" />
 </Collection>
 </VTKFile>
