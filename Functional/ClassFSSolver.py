@@ -465,8 +465,8 @@ class FSSolver:
 
         # Define dampening parameters
         xmin, xmax = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
-        xd_in = fd.Constant(-4.0)
-        xd_out = fd.Constant(20.0)
+        xd_in = fd.Constant(-4.0) # Missing automization ######################### LOOK AT SIMONES SCRIPT
+        xd_out = fd.Constant(20.0) # Missing automization
         x = fd.SpatialCoordinate(fsMesh)[0]
         A = fd.Constant(100)
 
