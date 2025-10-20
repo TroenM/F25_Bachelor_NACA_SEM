@@ -422,7 +422,7 @@ class FSSolver:
         return None
     
     def __initEta__(self):
-        self.eta = self.coordsFS[:,1]
+        self.eta = fd.Constant(self.ylim[1])
         return None
 
     def __weak1dFsEq__(self):
@@ -499,6 +499,10 @@ class FSSolver:
         # Extract new eta and phiTilde
         self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
         self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
+
+        '''Her skal vi have redefineret self.newEta til at være defineret på hele meshet 
+        altså self.V og ikke kun V_eta'''
+        
         return None
     
     def __shiftSurface__(self):
@@ -508,7 +512,6 @@ class FSSolver:
         V1 = fd.FunctionSpace(mesh, "CG", 1)
         W1 = fd.VectorFunctionSpace(mesh, "CG", 1)
         V = self.V
-        W = self.W
 
         # Define maximal y value of coordinates on airfoil (M)
         coords = mesh.coordinates.dat.data
@@ -516,7 +519,7 @@ class FSSolver:
         M = fd.Constant(np.max(coords[naca_idx][:,1])) 
         
         # scaling function
-        s = interpolate(self.newEta.dat.data[:] / self.eta, V)
+        s = interpolate(self.newEta / self.eta, V)
 
         # Shift only coords above M
         y_new = fd.conditional(fd.ge(y, M), M + s*(y-M), y)
@@ -652,19 +655,8 @@ class FSSolver:
 
 if __name__ == "__main__":
     solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
-    #changing mesh (Hopefully)
-    # solver.eta = fd.Constant(4)
-    # x, y = fd.SpatialCoordinate(solver.mesh)
-    # solver.newEta = 1*fd.sin(x)*x/7 + fd.Constant(8)
-    # solver.__updateMeshData__()
+
     solver.solve()
-
-
-
-
-    # solver.solve()
-
-
 
     #solver.plotVelocityField(xlim = (-2, 2), ylim = (-1, 1))
     #plt.show()
