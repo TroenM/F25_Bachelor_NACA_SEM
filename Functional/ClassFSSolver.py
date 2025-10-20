@@ -40,8 +40,8 @@ meshSettings = {
     "xlim": (-8, 27), # x-limits of the domain
     "ylim": (-4, 1), # y-limits of the domain
 
-    "nIn": 20, # Number of external nodes on inlet boundary 
-    "nOut": 20, # Number of external nodes on outlet boundary
+    "nIn": 40, # Number of external nodes on inlet boundary 
+    "nOut": 40, # Number of external nodes on outlet boundary
     "nBed": 150, # Number of external nodes on bed boundary
     "nFS": 300, # Number of external nodes on free surface boundary
     "nAirfoil": 200 # Number of external nodes on airfoil boundary
@@ -53,11 +53,11 @@ solverSettings = {
     "maxItFreeSurface": 50,
     "tolFreeSurface": 1e-6,
 
-    "maxItWeak1d": 5000, # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
-    "tolWeak1d": 1e-3, # Tolerance for free surface SNES solver
+    "maxItWeak1d": 5, # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
+    "tolWeak1d": 1e-10, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 1e-4, # Time step for free surface update
+    "dt": 1e-3, # Time step for free surface update
 }
 
 outputSettings = {
@@ -516,7 +516,7 @@ class FSSolver:
         M = fd.Constant(np.max(coords[naca_idx][:,1])) 
         
         # scaling function
-        s = interpolate(self.newEta/self.eta, V)
+        s = interpolate(self.newEta.dat.data[:] / self.eta, V)
 
         # Shift only coords above M
         y_new = fd.conditional(fd.ge(y, M), M + s*(y-M), y)
