@@ -53,8 +53,8 @@ solverSettings = {
     "maxItFreeSurface": 50,
     "tolFreeSurface": 1e-6,
 
-    "maxItWeak1d": 5, # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
-    "tolWeak1d": 1e-10, # Tolerance for free surface SNES solver
+    "maxItWeak1d": 50, # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
+    "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
     "dt": 1e-3, # Time step for free surface update
@@ -430,7 +430,6 @@ class FSSolver:
         Solves the weak form backward Euler forumulation of the phi and eta at the free surface.
         The equations are derived in the report.
         '''
-
         # Define 1D mesh along free surface
         fsMesh = fd.IntervalMesh(len(self.coordsFS)-1, *self.xlim)
         # Ensure nodes match the x-coordinates of free surface variables
@@ -500,6 +499,8 @@ class FSSolver:
         self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
         self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
 
+        self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
+
         '''Her skal vi have redefineret self.newEta til at være defineret på hele meshet 
         altså self.V og ikke kun V_eta'''
         
@@ -548,7 +549,7 @@ class FSSolver:
         return None
     
     def __checkStatus__(self, i : int, start_time, iteration_time):
-        if self.residuals < self.kwargs.get("fs_rtol", 1e-5):
+        if self.residuals < self.tolFreeSurface:
             print("\n" + "="*50)
             print(" Fs converged")
             print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
@@ -562,7 +563,7 @@ class FSSolver:
             print("-"*50 + "\n")
             return True
         # If the maximum amout of iterations is done print relevant information
-        elif iter >= self.kwargs.get("max_iter_fs", 10) - 1:
+        elif iter >= self.maxItFreeSurface - 1:
             print(" Fs did not converge")
             print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
             print(f" Total solve time: {time() - start_time}")
@@ -582,12 +583,12 @@ class FSSolver:
 
         # Stop kutta condition from writing
         self.writeKutta = False
-
-        # Saving output path
-        outfileFS = self.__saveOutputPath__
         
         # Initialize FS solver by applying kutta condition to a standard poisson solve
         self.__doKuttaSolve__()
+
+        # Saving output path
+        outfileFS = self.__saveOutputPath__()
 
         # Initialize phi tilde and eta
         self.__initPhiTilde__()
@@ -655,7 +656,6 @@ class FSSolver:
 
 if __name__ == "__main__":
     solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
-
     solver.solve()
 
     #solver.plotVelocityField(xlim = (-2, 2), ylim = (-1, 1))
