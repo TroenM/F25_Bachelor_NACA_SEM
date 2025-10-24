@@ -234,6 +234,9 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
         gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(lines), coef=prog_airfoil)
 
     # ==================== Meshing and writing model ====================
+    gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    gmsh.model.mesh.recombine()
+    gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)
     gmsh.model.mesh.generate(2)
 
     if kwargs.get('test', False):
@@ -1161,8 +1164,8 @@ class FsSolver:
             # Start iteration time
             iter_time = time()
 
-            if i%100 == 0 and self.dt > 1.25e-4:
-                self.dt *= 0.5
+            if i%100 == 0 and self.dt > 2e-4:
+                self.dt *= 0.8
             
             # Update eta and dirichlet boundary condition and notify if the dolve does not converge
             try:
@@ -1378,29 +1381,29 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-12,27], 
-            "xd_in": -10, "xd_out": 25,
+    kwargs = {"ylim":[-4,1], "xlim":[-7,12], 
+            "xd_in": -5, "xd_out": 10,
 
             "write":True, "save_results": True,
-            "V_inf": 10, 
+            "V_inf": 5, 
             "g_div": 7, 
             "write":True,
-            "n_airfoil": 350,
-            "n_fs": 520,
-            "n_bed": 120,
-            "n_in": 30,
-            "n_out": 30,
+            "n_airfoil": 100,
+            "n_fs": 300,
+            "n_bed": 50,
+            "n_in": 20,
+            "n_out": 20,
             "rtol": 1e-8,
             "max_iter": 100,
             "dot_tol": 1e-4,
 
-            # "a": 1,
-            # "b": 1,
+            "a": 1,
+            "b": 1,
 
             "fs_rtol": 1e-8,
             "max_iter_fs":10000,
             
-            "dt": 2e-3,
+            "dt": 1e-3,
             "damp":100}
     
     FS = FsSolver("0012", alpha = 3, P=3, kwargs = kwargs)
