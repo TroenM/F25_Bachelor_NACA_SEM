@@ -234,9 +234,9 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
         gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(lines), coef=prog_airfoil)
 
     # ==================== Meshing and writing model ====================
-    gmsh.option.setNumber("Mesh.RecombineAll", 1)
-    gmsh.model.mesh.recombine()
-    gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)
+    # gmsh.option.setNumber("Mesh.RecombineAll", 1)
+    # gmsh.model.mesh.recombine()
+    # gmsh.option.setNumber("Mesh.SubdivisionAlgorithm", 1)
     gmsh.model.mesh.generate(2)
 
     if kwargs.get('test', False):
@@ -1381,18 +1381,18 @@ class FsSolver:
 
 
 if __name__ == "__main__":
-    kwargs = {"ylim":[-4,1], "xlim":[-7,12], 
-            "xd_in": -5, "xd_out": 10,
+    kwargs = {"ylim":[-4,1], "xlim":[-8,27], 
+            "xd_in": -6, "xd_out": 20,
 
             "write":True, "save_results": True,
             "V_inf": 5, 
             "g_div": 7, 
             "write":True,
-            "n_airfoil": 100,
+            "n_airfoil": 200,
             "n_fs": 300,
-            "n_bed": 50,
-            "n_in": 20,
-            "n_out": 20,
+            "n_bed": 150,
+            "n_in": 40,
+            "n_out": 40,
             "rtol": 1e-8,
             "max_iter": 100,
             "dot_tol": 1e-4,

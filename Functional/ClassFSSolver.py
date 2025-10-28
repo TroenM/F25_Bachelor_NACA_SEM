@@ -26,7 +26,7 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 3, # Polynomial degree
+    "P": 1, # Polynomial degree
     "V_inf": fd.as_vector((10, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
@@ -50,7 +50,7 @@ meshSettings = {
 solverSettings = {
     "maxItKutta": 50,
     "tolKutta": 1e-6,
-    "maxItFreeSurface": 50,
+    "maxItFreeSurface": 1,
     "tolFreeSurface": 1e-6,
 
     "maxItWeak1d": 500, # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
@@ -536,13 +536,12 @@ class FSSolver:
         return np.interp(xi, xs, ys, left=ys[0], right=ys[-1])
   
 
-    def __shiftSurface__(self):
+    # def __shiftSurface__(self):
         from firedrake.__future__ import interpolate
         mesh = self.mesh
         x, y = fd.SpatialCoordinate(mesh)
         V1 = fd.FunctionSpace(mesh, "CG", 1)
         W1 = fd.VectorFunctionSpace(mesh, "CG", 1)
-        V = self.V
 
         # Define maximal y value of coordinates on airfoil (M)
         coords = mesh.coordinates.dat.data
@@ -570,9 +569,35 @@ class FSSolver:
         self.mesh.coordinates.dat.data[:] = mesh.coordinates.dat.data
         return None
     
+    def __shiftSurface__(self):
+        V1 = fd.FunctionSpace(self.mesh, "CG", 1)
+
+        coords = self.mesh.coordinates.dat.data
+        naca_idx = V1.boundary_nodes(5)
+        M = np.max(coords[naca_idx][:, 1])
+
+        # mask points above the airfoil surface
+        coordMask = coords[:, 1] > M
+        x_2d = coords[coordMask, 0]
+
+        # fsMesh x-coordinates sorted for interpolation
+        x_1d = self.fsMesh.coordinates.dat.data_ro
+        order = np.argsort(x_1d)
+        x_1d_sorted = x_1d[order]
+
+        etaSorted = self.eta.dat.data_ro[order]
+        newEtaSorted = self.newEta.dat.data_ro[order]
+
+        eta = np.interp(x_2d, x_1d_sorted, etaSorted)
+        newEta = np.interp(x_2d, x_1d_sorted, newEtaSorted)
+
+        coords[coordMask, 1] = M + (newEta - M) / (eta - M) * (coords[coordMask, 1] - M)
+        self.mesh.coordinates.dat.data[:] = coords
+        return None
 
     def __updateMeshData__(self):
         # Update mesh
+        self.newEta.dat.data[:] = self.fsMesh.coordinates.dat.data_ro[:] # For testing purposes
         self.__shiftSurface__()
 
         # Change the firedrake function spaces to match the new mesh
@@ -617,7 +642,7 @@ class FSSolver:
             print(f"\t iteration time: {time() - iteration_time}\n")
             print("-"*50 + "\n")
             return False 
-    
+
     def solve(self):
         # Start time
         start_time = time()
@@ -643,6 +668,8 @@ class FSSolver:
 
             # Calculate free surface
             self.__weak1dFsEq__()
+            # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1))
+            # self.residuals = np.array([0])
             
             # Update mesh data
             self.__updateMeshData__()
