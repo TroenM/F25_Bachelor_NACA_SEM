@@ -26,7 +26,7 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 1, # Polynomial degree
+    "P": 3, # Polynomial degree
     "V_inf": fd.as_vector((10, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
@@ -50,7 +50,7 @@ meshSettings = {
 solverSettings = {
     "maxItKutta": 50,
     "tolKutta": 1e-6,
-    "maxItFreeSurface": 1,
+    "maxItFreeSurface": 25,
     "tolFreeSurface": 1e-6,
 
     "maxItWeak1d": 500, # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
@@ -97,6 +97,7 @@ class FSSolver:
         # Computed mesh parameters
         self.mesh = naca_mesh(self.airfoilNumber, np.rad2deg(self.alpha), self.xlim, self.ylim, center_of_airfoil=self.centerOfAirfoil,
                               n_in=self.nIn, n_out=self.nOut, n_bed=self.nBed, n_fs=self.nFS, n_airfoil=self.nAirfoil)
+        # self.mesh = fd.UnitSquareMesh(100, 100)  # REMOVE LATER --- IGNORE ---
         self.a = 1
         self.b = 1 if self.circle else int(self.airfoilNumber[2:])/100
 
@@ -126,6 +127,7 @@ class FSSolver:
         # Ensure nodes match the x-coordinates of free surface variables
         self.fsMesh.coordinates.dat.data[:] = self.coordsFS[:,0]
 
+
         # Output parameters
         self.outputPath = outputSettings["outputPath"]
         self.writeKutta = outputSettings["writeKutta"]
@@ -133,8 +135,8 @@ class FSSolver:
         self.outputIntervalKutta = outputSettings["outputIntervalKutta"]
         self.outputIntervalFS = outputSettings["outputIntervalFS"]
 
-        self.etas = np.zeros((self.maxItFreeSurface, len(self.coordsFS)), dtype=np.float32)
-        self.phis = np.zeros((self.maxItFreeSurface, len(self.coordsFS)), dtype=np.float32)
+        self.etas = np.zeros((self.maxItFreeSurface, len(self.coordsFS)), dtype=np.float64)
+        self.phis = np.zeros((self.maxItFreeSurface, len(self.coordsFS)), dtype=np.float64)
         self.coordsFS_array = np.zeros((self.maxItFreeSurface, len(self.coordsFS)))
         self.residual_array = np.zeros((self.maxItFreeSurface, 2))
 
@@ -207,8 +209,9 @@ class FSSolver:
         
         if len(DBCs) == 0:
             nullspace = fd.VectorSpaceBasis(constant=True, comm=self.V.mesh().comm)
-
-        fd.solve(a == L, phi, bcs=DBCs, nullspace=nullspace)
+            fd.solve(a == L, phi, bcs=DBCs, nullspace=nullspace)
+        else:
+            fd.solve(a == L, phi, bcs=DBCs)
 
         if len(DBCs) == 0: # Normalize phi if there are no Dirichlet BCs
             phi -= np.min(phi.dat.data)
@@ -595,9 +598,10 @@ class FSSolver:
         self.mesh.coordinates.dat.data[:] = coords
         return None
 
+
     def __updateMeshData__(self):
         # Update mesh
-        self.newEta.dat.data[:] = self.fsMesh.coordinates.dat.data_ro[:] # For testing purposes
+        # self.newEta.dat.data[:] = self.fsMesh.coordinates.dat.data_ro[:] # Ensure newEta matches fsMesh coordinates
         self.__shiftSurface__()
 
         # Change the firedrake function spaces to match the new mesh
@@ -668,10 +672,10 @@ class FSSolver:
 
             # Calculate free surface
             self.__weak1dFsEq__()
-            # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1))
-            # self.residuals = np.array([0])
             
             # Update mesh data
+            # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1)) # ONLY FOR TESTING
+            # self.residuals = fd.norm(self.u) # ONLY FOR TESTING
             self.__updateMeshData__()
 
             # Apply kutta condition to a poisson solve on the new mesh
