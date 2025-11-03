@@ -26,26 +26,49 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 3, # Polynomial degree
+    "P": 1, # Polynomial degree
     "V_inf": fd.as_vector((10, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
 
+# meshSettings = {
+    # "airfoilNumber": "0012", # NACA airfoil number
+    # "alpha_deg": 5, # Angle of attack in degrees
+    # "centerOfAirfoil": (0.5, 0), # Center of airfoil (x,y)
+    # "circle": True, # Whether to use a circular or elliptical vortex
+# 
+    # "xlim": (-8, 27), # x-limits of the domain
+    # "ylim": (-4, 1), # y-limits of the domain
+# 
+    # "nIn": 40, # Number of external nodes on inlet boundary 
+    # "nOut": 40, # Number of external nodes on outlet boundary
+    # "nBed": 150, # Number of external nodes on bed boundary
+    # "nFS": 2500, # Number of external nodes on free surface boundary
+    # "nAirfoil": 200 # Number of external nodes on airfoil boundary
+# }
+
 meshSettings = {
-    "airfoilNumber": "0012", # NACA airfoil number
-    "alpha_deg": 5, # Angle of attack in degrees
-    "centerOfAirfoil": (0.5, 0), # Center of airfoil (x,y)
-    "circle": True, # Whether to use a circular or elliptical vortex
+    "airfoilNumber": "0012",
+    "alpha_deg": 5,
+    "circle": True,
 
-    "xlim": (-8, 27), # x-limits of the domain
-    "ylim": (-4, 1), # y-limits of the domain
+    "xlim": (-8,27),
+    "y_bed": -4,
 
-    "nIn": 40, # Number of external nodes on inlet boundary 
-    "nOut": 40, # Number of external nodes on outlet boundary
-    "nBed": 150, # Number of external nodes on bed boundary
-    "nFS": 300, # Number of external nodes on free surface boundary
-    "nAirfoil": 200 # Number of external nodes on airfoil boundary
-}
+    "scale": 1,
+    
+    "h": 1,
+    "interface_ratio": 10,
+    "nAirfoil": 100,
+    "centerOfAirfoil": (0,0.5),
+
+    "nFS": 300,
+    "nUpperSides": 20,
+    "nLowerInlet": 20,
+    "nLowerOutlet": 20,
+    "nBed": 100,
+    "test": True
+    }
 
 solverSettings = {
     "maxItKutta": 50,
@@ -87,17 +110,14 @@ class FSSolver:
         self.alpha = np.deg2rad(meshSettings["alpha_deg"])
         self.circle = meshSettings["circle"]
         self.xlim = meshSettings["xlim"]
-        self.ylim = meshSettings["ylim"]
-        self.nIn = meshSettings["nIn"]
-        self.nOut = meshSettings["nOut"]
-        self.nBed = meshSettings["nBed"]
-        self.nFS = meshSettings["nFS"]
+        # self.ylim = meshSettings["ylim"]
+        self.nUpperSides = meshSettings["nUpperSides"]
+
+        self.yBed = meshSettings["nBed"]
         self.nAirfoil = meshSettings["nAirfoil"]
 
         # Computed mesh parameters
-        self.mesh = naca_mesh(self.airfoilNumber, np.rad2deg(self.alpha), self.xlim, self.ylim, center_of_airfoil=self.centerOfAirfoil,
-                              n_in=self.nIn, n_out=self.nOut, n_bed=self.nBed, n_fs=self.nFS, n_airfoil=self.nAirfoil)
-        # self.mesh = fd.UnitSquareMesh(100, 100)  # REMOVE LATER --- IGNORE ---
+        self.mesh, self.yInterface, self.ylim = createFSMesh(self.airfoilNumber, np.rad2deg(self.alpha), meshSettings)
         self.a = 1
         self.b = 1 if self.circle else int(self.airfoilNumber[2:])/100
 
@@ -577,19 +597,19 @@ class FSSolver:
 
         coords = self.mesh.coordinates.dat.data
         naca_idx = V1.boundary_nodes(5)
-        M = np.max(coords[naca_idx][:, 1])
+        M = self.yInterface
 
         # mask points above the airfoil surface
         coordMask = coords[:, 1] > M
         x_2d = coords[coordMask, 0]
 
         # fsMesh x-coordinates sorted for interpolation
-        x_1d = self.fsMesh.coordinates.dat.data_ro
+        x_1d = coords[V1.boundary_nodes(4),0]
         order = np.argsort(x_1d)
         x_1d_sorted = x_1d[order]
 
-        etaSorted = self.eta.dat.data_ro[order]
-        newEtaSorted = self.newEta.dat.data_ro[order]
+        etaSorted = np.array(self.eta.at(x_1d))[order]
+        newEtaSorted = np.array(self.newEta.at(x_1d))[order]
 
         eta = np.interp(x_2d, x_1d_sorted, etaSorted)
         newEta = np.interp(x_2d, x_1d_sorted, newEtaSorted)
@@ -601,7 +621,9 @@ class FSSolver:
 
     def __updateMeshData__(self):
         # Update mesh
-        # self.newEta.dat.data[:] = self.fsMesh.coordinates.dat.data_ro[:] # Ensure newEta matches fsMesh coordinates
+        # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1)) # ONLY FOR TESTING
+        # self.residuals = fd.norm(self.u) # ONLY FOR TESTING
+        # self.newEta.dat.data[:] = np.sin(self.fsMesh.coordinates.dat.data_ro[:]/(8+27))/10 # Ensure newEta matches fsMesh coordinates
         self.__shiftSurface__()
 
         # Change the firedrake function spaces to match the new mesh
@@ -674,8 +696,6 @@ class FSSolver:
             self.__weak1dFsEq__()
             
             # Update mesh data
-            # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1)) # ONLY FOR TESTING
-            # self.residuals = fd.norm(self.u) # ONLY FOR TESTING
             self.__updateMeshData__()
 
             # Apply kutta condition to a poisson solve on the new mesh
@@ -689,42 +709,6 @@ class FSSolver:
             if self.__checkStatus__(iteration, start_time, iteration_time):
                 break
         return None
-
-    #=================================================================#
-    #====================== Plotting Tools ===========================#
-    #=================================================================#
-
-    def plotVelocityField(self, xlim = None, ylim = None):
-        fig, ax = plt.subplots()
-        
-        # Plot domain boundaries
-        for i in range(1, 5):
-            boundaryNodes = self.V.boundary_nodes(i)
-            coords = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[boundaryNodes,:]
-            ax.plot(coords[:,0], coords[:,1], 'k-')
-        
-        # plot airfoil
-        airfoilCoords = naca_4digit(self.airfoilNumber, self.nAirfoil, np.rad2deg(self.alpha), self.centerOfAirfoil)
-        ax.plot(airfoilCoords[:,0], airfoilCoords[:,1], 'k-')
-
-        # Plot quiver vPerp and velocity at TE
-        ax.quiver(self.pointAtTE[0], self.pointAtTE[1], self.vPerp[0], self.vPerp[1], color='r', scale=10, label='vPerp at TE')
-        velocityAtTE = self.u.at(self.pointAtTE)
-        ax.quiver(self.pointAtTE[0], self.pointAtTE[1], velocityAtTE[0], velocityAtTE[1], color='b', scale=10, label='Velocity at TE')
-
-        # p1 = airfoilCoords[1]
-        # pn = airfoilCoords[-1]
-        # v1 = (self.TE - p1)
-        # vn = (self.TE - pn)
-        # ax.quiver(p1[0], p1[1], v1[0], v1[1], color='g', scale=1e-2, label='v1 at TE')
-        # ax.quiver(pn[0], pn[1], vn[0], vn[1], color='m', scale=1e-2, label='vn at TE')
-
-        if xlim is not None:
-            ax.set_xlim(xlim)
-        if ylim is not None:
-            ax.set_ylim(ylim)
-        
-        ax.set_aspect('equal')
 
 
 if __name__ == "__main__":
