@@ -534,7 +534,10 @@ class FSSolver:
         Jacobian = fd.derivative(F, fs_n1)
         solver_parameters = {"snes_max_it": self.maxItWeak1d, "snes_rtol": self.tolWeak1d}
 
-        fd.solve(F == 0, fs_n1, bcs=DBC, J = Jacobian, solver_parameters=solver_parameters)
+        try:
+            fd.solve(F == 0, fs_n1, bcs=DBC, J = Jacobian, solver_parameters=solver_parameters)
+        except:
+            raise BrokenPipeError("FS equations diverged")
 
         # Extract new eta and phiTilde
         self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
