@@ -26,8 +26,8 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 1, # Polynomial degree
-    "V_inf": fd.as_vector((10, 0.0)), # Free stream velocity
+    "P": 3, # Polynomial degree
+    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
 
@@ -49,38 +49,39 @@ hypParams = {
 
 meshSettings = {
     "airfoilNumber": "0012",
-    "alpha_deg": 5,
+    "alpha_deg": 3,
     "circle": True,
 
-    "xlim": (-8,27),
+    "xlim": (-8.5,19.5),
     "y_bed": -4,
 
     "scale": 1,
     
-    "h": 1,
+    "h": 1.034,
     "interface_ratio": 10,
-    "nAirfoil": 100,
-    "centerOfAirfoil": (0,0.5),
+    "nAirfoil": 250,
+    "centerOfAirfoil": (0.5,0.0),
 
-    "nFS": 300,
+    "nFS": 550,
     "nUpperSides": 20,
-    "nLowerInlet": 20,
-    "nLowerOutlet": 20,
-    "nBed": 100,
+    "nLowerInlet": 30,
+    "nLowerOutlet": 30,
+    "nBed": 150,
     "test": True
     }
 
 solverSettings = {
     "maxItKutta": 50,
-    "tolKutta": 1e-6,
-    "maxItFreeSurface": 25,
+    "tolKutta": 1e-10,
+    "maxItFreeSurface": 1000,
+    "minItFreeSurface": 1000, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
-    "maxItWeak1d": 500, # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
+    "maxItWeak1d": 2500 , # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 1e-3, # Time step for free surface update
+    "dt": 1e-2, # Time step for free surface update
 }
 
 outputSettings = {
@@ -127,6 +128,7 @@ class FSSolver:
         self.maxItKutta = solverSettings["maxItKutta"]
         self.tolKutta = solverSettings["tolKutta"]
         self.maxItFreeSurface = solverSettings["maxItFreeSurface"]
+        self.minItFreeSurface = solverSettings["minItFreeSurface"]
         self.tolFreeSurface = solverSettings["tolFreeSurface"]
         self.tolWeak1d = solverSettings["tolWeak1d"]
         self.maxItWeak1d = solverSettings["maxItWeak1d"]
@@ -139,14 +141,20 @@ class FSSolver:
         # Function spaces
         self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
         self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
+        self.W1 = fd.VectorFunctionSpace(self.mesh, "CG", 1)
 
-        fSIndecies = self.V.boundary_nodes(4)
-        self.coordsFS = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
+        fSIndecies = self.W1.boundary_nodes(4)
+        self.coordsFS = (fd.Function(self.W1).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
          # Define 1D mesh along free surface
         self.fsMesh = fd.IntervalMesh(len(self.coordsFS)-1, *self.xlim)
         # Ensure nodes match the x-coordinates of free surface variables
         self.fsMesh.coordinates.dat.data[:] = self.coordsFS[:,0]
 
+        # Computing dt idea from Simone Minniti
+        # sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
+        # diffFSx =np.diff(sortedFSx)
+        # dxx = np.min(diffFSx)
+        # self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
 
         # Output parameters
         self.outputPath = outputSettings["outputPath"]
@@ -163,7 +171,8 @@ class FSSolver:
         print("Initialized FSSolver with:\n" + f"P={self.P}\n" + 
               f"alpha={np.round(np.rad2deg(self.alpha), 2)} deg\n" + 
               f"V_inf={self.V_inf}\n" + 
-              f"Degrees of freedom: {self.V.dof_count}")
+              f"Degrees of freedom: {self.V.dof_count}\n" + 
+              f"dt: {self.dt}")
         
         print(f"Initialization time: {np.round(time() - time_init, 2)} s")
         print("-"*50 + "\n")
@@ -203,7 +212,7 @@ class FSSolver:
 
         if self.circle:
             self.centerOfVortex = np.array(self.centerOfVortex)
-            self.centerOfVortex -= np.array([vPerp[1], -vPerp[0]])/4
+            # self.centerOfVortex -= np.array([vPerp[1], -vPerp[0]])/4
 
         return LE, TE, vPerp, pointAtTE
     
@@ -372,6 +381,14 @@ class FSSolver:
         lift_coeff = lift / (1/2 * self.rho * V_inf**2)
         return lift_coeff
 
+    def getPressureCoefficients(self) -> fd.Function:
+        # Defining the firedrake function
+        pressure = fd.Function(self.V, name = "Pressure_coeff")
+
+        # Defining pressure coefficents in all of the domain from the formula given in the report.
+        pressure.interpolate(1 - (fd.sqrt(fd.dot(self.u, self.u))/self.V_inf[0]) ** 2)
+        return pressure
+
     def __applyKuttaCondition__(self):
         """
         Applies the Kutta condition to the current velocity field
@@ -505,8 +522,9 @@ class FSSolver:
 
         # Define dampening parameters
         xmin, xmax = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
-        xd_in = fd.Constant(-4.0) # Missing automization ######################### LOOK AT SIMONES SCRIPT
-        xd_out = fd.Constant(20.0) # Missing automization
+        Fr = 0.5672
+        xd_in = fd.Constant(xmin + 4.02112  * np.pi * Fr**2) # Missing automization ######################### LOOK AT SIMONES SCRIPT
+        xd_out = fd.Constant(xmax - 2.5 * np.pi * Fr**2) # Missing automization
         x = fd.SpatialCoordinate(fsMesh)[0]
         A = fd.Constant(100)
 
@@ -516,19 +534,19 @@ class FSSolver:
 
         # Define variational problem
         a_eta = fd.inner((eta_n1 - eta_n), v_eta)*fd.dx + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx
-        L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) - w_n*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
-        F_eta = a_eta - dt*fd.inner(L_eta, v_eta)*fd.dx
+        L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) - w_n*(One + eta_n1.dx(0) * eta_n1.dx(0))
+        F_eta = a_eta + dt*fd.inner(L_eta, v_eta)*fd.dx
 
         a_phi = fd.inner((phi_n1 - phi_n), v_phi) * fd.dx
         L_phi = g*eta_n1 + point5*(fd.dot(phi_n1.dx(0), phi_n1.dx(0)) - (w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0))))
-        F_phi = a_phi - dt*fd.inner(L_phi, v_phi)*fd.dx
+        F_phi = a_phi + dt*fd.inner(L_phi, v_phi)*fd.dx
 
         F = F_eta + F_phi
 
         # Boundary conditions
         DBC = []
         DBC.append(fd.DirichletBC(V_fs.sub(0), fd.Constant(0), 1)) # eta = 0 at inflow
-        DBC.append(fd.DirichletBC(V_fs.sub(1), self.inletValue, 2)) # phiTilde = constant at outflow
+        # DBC.append(fd.DirichletBC(V_fs.sub(1), self.inletValue, 2)) # phiTilde = constant at outflow
 
         # Solve variational problem
         Jacobian = fd.derivative(F, fs_n1)
@@ -557,40 +575,6 @@ class FSSolver:
         xs, ys = self.__prepxy__(eta)
         xi = coords2d[:,0]
         return np.interp(xi, xs, ys, left=ys[0], right=ys[-1])
-  
-
-    # def __shiftSurface__(self):
-        from firedrake.__future__ import interpolate
-        mesh = self.mesh
-        x, y = fd.SpatialCoordinate(mesh)
-        V1 = fd.FunctionSpace(mesh, "CG", 1)
-        W1 = fd.VectorFunctionSpace(mesh, "CG", 1)
-
-        # Define maximal y value of coordinates on airfoil (M)
-        coords = mesh.coordinates.dat.data
-        naca_idx = V1.boundary_nodes(5)
-        M = fd.Constant(np.max(coords[naca_idx][:,1])) 
-        
-        # scaling function
-        etaVals = self.__interp1dToV__(self.eta, coords)
-        newEtaVals = self.__interp1dToV__(self.newEta, coords)
-
-        eta = fd.Function(V1)
-        eta.dat.data[:] = etaVals
-        newEta = fd.Function(V1)
-        newEta.dat.data[:] = newEtaVals
-    
-        s = interpolate(newEta/eta, V1)
-
-        # Shift only coords above M
-        y_new = fd.conditional(fd.ge(y, M), M + s*(y-M), y)
-
-        # Set new coordinates of mesh
-        X_new = fd.project(fd.as_vector([x, y_new]), W1)
-        mesh.coordinates.assign(X_new)
-
-        self.mesh.coordinates.dat.data[:] = mesh.coordinates.dat.data
-        return None
     
     def __shiftSurface__(self):
         V1 = fd.FunctionSpace(self.mesh, "CG", 1)
@@ -600,19 +584,12 @@ class FSSolver:
         M = self.yInterface
 
         # mask points above the airfoil surface
-        coordMask = coords[:, 1] > M
+        coordMask = coords[:, 1] >= M
         x_2d = coords[coordMask, 0]
 
-        # fsMesh x-coordinates sorted for interpolation
-        x_1d = coords[V1.boundary_nodes(4),0]
-        order = np.argsort(x_1d)
-        x_1d_sorted = x_1d[order]
-
-        etaSorted = np.array(self.eta.at(x_1d))[order]
-        newEtaSorted = np.array(self.newEta.at(x_1d))[order]
-
-        eta = np.interp(x_2d, x_1d_sorted, etaSorted)
-        newEta = np.interp(x_2d, x_1d_sorted, newEtaSorted)
+        # FS-variables evaluated at mesh x-coordinates and keeping same order
+        eta = self.eta.at(x_2d)
+        newEta = self.newEta.at(x_2d)
 
         coords[coordMask, 1] = M + (newEta - M) / (eta - M) * (coords[coordMask, 1] - M)
         self.mesh.coordinates.dat.data[:] = coords
@@ -621,18 +598,15 @@ class FSSolver:
 
     def __updateMeshData__(self):
         # Update mesh
-        # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1)) # ONLY FOR TESTING
-        # self.residuals = fd.norm(self.u) # ONLY FOR TESTING
-        # self.newEta.dat.data[:] = np.sin(self.fsMesh.coordinates.dat.data_ro[:]/(8+27))/10 # Ensure newEta matches fsMesh coordinates
         self.__shiftSurface__()
 
         # Change the firedrake function spaces to match the new mesh
         self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
         self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
-
+        self.W1 = fd.VectorFunctionSpace(self.mesh, "CG", 1)
         # Find points at free surface
-        fSIndecies = self.V.boundary_nodes(4)
-        self.coordsFS = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
+        fSIndecies = self.W1.boundary_nodes(4)
+        self.coordsFS = (fd.Function(self.W1).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
         # Ensure nodes match the x-coordinates of free surface variables
         self.fsMesh.coordinates.dat.data[:] = self.coordsFS[:,0]
 
@@ -641,7 +615,7 @@ class FSSolver:
         return None
     
     def __checkStatus__(self, i : int, start_time, iteration_time):
-        if (self.residuals < self.tolFreeSurface) and (i > 100):
+        if (self.residuals < self.tolFreeSurface) and (i > self.minItFreeSurface):
             print("\n" + "="*50)
             print(" Fs converged")
             print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
@@ -696,14 +670,20 @@ class FSSolver:
             self.__weak1dFsEq__()
             
             # Update mesh data
+            # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1)) # ONLY FOR TESTING
+            # self.residuals = fd.norm(self.u) # ONLY FOR TESTING
+            # self.newEta.dat.data[:] = np.sin(self.fsMesh.coordinates.dat.data_ro[:]* 2* np.pi/(8+27))/5 + self.ylim[1] # Ensure newEta matches fsMesh coordinates
             self.__updateMeshData__()
 
             # Apply kutta condition to a poisson solve on the new mesh
             self.__doKuttaSolve__()
 
             # Save result
-            outfileFS.write(self.u)
             self.__save_results__(self.newEta.dat.data_ro, self.residuals, iteration)
+            if (iteration % self.outputIntervalFS) == 0:
+                pressure = self.getPressureCoefficients()
+                pressure.rename("Pressure")
+                outfileFS.write(self.u, pressure)
 
             # Check solver status
             if self.__checkStatus__(iteration, start_time, iteration_time):
