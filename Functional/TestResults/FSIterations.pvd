@@ -7,6 +7,5 @@
 <DataSet timestep="3" file="FSIterations/FSIterations_3.vtu" />
 <DataSet timestep="4" file="FSIterations/FSIterations_4.vtu" />
 <DataSet timestep="5" file="FSIterations/FSIterations_5.vtu" />
-<DataSet timestep="6" file="FSIterations/FSIterations_6.vtu" />
 </Collection>
 </VTKFile>

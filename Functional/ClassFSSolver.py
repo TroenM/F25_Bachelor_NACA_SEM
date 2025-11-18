@@ -459,25 +459,16 @@ class FSSolver:
             #self.u.rename("Velocity")
             return outfileFS
     
-    def __save_results__(self, new_eta, residuals, iter):
-        if iter == 0:
-            self.etas[iter, :] = self.FSxEvaluator(new_eta)
-            self.phis[iter, :] = self.FSEvaluator(self.phi)
-            self.coordsFS_array[iter, :] = self.fsMesh.coordinates.dat.data_ro.copy()
-            self.residual_array[iter] = np.array([self.tolFreeSurface,-1])
-            np.save(self.outputPath + "arrays/eta.npy", self.etas)
-            np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
-            np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
-            np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
-        else:
-            self.etas[iter, :] = new_eta.copy()
-            self.phis[iter, :] = self.phiTilde.dat.data_ro.copy()
-            self.coordsFS_array[iter, :] = self.fsMesh.coordinates.dat.data_ro.copy()
-            self.residual_array[iter] = np.array([residuals.copy(), self.dt*(iter)])
-            np.save(self.outputPath + "arrays/eta.npy", self.etas)
-            np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
-            np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
-            np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
+    def __save_results__(self, iter):
+        self.etas[iter, :] = self.FSxEvaluator(self.eta)
+        self.phis[iter, :] = self.FSEvaluator(self.phi)
+        self.coordsFS_array[iter, :] = self.fsMesh.coordinates.dat.data_ro.copy()
+        self.residual_array[iter] = np.array([self.tolFreeSurface,-1]) if iter == 0 else np.array([self.residuals.copy(), self.dt*(iter)])
+        np.save(self.outputPath + "arrays/eta.npy", self.etas)
+        np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
+        np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
+        np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
+        return None
 
     def __doKuttaSolve__(self) -> None:
         if hasattr(self, "phiTilde2d"):
@@ -741,7 +732,6 @@ class FSSolver:
         self.__initPhiTilde__()
         self.__initEta__()
 
-        self.__save_results__(self.eta, 0, 0)
         print("Initialization done \n" + "-"*50 + "\n")
         # Start main loop
         for iteration in range(self.maxItFreeSurface):
@@ -761,7 +751,7 @@ class FSSolver:
             self.__doKuttaSolve__()
 
             # Save result
-            self.__save_results__(self.newEta.dat.data_ro, self.residuals, iteration+1)
+            self.__save_results__(iteration)
             if (iteration % self.outputIntervalFS) == 0:
                 pressure = self.__getPressureCoefficients__()
                 pressure.rename("Pressure")
