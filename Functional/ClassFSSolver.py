@@ -26,7 +26,7 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 2, # Polynomial degree
+    "P": 3, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
@@ -81,7 +81,7 @@ solverSettings = {
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 2e-2, # Time step for free surface update
+    "dt": 1e-2, # Time step for free surface update
 }
 
 outputSettings = {
