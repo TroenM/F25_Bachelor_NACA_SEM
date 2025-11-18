@@ -89,7 +89,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 25, # Output interval in free surface time steps
+    "outputIntervalFS": 1, # Output interval in free surface time steps
 }
 
 class FSSolver:
@@ -136,19 +136,22 @@ class FSSolver:
         self.c0 = solverSettings["c0"]
         self.Gammas = []
         self.dt = solverSettings["dt"]
-        
 
         # Function spaces
         self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
         self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
         self.W1 = fd.VectorFunctionSpace(self.mesh, "CG", 1)
 
-        fSIndecies = self.W1.boundary_nodes(4)
-        self.coordsFS = (fd.Function(self.W1).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
-         # Define 1D mesh along free surface
+        self.fSIndecies = self.W1.boundary_nodes(4)
+        self.coordsFS = (fd.Function(self.W1).interpolate(self.mesh.coordinates).dat.data)[self.fSIndecies,:]
+        # Define 1D mesh along free surface
         self.fsMesh = fd.IntervalMesh(len(self.coordsFS)-1, *self.xlim)
         # Ensure nodes match the x-coordinates of free surface variables
         self.fsMesh.coordinates.dat.data[:] = self.coordsFS[:,0]
+
+        self.W1FS = fd.VectorFunctionSpace(self.fsMesh, "CG", 1)
+
+        self.__gatherPointsAndDefineEvaluators__()
 
         # Computing dt idea from Simone Minniti
         # sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
@@ -163,17 +166,12 @@ class FSSolver:
         self.outputIntervalKutta = outputSettings["outputIntervalKutta"]
         self.outputIntervalFS = outputSettings["outputIntervalFS"]
 
-        self.etas = np.zeros((self.maxItFreeSurface, len(self.coordsFS)), dtype=np.float64)
-        self.phis = np.zeros((self.maxItFreeSurface, len(self.coordsFS)), dtype=np.float64)
-        self.coordsFS_array = np.zeros((self.maxItFreeSurface, len(self.coordsFS)))
-        self.residual_array = np.zeros((self.maxItFreeSurface, 2))
+        self.etas = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
+        self.phis = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
+        self.coordsFS_array = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)))
+        self.residual_array = np.zeros((self.maxItFreeSurface+1, 2))
 
-        # Define evaluators
-        self.TEevaluator = fd.PointEvaluator(self.mesh, self.pointAtTE).evaluate
-        self.FSevaluator = fd.PointEvaluator(self.mesh, self.coordsFS).evaluate
-        self.allPoints = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)
-        self.xEvaluator = fd.PointEvaluator(self.fsMesh, self.allPoints[:,0]).evaluate
-
+        
         print("Initialized FSSolver with:\n" + f"P={self.P}\n" + 
               f"alpha={np.round(np.rad2deg(self.alpha), 2)} deg\n" + 
               f"V_inf={self.V_inf}\n" + 
@@ -248,8 +246,8 @@ class FSSolver:
         else:
             fd.solve(a == L, phi, bcs=DBCs)
 
-        if len(DBCs) == 0: # Normalize phi if there are no Dirichlet BCs
-            phi -= np.min(phi.dat.data)
+        # Normalize phi such that upper left corner is 0
+        phi -= fd.Constant(self.upperLeftEvaluator(phi)[0])
         
         u = fd.Function(self.W, name = "Velocity").interpolate(fd.grad(phi))
         return phi, u
@@ -379,7 +377,7 @@ class FSSolver:
         else:
             return False
     
-    def getLiftCoefficient(self):
+    def __getLiftCoefficient__(self):
         # Compute lift based on circulation given the formula in the Kutta Jacowski theorem
         Gamma = np.sum(np.array(self.Gammas))
         V_inf = np.linalg.norm(np.array(self.V_inf, dtype=float))
@@ -387,7 +385,7 @@ class FSSolver:
         lift_coeff = lift / (1/2 * self.rho * V_inf**2)
         return lift_coeff
 
-    def getPressureCoefficients(self) -> fd.Function:
+    def __getPressureCoefficients__(self) -> fd.Function:
         # Defining the firedrake function
         pressure = fd.Function(self.V, name = "Pressure_coeff")
 
@@ -462,14 +460,24 @@ class FSSolver:
             return outfileFS
     
     def __save_results__(self, new_eta, residuals, iter):
-        self.etas[iter, :] = new_eta.copy()
-        self.phis[iter, :] = self.phiTilde.dat.data_ro.copy()
-        self.coordsFS_array[iter, :] = self.fsMesh.coordinates.dat.data_ro.copy()
-        self.residual_array[iter] = np.array([residuals.copy(), self.dt*(iter+1)])
-        np.save(self.outputPath + "arrays/eta.npy", self.etas)
-        np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
-        np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
-        np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
+        if iter == 0:
+            self.etas[iter, :] = self.FSxEvaluator(new_eta)
+            self.phis[iter, :] = self.FSEvaluator(self.phi)
+            self.coordsFS_array[iter, :] = self.fsMesh.coordinates.dat.data_ro.copy()
+            self.residual_array[iter] = np.array([self.tolFreeSurface,-1])
+            np.save(self.outputPath + "arrays/eta.npy", self.etas)
+            np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
+            np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
+            np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
+        else:
+            self.etas[iter, :] = new_eta.copy()
+            self.phis[iter, :] = self.phiTilde.dat.data_ro.copy()
+            self.coordsFS_array[iter, :] = self.fsMesh.coordinates.dat.data_ro.copy()
+            self.residual_array[iter] = np.array([residuals.copy(), self.dt*(iter)])
+            np.save(self.outputPath + "arrays/eta.npy", self.etas)
+            np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
+            np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
+            np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
 
     def __doKuttaSolve__(self) -> None:
         if hasattr(self, "phiTilde2d"):
@@ -482,7 +490,7 @@ class FSSolver:
     def __initPhiTilde__(self) -> None:
         V1 = fd.FunctionSpace(self.fsMesh, "CG", 1)
         self.phiTilde = fd.Function(V1)
-        self.phiTilde.dat.data[:] = self.FSevaluator(self.phi)
+        self.phiTilde.dat.data[:] = self.FSEvaluator(self.phi)
 
         self.inletValue = fd.Constant(self.phiTilde.dat.data_ro[self.coordsFS[:,0].argmin()]) # phiTilde = constant at inflow boundary
         return None
@@ -501,7 +509,7 @@ class FSSolver:
         V2 = self.V
         u2D = fd.Function(V2)
 
-        u2D.dat.data[:] = np.array(self.xEvaluator(u1D))
+        u2D.dat.data[:] = np.array(self.allxFSEvaluator(u1D))
 
         return u2D
     
@@ -534,7 +542,7 @@ class FSSolver:
         dt = fd.Constant(self.dt)
         g = fd.Constant(9.81)
         w_n = fd.Function(V_eta)
-        w_n.dat.data[:] = np.array(self.FSevaluator(self.u))[:,1] # Vertical velocity at free surface
+        w_n.dat.data[:] = np.array(self.FSEvaluator(self.u))[:,1] # Vertical velocity at free surface
         One = fd.Constant(1)
         point5 = fd.Constant(0.5)
 
@@ -578,6 +586,7 @@ class FSSolver:
         # Extract new eta and phiTilde
         self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
         self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
+        self.phiTilde -= fd.Constant(self.upperLeftFSEvaluator(self.phiTilde))
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
 
@@ -585,7 +594,7 @@ class FSSolver:
         self.newEta2d   = self.__lift_1d_to_2d__(self.newEta)
         self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde)
         print("-"*50)
-        print("Lifting FS 1D equations took ", time()-fs_time, " seconds.")
+        print("Lifting FS 1D equations took ", round(time()-fs_time,2), " seconds.")
         print("-"*50)
         
         return None
@@ -600,6 +609,22 @@ class FSSolver:
         xs, ys = self.__prepxy__(eta)
         xi = coords2d[:,0]
         return np.interp(xi, xs, ys, left=ys[0], right=ys[-1])
+    
+    def __gatherPointsAndDefineEvaluators__(self):
+        # Gather position of points
+        self.allPoints = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)
+        self.xFS = (fd.Function(self.W1FS).interpolate(self.fsMesh.coordinates).dat.data)
+
+        # Define evaluators for full mesh
+        self.TEevaluator = fd.PointEvaluator(self.mesh, self.pointAtTE).evaluate
+        self.FSEvaluator = fd.PointEvaluator(self.mesh, self.coordsFS).evaluate
+        self.upperLeftEvaluator = fd.PointEvaluator(self.mesh, [self.xlim[0],self.ylim[1]]).evaluate
+
+        # Define evaluators for fs mesh
+        self.allxFSEvaluator = fd.PointEvaluator(self.fsMesh, self.allPoints[:,0]).evaluate
+        self.upperLeftFSEvaluator = fd.PointEvaluator(self.fsMesh, self.xlim[0]).evaluate
+        self.FSxEvaluator = fd.PointEvaluator(self.fsMesh, self.xFS).evaluate
+        return None
     
     def __shiftSurface2DEta__(self):
         mesh = self.mesh
@@ -664,6 +689,7 @@ class FSSolver:
         # Ensure nodes match the x-coordinates of free surface variables
         self.fsMesh.coordinates.dat.data[:] = self.coordsFS[:,0]
 
+        self.__gatherPointsAndDefineEvaluators__()
         # Update eta
         self.eta = self.newEta
         self.eta2d = self.newEta2d
@@ -715,6 +741,7 @@ class FSSolver:
         self.__initPhiTilde__()
         self.__initEta__()
 
+        self.__save_results__(self.eta, 0, 0)
         print("Initialization done \n" + "-"*50 + "\n")
         # Start main loop
         for iteration in range(self.maxItFreeSurface):
@@ -734,9 +761,9 @@ class FSSolver:
             self.__doKuttaSolve__()
 
             # Save result
-            self.__save_results__(self.newEta.dat.data_ro, self.residuals, iteration)
+            self.__save_results__(self.newEta.dat.data_ro, self.residuals, iteration+1)
             if (iteration % self.outputIntervalFS) == 0:
-                pressure = self.getPressureCoefficients()
+                pressure = self.__getPressureCoefficients__()
                 pressure.rename("Pressure")
                 outfileFS.write(self.u, pressure)
 
