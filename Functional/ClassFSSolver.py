@@ -26,7 +26,7 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 3, # Polynomial degree
+    "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
@@ -81,7 +81,7 @@ solverSettings = {
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 1e-2, # Time step for free surface update
+    "dt": 2e-2, # Time step for free surface update
 }
 
 outputSettings = {
@@ -168,6 +168,12 @@ class FSSolver:
         self.coordsFS_array = np.zeros((self.maxItFreeSurface, len(self.coordsFS)))
         self.residual_array = np.zeros((self.maxItFreeSurface, 2))
 
+        # Define evaluators
+        self.TEevaluator = fd.PointEvaluator(self.mesh, self.pointAtTE).evaluate
+        self.FSevaluator = fd.PointEvaluator(self.mesh, self.coordsFS).evaluate
+        self.allPoints = (fd.Function(self.W).interpolate(self.mesh.coordinates).dat.data)
+        self.xEvaluator = fd.PointEvaluator(self.fsMesh, self.allPoints[:,0]).evaluate
+
         print("Initialized FSSolver with:\n" + f"P={self.P}\n" + 
               f"alpha={np.round(np.rad2deg(self.alpha), 2)} deg\n" + 
               f"V_inf={self.V_inf}\n" + 
@@ -213,7 +219,7 @@ class FSSolver:
         if self.circle:
             self.centerOfVortex = np.array(self.centerOfVortex)
             # self.centerOfVortex -= np.array([vPerp[1], -vPerp[0]])/4
-
+        
         return LE, TE, vPerp, pointAtTE
     
     #=================================================================#
@@ -295,7 +301,7 @@ class FSSolver:
 
         # Computing the vortex strength Gamma
         vPerp = self.vPerp
-        velocityAtTE = self.u.at(self.pointAtTE) # Requires that self.u is computed before calling this function
+        velocityAtTE = self.TEevaluator(self.u)[0] # Requires that self.u is computed before calling this function
         Gamma = -ellipseCircumference*(vPerp[0]*velocityAtTE[0] + vPerp[1]*velocityAtTE[1])/(Wx_rot*vPerp[0] + Wy_rot*vPerp[1])
 
         return Gamma
@@ -354,7 +360,7 @@ class FSSolver:
         """
         Checks whether the Kutta condition has converged
         """
-        velocityAtTE = self.__normaliseVector__(self.u.at(self.pointAtTE))
+        velocityAtTE = self.__normaliseVector__(self.TEevaluator(self.u)[0])
         dotProductTE = np.dot(velocityAtTE, self.vPerp)
         GammaDiff = np.inf if len(self.Gammas) < 2 else abs(self.Gammas[-1] - self.Gammas[-2])
         if abs(dotProductTE) < self.tolKutta:
@@ -414,7 +420,7 @@ class FSSolver:
 
             outfile = fd.VTKFile(self.outputPath + "kuttaIterations.pvd")
             self.u.rename("Velocity")
-
+        
         for it in range(self.maxItKutta):
             # Compute vortex strength and correct it using FBCS
             Gamma = self.__computeVortexStrength__()
@@ -436,7 +442,6 @@ class FSSolver:
                 print(f"Kutta solver time: {np.round(time() - t1, 4)} s")
                 print("-"*50*self.writeKutta + "\n")
                 break
-
         return None
     
     #=================================================================#
@@ -467,17 +472,17 @@ class FSSolver:
         np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
 
     def __doKuttaSolve__(self) -> None:
-        try:
-            self.phi, self.u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]], DBC=[(4, self.phiTilde)])
-        except:
-            self.phi, self.u = self.__poissonSolver__(NBC = [(i, self.V_inf) for i in [1,2]])
+        if hasattr(self, "phiTilde2d"):
+            self.phi, self.u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]], DBC=[(4, self.phiTilde2d)])
+        else:
+            self.phi, self.u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]])
         self.__applyKuttaCondition__()
         return None
 
     def __initPhiTilde__(self) -> None:
         V1 = fd.FunctionSpace(self.fsMesh, "CG", 1)
         self.phiTilde = fd.Function(V1)
-        self.phiTilde.dat.data[:] = self.phi.at(self.coordsFS)
+        self.phiTilde.dat.data[:] = self.FSevaluator(self.phi)
 
         self.inletValue = fd.Constant(self.phiTilde.dat.data_ro[self.coordsFS[:,0].argmin()]) # phiTilde = constant at inflow boundary
         return None
@@ -485,8 +490,21 @@ class FSSolver:
     def __initEta__(self):
         V1 = fd.FunctionSpace(self.fsMesh, "CG", 1)
         self.eta = fd.Function(V1).interpolate(fd.Constant(self.ylim[1]))
+        self.eta2d = fd.Function(self.V).interpolate(fd.Constant(self.ylim[1]))
         return None
 
+    def __lift_1d_to_2d__(self, u1D):
+        """
+        Lift a scalar 1D Firedrake Function u1D(x) to a 2D Function on self.mesh
+        by defining u2D(x,y) := u1D(x).
+        """
+        V2 = self.V
+        u2D = fd.Function(V2)
+
+        u2D.dat.data[:] = np.array(self.xEvaluator(u1D))
+
+        return u2D
+    
     def __weak1dFsEq__(self):
         '''
         Solves the weak form backward Euler forumulation of the phi and eta at the free surface.
@@ -516,7 +534,7 @@ class FSSolver:
         dt = fd.Constant(self.dt)
         g = fd.Constant(9.81)
         w_n = fd.Function(V_eta)
-        w_n.dat.data[:] = np.array(self.u.at(self.coordsFS))[:,1] # Vertical velocity at free surface
+        w_n.dat.data[:] = np.array(self.FSevaluator(self.u))[:,1] # Vertical velocity at free surface
         One = fd.Constant(1)
         point5 = fd.Constant(0.5)
 
@@ -563,8 +581,12 @@ class FSSolver:
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
 
-        '''Her skal vi have redefineret self.newEta til at være defineret på hele meshet 
-        altså self.V og ikke kun V_eta'''
+        fs_time = time()
+        self.newEta2d   = self.__lift_1d_to_2d__(self.newEta)
+        self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde)
+        print("-"*50)
+        print("Lifting FS 1D equations took ", time()-fs_time, " seconds.")
+        print("-"*50)
         
         return None
     
@@ -579,6 +601,32 @@ class FSSolver:
         xi = coords2d[:,0]
         return np.interp(xi, xs, ys, left=ys[0], right=ys[-1])
     
+    def __shiftSurface2DEta__(self):
+        mesh = self.mesh
+        x, y = fd.SpatialCoordinate(mesh)
+        V1 = fd.FunctionSpace(mesh, "CG", 1)
+        W1 = fd.VectorFunctionSpace(mesh, "CG", 1)
+        V = self.V
+        W = self.W
+
+        # Define maximal y value of coordinates on airfoil 
+        coords = mesh.coordinates.dat.data
+        naca_idx = V1.boundary_nodes(5)
+        M = fd.Constant(np.max(coords[naca_idx][:,1])) 
+        
+        # scaling function
+        s = fd.interpolate(self.newEta2d/self.eta2d, V)
+
+        # Shift only coords above M
+        y_new = fd.conditional(fd.ge(y, M), M + s*(y-M), y)
+
+        # Set new coordinates of mesh
+        X_new = fd.project(fd.as_vector([x, y_new]), W1)
+        mesh.coordinates.assign(X_new)
+
+        self.mesh.coordinates.dat.data[:] = mesh.coordinates.dat.data
+        return None
+    
     def __shiftSurface__(self):
         V1 = fd.FunctionSpace(self.mesh, "CG", 1)
 
@@ -590,18 +638,21 @@ class FSSolver:
         coordMask = coords[:, 1] >= M
         x_2d = coords[coordMask, 0]
 
+        # Define the evaluator
+        x_2devaluator = fd.PointEvaluator(self.fsMesh, x_2d).evaluate
+
         # FS-variables evaluated at mesh x-coordinates and keeping same order
-        eta = self.eta.at(x_2d)
-        newEta = self.newEta.at(x_2d)
+        eta = x_2devaluator(self.eta)
+        newEta = x_2devaluator(self.newEta)
 
         coords[coordMask, 1] = M + (newEta - M) / (eta - M) * (coords[coordMask, 1] - M)
         self.mesh.coordinates.dat.data[:] = coords
         return None
 
-
     def __updateMeshData__(self):
         # Update mesh
-        self.__shiftSurface__()
+        # self.__shiftSurface__()
+        self.__shiftSurface2DEta__()
 
         # Change the firedrake function spaces to match the new mesh
         self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
@@ -615,6 +666,7 @@ class FSSolver:
 
         # Update eta
         self.eta = self.newEta
+        self.eta2d = self.newEta2d
         return None
     
     def __checkStatus__(self, i : int, start_time, iteration_time):
@@ -697,9 +749,6 @@ class FSSolver:
 if __name__ == "__main__":
     solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
     solver.solve()
-
-    #solver.plotVelocityField(xlim = (-2, 2), ylim = (-1, 1))
-    #plt.show()
 
 
 

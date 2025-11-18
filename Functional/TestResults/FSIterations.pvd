@@ -2,7 +2,5 @@
 <VTKFile type="Collection" version="0.1" byte_order="LittleEndian">
 <Collection>
 <DataSet timestep="0" file="FSIterations/FSIterations_0.vtu" />
-<DataSet timestep="1" file="FSIterations/FSIterations_1.vtu" />
-<DataSet timestep="2" file="FSIterations/FSIterations_2.vtu" />
 </Collection>
 </VTKFile>
