@@ -28,7 +28,7 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 3, # Polynomial degree
+    "P": 1, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225 # Density of air [kg/m^3]
 }
@@ -64,11 +64,11 @@ meshSettings = {
     "nAirfoil": 250,
     "centerOfAirfoil": (0.5,0.0),
 
-    "nFS": 550,
-    "nUpperSides": 20,
-    "nLowerInlet": 30,
-    "nLowerOutlet": 30,
-    "nBed": 150,
+    "nFS": 550*2,
+    "nUpperSides": 20 * int(3/hypParams["P"]),
+    "nLowerInlet": 30 * int(3/hypParams["P"]),
+    "nLowerOutlet": 30 * int(3/hypParams["P"]),
+    "nBed": 150 * int(3/hypParams["P"]),
     "test": True
     }
 
@@ -83,7 +83,7 @@ solverSettings = {
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 1e-4, # Time step for free surface update
+    "dt": 1e-3, # Time step for free surface update
 }
 
 outputSettings = {
@@ -532,7 +532,7 @@ class FSSolver:
         eta_n = fd.Function(V_eta)
         eta_n.dat.data[:] = self.eta.dat.data_ro[:] - self.ylim[1] # Shift eta such that the eta=0 -> y = 0
         phi_n = fd.Function(V_phi)
-        phi_n.dat.data[:] = self.FSEvaluator(self.phi)#self.phiTilde.dat.data_ro[:]
+        phi_n.dat.data[:] = self.phiTilde.dat.data_ro[:]
 
         # Initial guess for new time step
         fs_n1.sub(0).assign(eta_n)   # eta^{n+1} initial guess
@@ -592,7 +592,7 @@ class FSSolver:
         self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
         self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
         self.phiTilde -= fd.Constant(self.upperLeftFSEvaluator(self.phiTilde))
-        self.__relax_phiTilde__(iter)
+        # self.__relax_phiTilde__(iter)
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
 
@@ -607,7 +607,7 @@ class FSSolver:
     
     def __relax_phiTilde__(self, iter):
         """Relaxes the solution of phiTilde to avoid erratic behavior during first couple of iterations"""
-        relax_start = 0.01
+        relax_start = 0.3
         theta = fd.Constant(np.min([relax_start + (1-relax_start)/500 * iter, 1]))
         self.phiTilde.project(theta*self.phiTilde + (1-theta)*self.phiTilde_prev)
         self.phiTilde_prev = self.phiTilde.copy()
@@ -668,7 +668,7 @@ class FSSolver:
         self.mesh.coordinates.dat.data[:] = mesh.coordinates.dat.data
         return None
     
-    def __shiftSurface2DEta__(self):
+    def __shiftSurface__(self):
         V1 = fd.FunctionSpace(self.mesh, "CG", 1)
 
         coords = self.mesh.coordinates.dat.data
@@ -691,8 +691,8 @@ class FSSolver:
 
     def __updateMeshData__(self):
         # Update mesh
-        # self.__shiftSurface__()
-        self.__shiftSurface2DEta__()
+        self.__shiftSurface__()
+        # self.__shiftSurface2DEta__()
 
         # Change the firedrake function spaces to match the new mesh
         self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
