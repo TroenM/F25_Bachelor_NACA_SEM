@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from time import time
 import shutil
+import sys
 import copy
 
 import os
@@ -61,16 +62,28 @@ meshSettings = {
     
     "h": 1.034,
     "interface_ratio": 10,
-    "nAirfoil": 250,
+    "nAirfoil": "calculated down below for a ration that Morten found, this seemed stable, but fast",
     "centerOfAirfoil": (0.5,0.0),
 
-    "nFS": 550*2,
-    "nUpperSides": 20 * int(3/hypParams["P"]),
-    "nLowerInlet": 30 * int(3/hypParams["P"]),
-    "nLowerOutlet": 30 * int(3/hypParams["P"]),
-    "nBed": 150 * int(3/hypParams["P"]),
+    "nFS": int( 300/hypParams["P"] ),
+    "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
+    "nLowerInlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
+    "nLowerOutlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
+    "nBed": "calculated down below for a ration that Morten found, this seemed stable, but fast",
     "test": True
     }
+
+meshSettings["nLowerInlet"] = int( meshSettings["nFS"]/10 )
+meshSettings["nLowerOutlet"] = int( meshSettings["nFS"]/10 )
+meshSettings["nAirfoil"] = int( meshSettings["nFS"]/2 )
+meshSettings["nBed"] = int( meshSettings["nFS"]/2 )
+def calculateNUpperSides(meshSettings):
+    nFS = meshSettings["nFS"]
+    xlim = meshSettings["xlim"]
+    h = meshSettings["h"]
+    meshSettings["nUpperSides"] =  int( nFS/(xlim[1]-xlim[0]) * h )
+    return None
+calculateNUpperSides(meshSettings)
 
 solverSettings = {
     "maxItKutta": 50,
@@ -83,7 +96,7 @@ solverSettings = {
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 1e-3, # Time step for free surface update
+    "dt": 2e-2, # Time step for free surface update
 }
 
 outputSettings = {
@@ -93,6 +106,7 @@ outputSettings = {
     "outputIntervalKutta": 1, # Output interval in time steps
     "outputIntervalFS": 1, # Output interval in free surface time steps
 }
+deleteLines = False
 
 class FSSolver:
 
@@ -120,7 +134,9 @@ class FSSolver:
         self.nAirfoil = meshSettings["nAirfoil"]
 
         # Computed mesh parameters
+        ### Choose either uniform mesh on top or original mesh
         self.mesh, self.yInterface, self.ylim = createFSMesh(self.airfoilNumber, np.rad2deg(self.alpha), meshSettings)
+        #self.mesh, self.yInterface, self.ylim = naca_mesh(self.airfoilNumber, np.rad2deg(self.alpha), meshSettings)
         self.a = 1
         self.b = 1 if self.circle else int(self.airfoilNumber[2:])/100
 
@@ -367,8 +383,17 @@ class FSSolver:
         dotProductTE = np.dot(velocityAtTE, self.vPerp)
         GammaDiff = np.inf if len(self.Gammas) < 2 else abs(self.Gammas[-1] - self.Gammas[-2])
         if abs(dotProductTE) < self.tolKutta:
-            print(f"Kutta condition applied in {it+1} iterations")
-            print(f"Dot product at TE: {dotProductTE}")
+            lines = 13
+            if deleteLines:
+                sys.stdout.write("\033[F" * lines)
+                for _ in range(lines):
+                    sys.stdout.write("\033[2K\033[1E")
+                sys.stdout.write("\033[F" * lines)
+            print(
+f"""{"-"*50 + "\n"}
+Kutta condition applied in {it+1} iterations
+Dot product at TE: {dotProductTE}
+""")
             return True
         elif GammaDiff < self.tolKutta:
             print(f"Kutta condition stagnated after {it+1} iterations")
@@ -514,6 +539,36 @@ class FSSolver:
 
         return u2D
     
+    def __dampenPhiTilde__(self, iter:0, fsMesh):
+        if iter == 0:
+            self.phiTarget = self.phiTilde
+            VSigma = fd.FunctionSpace(fsMesh, "CG", 1)  # scalar continuous space for sigma
+            x = fd.SpatialCoordinate(fsMesh)[0]
+            x_min = fd.Constant(self.xlim[0])
+            x_max = fd.Constant(self.xlim[1])
+            L_damp = fd.Constant(2.0)   # width of damping region at each end
+
+            xL0 = x_min + L_damp
+            xR0 = x_max - L_damp
+
+            sigma_left = fd.cos(fd.Constant(0.5) * fd.pi * (x - x_min) / L_damp)
+
+            sigma_right = fd.cos(fd.Constant(0.5) * fd.pi * (x_max - x) / L_damp)
+
+            sigma_expr = fd.conditional(
+                x < xL0, sigma_left,
+                fd.conditional(
+                    x > xR0, sigma_right,
+                    0.0
+                )
+            )
+
+            self.sigma = fd.Function(VSigma, name="sigma")
+            self.sigma.interpolate(sigma_expr)
+        else:
+            self.phiTilde.interpolate((1 - self.sigma) * self.phiTilde + self.sigma * self.phiTarget)
+        return None
+
     def __weak1dFsEq__(self, iter = 0):
         '''
         Solves the weak form backward Euler forumulation of the phi and eta at the free surface.
@@ -589,19 +644,25 @@ class FSSolver:
             raise BrokenPipeError("FS equations diverged")
 
         # Extract new eta and phiTilde
+        upperLeftValue = self.upperLeftFSEvaluator(self.phiTilde)
         self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
+        self.phiTilde -= fd.Constant(upperLeftValue)
+
+        # Dampen phiTilde
+        self.__dampenPhiTilde__(iter,fsMesh)
         self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
-        self.phiTilde -= fd.Constant(self.upperLeftFSEvaluator(self.phiTilde))
+        # self.phiTilde -= fd.Constant(self.upperLeftFSEvaluator(self.phiTilde))
         # self.__relax_phiTilde__(iter)
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
 
-        fs_time = time()
-        self.newEta2d   = self.__lift_1d_to_2d__(self.newEta)
+        # fs_time = time()
+        # self.newEta2d   = self.__lift_1d_to_2d__(self.newEta)
+        self.newEta2d = None
         self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde)
-        print("-"*50)
-        print("Lifting FS 1D equations took ", round(time()-fs_time,2), " seconds.")
-        print("-"*50)
+        # print("-"*50)
+        # print("Lifting FS 1D equations took ", round(time()-fs_time,2), " seconds.")
+        # print("-"*50)
         
         return None
     
@@ -712,31 +773,45 @@ class FSSolver:
     
     def __checkStatus__(self, i : int, start_time, iteration_time):
         if (self.residuals < self.tolFreeSurface) and (i > self.minItFreeSurface):
-            print("\n" + "="*50)
-            print(" Fs converged")
-            print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
-            print(f" Total solve time: {time() - start_time}")
+            print(
+                f"""
+            {"\n" + "="*50}
+             Fs converged
+             residuals norm {np.linalg.norm(self.residuals)} after {i} iterations
+             Total solve time: {time() - start_time}
+                """
+            )
             return True
         # If divergence kriteria is met print relevant information
         elif self.residuals > 10000:
-            print(" Fs diverged")
-            print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
-            print(f" Total solve time: {time() - start_time}")
-            print("-"*50 + "\n")
+            print(f"""
+             Fs diverged
+             residuals norm {np.linalg.norm(self.residuals)} after {i} iterations
+             Total solve time: {time() - start_time}
+            {"-"*50 + "\n"}
+            """)
             return True
         # If the maximum amout of iterations is done print relevant information
         elif i >= self.maxItFreeSurface - 1:
-            print(" Fs did not converge")
-            print(f" residuals norm {np.linalg.norm(self.residuals)} after {i} iterations")
-            print(f" Total solve time: {time() - start_time}")
-            print("-"*50 + "\n")
+            print(f"""
+             Fs did not converge
+             residuals norm {np.linalg.norm(self.residuals)} after {i} iterations
+             Total solve time: {time() - start_time}
+            {"-"*50 + "\n"}
+            """)
             return True
         # If none of the above, print relevant information about solver status
         else:
-            print(f"\t iteration: {i+1}")
-            print(f"\t residual norm {self.residuals}")
-            print(f"\t iteration time: {time() - iteration_time}\n")
-            print("-"*50 + "\n")
+            block = (
+f"""\t iteration: {i+1}
+\t residual norm {self.residuals}
+\t iteration time: {time() - iteration_time}
+{"-"*50 + "\n"}""")
+            global deleteLines
+            if not deleteLines:
+                deleteLines = True
+
+            print(block)
             return False 
 
     def solve(self):

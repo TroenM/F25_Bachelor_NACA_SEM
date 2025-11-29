@@ -92,9 +92,8 @@ def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : n
     # Return points defining the airfoil
     return points
 
-def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple = (-2,1), **kwargs) -> fd.MeshGeometry:
+def naca_mesh(airfoil: str, alpha: float, meshSettings) -> list[fd.MeshGeometry, np.float64, tuple]:
     """
-    
     parameters
     ----------
     airfoil: str
@@ -106,7 +105,7 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     ylim: tuple
         y limits of the domain
     
-    ** kwargs:
+    ** meshSettings:
         - n_in, n_out, n_bed, n_fs, n_airfoil: int
             Number of points in the inlet, outlet, bed, front step and airfoil
         - prog_in, prog_out, prog_bed, prog_fs: float
@@ -117,19 +116,37 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     """
 
     # ==================== Initializing the model ====================
-    try:
-        kwargs = kwargs["kwargs"]
-    except:
-        pass
-    
+
     gmsh.initialize()
     gmsh.option.setNumber("General.Verbosity", 0)
 
-    # Creating domain
-    xmin, xmax = xlim
+    # Gathering xlim and y_bed from mesh settings
+    xmin, xmax = meshSettings["xlim"]
+    y_bed = meshSettings["y_bed"]
+
+    # The insulating layer will be 1/10 of the distance from the airfoil to the surface
+    h = meshSettings['h']
+    interface_ratio = meshSettings.get("interface_ratio", 10)
+    naca_eps = h/interface_ratio
+    h -= naca_eps
+
+
+    n_airfoil = meshSettings["nAirfoil"]
+    n_fs = meshSettings["nFS"]
+    n_bed = meshSettings["nBed"]
+    n_in = meshSettings["nLowerInlet"] + meshSettings["nUpperSides"]
+    n_out = meshSettings["nLowerOutlet"] + meshSettings["nUpperSides"]
+
+
+    # ==================== Handling the airfoil ====================
+    coords = naca_4digit(airfoil, n = n_airfoil, alpha=alpha, position_of_center=meshSettings.get("center_of_airfoil",np.array([0.5,0])))
+    y_interface = np.max(coords[:,1]) + naca_eps
+
+    # Defining ylim
+    ylim = (y_bed, h + y_interface)
     ymin, ymax = ylim
 
-    scale = kwargs.get('scale', 1.034)
+    scale = meshSettings.get('scale', 1.034)
     gmsh.model.geo.addPoint(xmin, ymin, 0, scale, tag=1) # bottom left
     gmsh.model.geo.addPoint(xmin, ymax, 0, scale, tag=2) # top left
     gmsh.model.geo.addPoint(xmax, ymin, 0, scale, tag=3) # bottom right
@@ -141,11 +158,6 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     fs = gmsh.model.geo.addLine(2, 4, tag=4)
 
     boundary_loop = gmsh.model.geo.addCurveLoop([inlet, fs, -outlet, -bed], tag=1)
-
-    # ==================== Handling the airfoil ====================
-    n_airfoil = kwargs.get('n_airfoil') if kwargs.get('n_airfoil') else 60
-    coords = naca_4digit(airfoil, n = n_airfoil, alpha=alpha, position_of_center=kwargs.get("center_of_airfoil",np.array([0.5,0])))
-
 
     points = []
     for idx, coord in enumerate(coords[::len(coords)//n_airfoil]):
@@ -197,40 +209,36 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     gmsh.model.setPhysicalName(2, 6, 'domain')
     # ==================== Transfinte curves ====================
     # Inlet
-    n_in = kwargs.get('n_in') if kwargs.get('n_in') else 70
-    prog_in = kwargs.get('prog_in', 0.99)
+    prog_in = meshSettings.get('prog_in', 0.99)
     gmsh.model.mesh.setTransfiniteCurve(tag = inlet, numNodes=n_in, coef=prog_in)
 
     # Outlet
-    n_out = kwargs.get('n_out') if kwargs.get('n_out') else 70
-    prog_out = kwargs.get('prog_out', 0.99)
+    prog_out = meshSettings.get('prog_out', 0.99)
     gmsh.model.mesh.setTransfiniteCurve(tag = outlet, numNodes=n_out, coef=prog_out)
 
     # Bed
-    n_bed = kwargs.get('n_bed') if kwargs.get('n_bed') else 200
-    prog_bed = kwargs.get('prog_bed', 1)
+    prog_bed = meshSettings.get('prog_bed', 1)
     gmsh.model.mesh.setTransfiniteCurve(tag = bed, numNodes=n_bed, coef=prog_bed)
 
     # Free surface
-    n_fs = kwargs.get('n_fs') if kwargs.get('n_fs') else 200
-    prog_fs = kwargs.get('prog_fs', 1)
+    prog_fs = meshSettings.get('prog_fs', 1)
     gmsh.model.mesh.setTransfiniteCurve(tag = fs, numNodes=n_fs, coef=prog_fs)
 
     # Airfoil
-    prog_airfoil = kwargs.get('prog_airfoil', 1)
+    prog_airfoil = meshSettings.get('prog_airfoil', 1)
     for line in lines:
         gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(lines), coef=prog_airfoil)
 
     # ==================== Meshing and writing model ====================
     gmsh.model.mesh.generate(2)
 
-    if kwargs.get('test', False):
-        gmsh.fltk.run()
+    # if meshSettings.get('test', False):
+    #     gmsh.fltk.run()
 
-    if kwargs.get("write", False):
-        out_name = kwargs.get('o', "naca")
-        file_type = kwargs.get("file_type", "msh")
-        gmsh.write(out_name + "." + file_type)
+    # if meshSettings.get("write", False):
+    #     out_name = meshSettings.get('o', "naca")
+    #     file_type = meshSettings.get("file_type", "msh")
+    #     gmsh.write(out_name + "." + file_type)
 
     # ==================== Converting to meshio ====================
     gmsh.write("temp.msh")
@@ -239,8 +247,7 @@ def naca_mesh(airfoil: str, alpha: float = 0, xlim: tuple = (-7,13), ylim: tuple
     os.system("rm temp.msh")
     
     gmsh.finalize()
-
-    return mesh
+    return mesh, y_interface, ylim
 
 def shiftSurface(mesh : fd.Mesh, func_b : fd.Function, func_a : fd.Function) -> fd.MeshGeometry:
     '''
