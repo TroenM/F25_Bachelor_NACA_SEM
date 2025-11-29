@@ -871,7 +871,7 @@ f"""\t iteration: {i+1}
         start_time = time()
 
         # Stop kutta condition from writing
-        # self.writeKutta = False
+        self.writeKutta = False
 
         # Saving output path
         outfileFS = self.__saveOutputPath__()
