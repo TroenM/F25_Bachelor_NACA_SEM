@@ -1,0 +1,2466 @@
+Initialized FSSolver with:
+P=3
+alpha=3.0 deg
+V_inf=[1.0, 0]
+Degrees of freedom: 49587
+dt: 0.005
+ylim: [np.float64(-4.0), np.float64(1.1070139160122956)]
+
+Initialization time: 5.43 s
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -2.252875663799614e-11
+
+Kutta solver time: 4.1128 s
+
+
+Initialization done 
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.547373340571312e-15
+
+Kutta solver time: 14.3378 s
+
+
+	 iteration: 1
+	 residual norm 4.686409550191539e-08
+	 iteration time: 19.780476808547974
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.733300722538971e-11
+
+Kutta solver time: 4.1471 s
+
+
+	 iteration: 2
+	 residual norm 4.985800785945987e-06
+	 iteration time: 7.18086314201355
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -1.7277845820728999e-15
+
+Kutta solver time: 6.1697 s
+
+
+	 iteration: 3
+	 residual norm 5.2482113891987645e-06
+	 iteration time: 9.055273532867432
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.206502672911896e-11
+
+Kutta solver time: 4.3029 s
+
+
+	 iteration: 4
+	 residual norm 5.65473693123228e-06
+	 iteration time: 7.197381973266602
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.1796119636642288e-15
+
+Kutta solver time: 6.1623 s
+
+
+	 iteration: 5
+	 residual norm 6.176096642892975e-06
+	 iteration time: 9.038501262664795
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.3676325617015834e-12
+
+Kutta solver time: 4.1155 s
+
+
+	 iteration: 6
+	 residual norm 6.784787342077337e-06
+	 iteration time: 6.997591495513916
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -4.926614671774132e-16
+
+Kutta solver time: 6.3865 s
+
+
+	 iteration: 7
+	 residual norm 7.458225445888066e-06
+	 iteration time: 9.26733660697937
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -8.798517470154366e-15
+
+Kutta solver time: 6.2007 s
+
+
+	 iteration: 8
+	 residual norm 8.179086843675779e-06
+	 iteration time: 9.323787927627563
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -9.385721366772515e-12
+
+Kutta solver time: 4.1422 s
+
+
+	 iteration: 9
+	 residual norm 8.934466586622459e-06
+	 iteration time: 7.033004999160767
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -2.9906632725840154e-15
+
+Kutta solver time: 6.2158 s
+
+
+	 iteration: 10
+	 residual norm 9.714816493805982e-06
+	 iteration time: 9.101626873016357
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 9.874046025259986e-15
+
+Kutta solver time: 6.2513 s
+
+
+	 iteration: 11
+	 residual norm 1.0513028296657498e-05
+	 iteration time: 9.142714262008667
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 2.4216739724636227e-15
+
+Kutta solver time: 6.4901 s
+
+
+	 iteration: 12
+	 residual norm 1.1323738850062718e-05
+	 iteration time: 9.383760452270508
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 4.3211892397643226e-12
+
+Kutta solver time: 4.1429 s
+
+
+	 iteration: 13
+	 residual norm 1.2142831322857595e-05
+	 iteration time: 7.029634714126587
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.98839111579197e-11
+
+Kutta solver time: 4.1505 s
+
+
+	 iteration: 14
+	 residual norm 1.296708469687483e-05
+	 iteration time: 7.11919903755188
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 4.321081686908812e-11
+
+Kutta solver time: 4.1654 s
+
+
+	 iteration: 15
+	 residual norm 1.379392862524365e-05
+	 iteration time: 7.043631553649902
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.8781491079321597e-12
+
+Kutta solver time: 4.1699 s
+
+
+	 iteration: 16
+	 residual norm 1.4621271445197243e-05
+	 iteration time: 7.046770095825195
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -4.3238621016961076e-11
+
+Kutta solver time: 4.1563 s
+
+
+	 iteration: 17
+	 residual norm 1.5447378515295956e-05
+	 iteration time: 7.059773921966553
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.2069777389232e-11
+
+Kutta solver time: 4.4654 s
+
+
+	 iteration: 18
+	 residual norm 1.6270785284202487e-05
+	 iteration time: 7.358767747879028
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 4.15558074062794e-11
+
+Kutta solver time: 4.1604 s
+
+
+	 iteration: 19
+	 residual norm 1.7090234464268158e-05
+	 iteration time: 7.060109615325928
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.603092658619687e-12
+
+Kutta solver time: 4.1114 s
+
+
+	 iteration: 20
+	 residual norm 1.7904630127438784e-05
+	 iteration time: 7.0023698806762695
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 3.348094718136352e-11
+
+Kutta solver time: 4.1031 s
+
+
+	 iteration: 21
+	 residual norm 1.8713003769470273e-05
+	 iteration time: 7.010454416275024
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -7.979727989493313e-16
+
+Kutta solver time: 6.1674 s
+
+
+	 iteration: 22
+	 residual norm 1.9514488951395638e-05
+	 iteration time: 9.071013450622559
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 5.079270337660091e-15
+
+Kutta solver time: 6.1619 s
+
+
+	 iteration: 23
+	 residual norm 2.0308302172444533e-05
+	 iteration time: 9.063265562057495
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 5.465949914906787e-11
+
+Kutta solver time: 4.1389 s
+
+
+	 iteration: 24
+	 residual norm 2.109372828126192e-05
+	 iteration time: 7.046023607254028
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 8.326672684688674e-17
+
+Kutta solver time: 6.5354 s
+
+
+	 iteration: 25
+	 residual norm 2.1870109279162338e-05
+	 iteration time: 9.428410291671753
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -3.3306690738754696e-16
+
+Kutta solver time: 6.1773 s
+
+
+	 iteration: 26
+	 residual norm 2.2636835627297207e-05
+	 iteration time: 9.083821773529053
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.5158783950308674e-11
+
+Kutta solver time: 4.1089 s
+
+
+	 iteration: 27
+	 residual norm 2.3393339469417323e-05
+	 iteration time: 7.014678001403809
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.750294353897175e-12
+
+Kutta solver time: 4.1333 s
+
+
+	 iteration: 28
+	 residual norm 2.413908929970482e-05
+	 iteration time: 7.029584884643555
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 8.845521537459433e-12
+
+Kutta solver time: 4.2399 s
+
+
+	 iteration: 29
+	 residual norm 2.4873585759056542e-05
+	 iteration time: 7.126152038574219
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.3346768135136244e-11
+
+Kutta solver time: 5.2662 s
+
+
+	 iteration: 30
+	 residual norm 2.5596358266686202e-05
+	 iteration time: 8.16727590560913
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.9864278544854415e-11
+
+Kutta solver time: 4.1186 s
+
+
+	 iteration: 31
+	 residual norm 2.6306962363133626e-05
+	 iteration time: 7.018906354904175
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -4.2122513810305406e-11
+
+Kutta solver time: 4.1235 s
+
+
+	 iteration: 32
+	 residual norm 2.7004977551800417e-05
+	 iteration time: 7.018744468688965
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 5.342948306008566e-16
+
+Kutta solver time: 6.5743 s
+
+
+	 iteration: 33
+	 residual norm 2.7690005579381528e-05
+	 iteration time: 9.469107151031494
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 7.556464481917047e-11
+
+Kutta solver time: 4.1394 s
+
+
+	 iteration: 34
+	 residual norm 2.8361669042379273e-05
+	 iteration time: 7.051928520202637
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.469398545177029e-11
+
+Kutta solver time: 4.1034 s
+
+
+	 iteration: 35
+	 residual norm 2.901961024964818e-05
+	 iteration time: 7.002131462097168
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.439087126715478e-11
+
+Kutta solver time: 4.1333 s
+
+
+	 iteration: 36
+	 residual norm 2.9663490311204998e-05
+	 iteration time: 7.0225512981414795
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 5.284765680624304e-12
+
+Kutta solver time: 4.1452 s
+
+
+	 iteration: 37
+	 residual norm 3.0292988413013133e-05
+	 iteration time: 7.053203105926514
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.4779115431462486e-11
+
+Kutta solver time: 4.1256 s
+
+
+	 iteration: 38
+	 residual norm 3.090780118011732e-05
+	 iteration time: 7.014620065689087
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 4.805510156469239e-12
+
+Kutta solver time: 4.142 s
+
+
+	 iteration: 39
+	 residual norm 3.150764221543324e-05
+	 iteration time: 7.024498701095581
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 6.628669835251344e-12
+
+Kutta solver time: 4.1166 s
+
+
+	 iteration: 40
+	 residual norm 3.2092241688960956e-05
+	 iteration time: 7.012728929519653
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.8732939638675958e-11
+
+Kutta solver time: 4.1252 s
+
+
+	 iteration: 41
+	 residual norm 3.266134600771419e-05
+	 iteration time: 7.021057605743408
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.9156629327852244e-11
+
+Kutta solver time: 4.1167 s
+
+
+	 iteration: 42
+	 residual norm 3.3214717560146966e-05
+	 iteration time: 7.006542682647705
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.656157238600798e-11
+
+Kutta solver time: 4.6425 s
+
+
+	 iteration: 43
+	 residual norm 3.375213449197519e-05
+	 iteration time: 7.536738872528076
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.957304094472704e-11
+
+Kutta solver time: 4.142 s
+
+
+	 iteration: 44
+	 residual norm 3.4273390535941966e-05
+	 iteration time: 7.0917863845825195
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 3.667437187271361e-11
+
+Kutta solver time: 4.1492 s
+
+
+	 iteration: 45
+	 residual norm 3.477829486289185e-05
+	 iteration time: 7.0449059009552
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.926881984670175e-11
+
+Kutta solver time: 4.3054 s
+
+
+	 iteration: 46
+	 residual norm 3.526667196024747e-05
+	 iteration time: 7.197876930236816
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.429412144204889e-15
+
+Kutta solver time: 6.172 s
+
+
+	 iteration: 47
+	 residual norm 3.573836154035264e-05
+	 iteration time: 9.064872741699219
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -1.489645906627146e-11
+
+Kutta solver time: 4.119 s
+
+
+	 iteration: 48
+	 residual norm 3.619321845228483e-05
+	 iteration time: 7.018137693405151
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -2.282896094385478e-15
+
+Kutta solver time: 6.2085 s
+
+
+	 iteration: 49
+	 residual norm 3.66311126024359e-05
+	 iteration time: 9.111190795898438
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.8272939545104236e-11
+
+Kutta solver time: 4.1327 s
+
+
+	 iteration: 50
+	 residual norm 3.705192890524072e-05
+	 iteration time: 7.028352737426758
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.7202983749207164e-11
+
+Kutta solver time: 4.114 s
+
+
+	 iteration: 51
+	 residual norm 3.74555672161972e-05
+	 iteration time: 7.086081504821777
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 4.454769886308441e-15
+
+Kutta solver time: 6.1797 s
+
+
+	 iteration: 52
+	 residual norm 3.784194228358178e-05
+	 iteration time: 9.069554805755615
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.072935127525824e-12
+
+Kutta solver time: 4.1172 s
+
+
+	 iteration: 53
+	 residual norm 3.821098369530529e-05
+	 iteration time: 7.006820917129517
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 5.259681579161679e-15
+
+Kutta solver time: 6.1803 s
+
+
+	 iteration: 54
+	 residual norm 3.8562635837720035e-05
+	 iteration time: 9.071770191192627
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -2.5743296383495817e-15
+
+Kutta solver time: 6.2084 s
+
+
+	 iteration: 55
+	 residual norm 3.889685783086574e-05
+	 iteration time: 9.784199714660645
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 3.9721316513752214e-11
+
+Kutta solver time: 4.1438 s
+
+
+	 iteration: 56
+	 residual norm 3.921362349456333e-05
+	 iteration time: 7.045242071151733
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -3.157196726277789e-15
+
+Kutta solver time: 6.1998 s
+
+
+	 iteration: 57
+	 residual norm 3.951292127064868e-05
+	 iteration time: 9.092538356781006
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.1379786002407855e-15
+
+Kutta solver time: 6.1916 s
+
+
+	 iteration: 58
+	 residual norm 3.979475419629645e-05
+	 iteration time: 9.080830097198486
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 9.040115878100607e-12
+
+Kutta solver time: 4.1365 s
+
+
+	 iteration: 59
+	 residual norm 4.0059139813100215e-05
+	 iteration time: 7.027376174926758
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -6.245004513516506e-17
+
+Kutta solver time: 6.1569 s
+
+
+	 iteration: 60
+	 residual norm 4.030611012038473e-05
+	 iteration time: 9.048446416854858
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.216331285165296e-12
+
+Kutta solver time: 4.106 s
+
+
+	 iteration: 61
+	 residual norm 4.0535711498512495e-05
+	 iteration time: 6.995019435882568
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -1.7094090032365727e-11
+
+Kutta solver time: 4.1436 s
+
+
+	 iteration: 62
+	 residual norm 4.074800462894692e-05
+	 iteration time: 7.033849716186523
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 7.030315218869987e-11
+
+Kutta solver time: 4.0994 s
+
+
+	 iteration: 63
+	 residual norm 4.0943064419510597e-05
+	 iteration time: 6.993016958236694
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -3.344546861683284e-15
+
+Kutta solver time: 6.1761 s
+
+
+	 iteration: 64
+	 residual norm 4.1120979916852956e-05
+	 iteration time: 9.082473278045654
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.1965498036836664e-12
+
+Kutta solver time: 4.112 s
+
+
+	 iteration: 65
+	 residual norm 4.128185420770919e-05
+	 iteration time: 7.006036996841431
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -4.024965777338352e-11
+
+Kutta solver time: 4.1147 s
+
+
+	 iteration: 66
+	 residual norm 4.142580433064135e-05
+	 iteration time: 7.001342535018921
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -1.5736023595280813e-13
+
+Kutta solver time: 4.1018 s
+
+
+	 iteration: 67
+	 residual norm 4.155296115975336e-05
+	 iteration time: 6.994357347488403
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -4.0693858005536043e-11
+
+Kutta solver time: 4.9048 s
+
+
+	 iteration: 68
+	 residual norm 4.166346930319325e-05
+	 iteration time: 7.799006700515747
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.893201287549999e-12
+
+Kutta solver time: 4.1568 s
+
+
+	 iteration: 69
+	 residual norm 4.175748698592185e-05
+	 iteration time: 7.075563430786133
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 4.7824591509204595e-12
+
+Kutta solver time: 4.1365 s
+
+
+	 iteration: 70
+	 residual norm 4.1835185920805276e-05
+	 iteration time: 7.030997276306152
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.1996653670465207e-12
+
+Kutta solver time: 4.104 s
+
+
+	 iteration: 71
+	 residual norm 4.1896751185642945e-05
+	 iteration time: 6.991296052932739
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -1.7264557838903016e-11
+
+Kutta solver time: 4.0981 s
+
+
+	 iteration: 72
+	 residual norm 4.1942381090203095e-05
+	 iteration time: 6.982276916503906
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.143224569512881e-11
+
+Kutta solver time: 4.1193 s
+
+
+	 iteration: 73
+	 residual norm 4.197228703028465e-05
+	 iteration time: 7.015027284622192
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.4120656033345114e-11
+
+Kutta solver time: 4.119 s
+
+
+	 iteration: 74
+	 residual norm 4.198669334846316e-05
+	 iteration time: 6.999359846115112
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -4.4255099584944446e-11
+
+Kutta solver time: 4.138 s
+
+
+	 iteration: 75
+	 residual norm 4.1985837176559174e-05
+	 iteration time: 7.036796808242798
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -4.5592002395622444e-12
+
+Kutta solver time: 4.1193 s
+
+
+	 iteration: 76
+	 residual norm 4.196996828730252e-05
+	 iteration time: 7.014400482177734
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.375285633268945e-11
+
+Kutta solver time: 4.1113 s
+
+
+	 iteration: 77
+	 residual norm 4.19393489121678e-05
+	 iteration time: 7.012799263000488
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 4.760081218080359e-15
+
+Kutta solver time: 6.4736 s
+
+
+	 iteration: 78
+	 residual norm 4.189425360058866e-05
+	 iteration time: 9.37868595123291
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.394717674685353e-15
+
+Kutta solver time: 6.1834 s
+
+
+	 iteration: 79
+	 residual norm 4.1834969022394565e-05
+	 iteration time: 9.067239999771118
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -2.7755575615628914e-17
+
+Kutta solver time: 6.2149 s
+
+
+	 iteration: 80
+	 residual norm 4.176179379868609e-05
+	 iteration time: 9.119964599609375
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -1.2054808540273854e-11
+
+Kutta solver time: 4.1232 s
+
+
+	 iteration: 81
+	 residual norm 4.1675038319690265e-05
+	 iteration time: 7.01393461227417
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.297139198974122e-11
+
+Kutta solver time: 4.2196 s
+
+
+	 iteration: 82
+	 residual norm 4.1575024544716067e-05
+	 iteration time: 7.101316690444946
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.1518703485767787e-11
+
+Kutta solver time: 4.1436 s
+
+
+	 iteration: 83
+	 residual norm 4.1462085810044383e-05
+	 iteration time: 7.072627067565918
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.511960084383702e-11
+
+Kutta solver time: 9.8198 s
+
+
+	 iteration: 84
+	 residual norm 4.1336566632303604e-05
+	 iteration time: 13.608688116073608
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -7.89465715023141e-13
+
+Kutta solver time: 4.1757 s
+
+
+	 iteration: 85
+	 residual norm 4.1198822491662866e-05
+	 iteration time: 7.133975505828857
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -1.676391664373611e-11
+
+Kutta solver time: 4.1584 s
+
+
+	 iteration: 86
+	 residual norm 4.1049219616607614e-05
+	 iteration time: 7.091587066650391
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.4282353905391574e-11
+
+Kutta solver time: 4.2075 s
+
+
+	 iteration: 87
+	 residual norm 4.088813477250103e-05
+	 iteration time: 7.124509334564209
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.3280974370543106e-11
+
+Kutta solver time: 4.1189 s
+
+
+	 iteration: 88
+	 residual norm 4.0715955020002864e-05
+	 iteration time: 7.021755933761597
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.7036887445829336e-11
+
+Kutta solver time: 4.1168 s
+
+
+	 iteration: 89
+	 residual norm 4.05330774907334e-05
+	 iteration time: 7.000739097595215
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.856876177963045e-13
+
+Kutta solver time: 4.2338 s
+
+
+	 iteration: 90
+	 residual norm 4.0339909135700656e-05
+	 iteration time: 7.125530242919922
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 5.620504062164855e-16
+
+Kutta solver time: 6.1957 s
+
+
+	 iteration: 91
+	 residual norm 4.013686647305126e-05
+	 iteration time: 9.09892201423645
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.22418219794929e-12
+
+Kutta solver time: 4.1131 s
+
+
+	 iteration: 92
+	 residual norm 3.99243753314602e-05
+	 iteration time: 7.007773160934448
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.313878255666424e-12
+
+Kutta solver time: 4.1212 s
+
+
+	 iteration: 93
+	 residual norm 3.970287056775933e-05
+	 iteration time: 7.015270709991455
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -6.661338147750939e-16
+
+Kutta solver time: 6.165 s
+
+
+	 iteration: 94
+	 residual norm 3.947279579326054e-05
+	 iteration time: 9.061973333358765
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -1.547373340571312e-15
+
+Kutta solver time: 6.2569 s
+
+
+	 iteration: 95
+	 residual norm 3.9234603065801945e-05
+	 iteration time: 9.154836177825928
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 4.15639744844043e-15
+
+Kutta solver time: 6.18 s
+
+
+	 iteration: 96
+	 residual norm 3.8988752590066974e-05
+	 iteration time: 9.081711769104004
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 5.689893001203927e-16
+
+Kutta solver time: 6.177 s
+
+
+	 iteration: 97
+	 residual norm 3.87357123894659e-05
+	 iteration time: 9.07041597366333
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.953018468116909e-13
+
+Kutta solver time: 4.1403 s
+
+
+	 iteration: 98
+	 residual norm 3.847595794987752e-05
+	 iteration time: 7.034611940383911
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.0771591951730386e-11
+
+Kutta solver time: 4.1468 s
+
+
+	 iteration: 99
+	 residual norm 3.8209971878702285e-05
+	 iteration time: 7.04952597618103
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.664556406743571e-11
+
+Kutta solver time: 4.2727 s
+
+
+	 iteration: 100
+	 residual norm 3.793824350734147e-05
+	 iteration time: 7.154339551925659
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 2.546574062733953e-15
+
+Kutta solver time: 6.151 s
+
+
+	 iteration: 101
+	 residual norm 3.7661268500017397e-05
+	 iteration time: 9.11879014968872
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.022625122943822e-12
+
+Kutta solver time: 4.1043 s
+
+
+	 iteration: 102
+	 residual norm 3.737954841188691e-05
+	 iteration time: 6.994018316268921
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 3.520281982583029e-11
+
+Kutta solver time: 5.4106 s
+
+
+	 iteration: 103
+	 residual norm 3.709359023799498e-05
+	 iteration time: 8.301604986190796
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.462810759304659e-12
+
+Kutta solver time: 4.1551 s
+
+
+	 iteration: 104
+	 residual norm 3.6803905929800225e-05
+	 iteration time: 7.099960803985596
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.26931390345797e-11
+
+Kutta solver time: 4.1559 s
+
+
+	 iteration: 105
+	 residual norm 3.65110118708394e-05
+	 iteration time: 7.076928377151489
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.5832746492214795e-11
+
+Kutta solver time: 4.1178 s
+
+
+	 iteration: 106
+	 residual norm 3.621542832748074e-05
+	 iteration time: 7.017659902572632
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 3.0621408186881638e-12
+
+Kutta solver time: 4.2847 s
+
+
+	 iteration: 107
+	 residual norm 3.5917678855255635e-05
+	 iteration time: 7.1702797412872314
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -4.481082171992057e-12
+
+Kutta solver time: 4.1346 s
+
+
+	 iteration: 108
+	 residual norm 3.5618289662684237e-05
+	 iteration time: 7.020554780960083
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 9.403734735347058e-12
+
+Kutta solver time: 4.1613 s
+
+
+	 iteration: 109
+	 residual norm 3.531778893957736e-05
+	 iteration time: 7.044368028640747
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.1547381106868926e-11
+
+Kutta solver time: 8.3363 s
+
+
+	 iteration: 110
+	 residual norm 3.5016706122934956e-05
+	 iteration time: 11.214519023895264
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 4.163336342344337e-17
+
+Kutta solver time: 6.1604 s
+
+
+	 iteration: 111
+	 residual norm 3.471557113511605e-05
+	 iteration time: 9.058868408203125
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 4.414801857421935e-13
+
+Kutta solver time: 4.1091 s
+
+
+	 iteration: 112
+	 residual norm 3.44149135534506e-05
+	 iteration time: 7.0060412883758545
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.887579841377331e-11
+
+Kutta solver time: 4.4537 s
+
+
+	 iteration: 113
+	 residual norm 3.411526171173067e-05
+	 iteration time: 7.3327555656433105
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.2674515043341614e-11
+
+Kutta solver time: 4.1104 s
+
+
+	 iteration: 114
+	 residual norm 3.38171417880903e-05
+	 iteration time: 7.002143621444702
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 8.042178034628478e-15
+
+Kutta solver time: 6.1545 s
+
+
+	 iteration: 115
+	 residual norm 3.352107678592305e-05
+	 iteration time: 9.062390804290771
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 4.475586568020162e-15
+
+Kutta solver time: 6.3743 s
+
+
+	 iteration: 116
+	 residual norm 3.322758548494102e-05
+	 iteration time: 9.295838832855225
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.908162847845233e-12
+
+Kutta solver time: 4.1178 s
+
+
+	 iteration: 117
+	 residual norm 3.29371813244978e-05
+	 iteration time: 7.012316465377808
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.1306303943369187e-11
+
+Kutta solver time: 4.1223 s
+
+
+	 iteration: 118
+	 residual norm 3.265037121428669e-05
+	 iteration time: 7.037596940994263
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.492911681059809e-12
+
+Kutta solver time: 4.653 s
+
+
+	 iteration: 119
+	 residual norm 3.236765431097176e-05
+	 iteration time: 7.5424346923828125
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.6946860581512624e-12
+
+Kutta solver time: 4.1161 s
+
+
+	 iteration: 120
+	 residual norm 3.2089520711977135e-05
+	 iteration time: 7.018238067626953
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.0853763160744165e-11
+
+Kutta solver time: 4.1231 s
+
+
+	 iteration: 121
+	 residual norm 3.181645011371264e-05
+	 iteration time: 7.024958610534668
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -4.649058915617843e-16
+
+Kutta solver time: 6.1796 s
+
+
+	 iteration: 122
+	 residual norm 3.1548910417794034e-05
+	 iteration time: 9.063002109527588
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 4.850286838831153e-15
+
+Kutta solver time: 6.1866 s
+
+
+	 iteration: 123
+	 residual norm 3.128735629022079e-05
+	 iteration time: 9.075780630111694
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.0824674490095276e-15
+
+Kutta solver time: 6.4993 s
+
+
+	 iteration: 124
+	 residual norm 3.103222768807496e-05
+	 iteration time: 9.381026029586792
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.0984449461126644e-11
+
+Kutta solver time: 5.4472 s
+
+
+	 iteration: 125
+	 residual norm 3.078394836145753e-05
+	 iteration time: 8.342404842376709
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.8979249555582953e-12
+
+Kutta solver time: 5.0701 s
+
+
+	 iteration: 126
+	 residual norm 3.0542924346285054e-05
+	 iteration time: 7.991771221160889
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 7.424616477180734e-16
+
+Kutta solver time: 6.207 s
+
+
+	 iteration: 127
+	 residual norm 3.0309542446187e-05
+	 iteration time: 9.107939004898071
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.464800503114816e-14
+
+Kutta solver time: 6.7444 s
+
+
+	 iteration: 128
+	 residual norm 3.0084168729655704e-05
+	 iteration time: 9.631996631622314
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.137658354303909e-11
+
+Kutta solver time: 4.1419 s
+
+
+	 iteration: 129
+	 residual norm 2.986714704310745e-05
+	 iteration time: 7.027535438537598
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.2497192437030975e-11
+
+Kutta solver time: 4.1171 s
+
+
+	 iteration: 130
+	 residual norm 2.9658797609164943e-05
+	 iteration time: 7.029362201690674
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.3216719385589215e-12
+
+Kutta solver time: 4.6936 s
+
+
+	 iteration: 131
+	 residual norm 2.945941560057091e-05
+	 iteration time: 7.573425531387329
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 3.710511065069255e-12
+
+Kutta solver time: 4.1051 s
+
+
+	 iteration: 132
+	 residual norm 2.926926990394042e-05
+	 iteration time: 6.999969959259033
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.677455479549451e-11
+
+Kutta solver time: 4.1303 s
+
+
+	 iteration: 133
+	 residual norm 2.908860186991966e-05
+	 iteration time: 7.0196309089660645
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.4493017896910487e-11
+
+Kutta solver time: 4.144 s
+
+
+	 iteration: 134
+	 residual norm 2.8917624259853816e-05
+	 iteration time: 7.0333473682403564
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -8.522822031453714e-11
+
+Kutta solver time: 4.8164 s
+
+
+	 iteration: 135
+	 residual norm 2.875652027719017e-05
+	 iteration time: 7.72073769569397
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 4.85722573273506e-16
+
+Kutta solver time: 6.192 s
+
+
+	 iteration: 136
+	 residual norm 2.8605442768025994e-05
+	 iteration time: 9.114641666412354
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.930925029926868e-11
+
+Kutta solver time: 4.1388 s
+
+
+	 iteration: 137
+	 residual norm 2.846451358373997e-05
+	 iteration time: 7.048513412475586
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.0451058341540715e-12
+
+Kutta solver time: 4.1112 s
+
+
+	 iteration: 138
+	 residual norm 2.8333823116117855e-05
+	 iteration time: 7.021874904632568
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 3.940958670511918e-11
+
+Kutta solver time: 4.1577 s
+
+
+	 iteration: 139
+	 residual norm 2.821343002191806e-05
+	 iteration time: 7.05767297744751
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 2.8796409701214998e-15
+
+Kutta solver time: 6.2665 s
+
+
+	 iteration: 140
+	 residual norm 2.8103361151594838e-05
+	 iteration time: 9.179255485534668
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.28848639827595e-11
+
+Kutta solver time: 4.1161 s
+
+
+	 iteration: 141
+	 residual norm 2.800361167857412e-05
+	 iteration time: 7.016008615493774
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.884725874314654e-12
+
+Kutta solver time: 4.483 s
+
+
+	 iteration: 142
+	 residual norm 2.791414543888254e-05
+	 iteration time: 7.401574611663818
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -9.281351381895675e-11
+
+Kutta solver time: 4.3503 s
+
+
+	 iteration: 143
+	 residual norm 2.7834895455160537e-05
+	 iteration time: 7.2677202224731445
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 2.4841240175987878e-15
+
+Kutta solver time: 6.1694 s
+
+
+	 iteration: 144
+	 residual norm 2.7765764704340814e-05
+	 iteration time: 9.085102558135986
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 3.52067472397799e-11
+
+Kutta solver time: 4.1096 s
+
+
+	 iteration: 145
+	 residual norm 2.7706627032897832e-05
+	 iteration time: 7.016317844390869
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.942890293094024e-15
+
+Kutta solver time: 6.2327 s
+
+
+	 iteration: 146
+	 residual norm 2.765732829227141e-05
+	 iteration time: 9.12541127204895
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.2145986433574905e-11
+
+Kutta solver time: 4.1188 s
+
+
+	 iteration: 147
+	 residual norm 2.761768763288014e-05
+	 iteration time: 7.031045198440552
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 9.711381004917641e-11
+
+Kutta solver time: 4.1274 s
+
+
+	 iteration: 148
+	 residual norm 2.7587498941288108e-05
+	 iteration time: 7.0413899421691895
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.663454096689776e-12
+
+Kutta solver time: 4.1267 s
+
+
+	 iteration: 149
+	 residual norm 2.7566532441924955e-05
+	 iteration time: 7.033876657485962
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 9.020562075079397e-16
+
+Kutta solver time: 6.2473 s
+
+
+	 iteration: 150
+	 residual norm 2.755453637364972e-05
+	 iteration time: 9.17203974723816
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.1102230246251565e-15
+
+Kutta solver time: 6.6618 s
+
+
+	 iteration: 151
+	 residual norm 2.755123882368727e-05
+	 iteration time: 9.627746820449829
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -5.67803443152215e-12
+
+Kutta solver time: 4.1641 s
+
+
+	 iteration: 152
+	 residual norm 2.7556349577112803e-05
+	 iteration time: 8.677950859069824
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -1.68388428201105e-11
+
+Kutta solver time: 4.1709 s
+
+
+	 iteration: 153
+	 residual norm 2.7569562050801876e-05
+	 iteration time: 7.1145501136779785
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -3.12944115066216e-15
+
+Kutta solver time: 6.2241 s
+
+
+	 iteration: 154
+	 residual norm 2.759055525579794e-05
+	 iteration time: 9.164785861968994
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -1.8041124150158794e-16
+
+Kutta solver time: 6.2278 s
+
+
+	 iteration: 155
+	 residual norm 2.7618995764340137e-05
+	 iteration time: 9.139829874038696
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.414533933376873e-11
+
+Kutta solver time: 4.1282 s
+
+
+	 iteration: 156
+	 residual norm 2.7654539677260346e-05
+	 iteration time: 7.03722071647644
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.2714065911190175e-12
+
+Kutta solver time: 4.1161 s
+
+
+	 iteration: 157
+	 residual norm 2.7696834541195793e-05
+	 iteration time: 7.017755746841431
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.4884386218282373e-11
+
+Kutta solver time: 4.1168 s
+
+
+	 iteration: 158
+	 residual norm 2.7745521260299318e-05
+	 iteration time: 7.0147411823272705
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -4.429814154383038e-11
+
+Kutta solver time: 4.7236 s
+
+
+	 iteration: 159
+	 residual norm 2.7800235905599615e-05
+	 iteration time: 7.631782293319702
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -9.329912536992779e-11
+
+Kutta solver time: 4.1448 s
+
+
+	 iteration: 160
+	 residual norm 2.7860611481208493e-05
+	 iteration time: 7.027213096618652
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -1.2906342661267445e-15
+
+Kutta solver time: 6.1677 s
+
+
+	 iteration: 161
+	 residual norm 2.7926279596426276e-05
+	 iteration time: 9.059422492980957
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 4.2401575306438843e-11
+
+Kutta solver time: 4.127 s
+
+
+	 iteration: 162
+	 residual norm 2.799687204724856e-05
+	 iteration time: 7.0262415409088135
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.388075848180904e-11
+
+Kutta solver time: 4.1403 s
+
+
+	 iteration: 163
+	 residual norm 2.8072022303544857e-05
+	 iteration time: 7.033614635467529
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.5672804160326024e-11
+
+Kutta solver time: 4.1826 s
+
+
+	 iteration: 164
+	 residual norm 2.8151366881821105e-05
+	 iteration time: 7.081782817840576
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 1.0898969227124411e-11
+
+Kutta solver time: 4.1265 s
+
+
+	 iteration: 165
+	 residual norm 2.8234546620130298e-05
+	 iteration time: 7.019833326339722
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.9404743357174254e-11
+
+Kutta solver time: 4.1222 s
+
+
+	 iteration: 166
+	 residual norm 2.83212078345801e-05
+	 iteration time: 7.025160312652588
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 5.837384742246599e-11
+
+Kutta solver time: 4.2223 s
+
+
+	 iteration: 167
+	 residual norm 2.8411003383486823e-05
+	 iteration time: 7.116173028945923
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.0778059828252537e-11
+
+Kutta solver time: 4.1198 s
+
+
+	 iteration: 168
+	 residual norm 2.850359360584696e-05
+	 iteration time: 7.02187967300415
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.930802459725882e-11
+
+Kutta solver time: 4.13 s
+
+
+	 iteration: 169
+	 residual norm 2.859864716760564e-05
+	 iteration time: 7.0314764976501465
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 4.597322522670311e-12
+
+Kutta solver time: 4.1285 s
+
+
+	 iteration: 170
+	 residual norm 2.869584178997405e-05
+	 iteration time: 7.01638126373291
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -6.814736275284616e-12
+
+Kutta solver time: 4.1233 s
+
+
+	 iteration: 171
+	 residual norm 2.8794864899574715e-05
+	 iteration time: 7.021742343902588
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 6.12242201381008e-11
+
+Kutta solver time: 4.1078 s
+
+
+	 iteration: 172
+	 residual norm 2.8895414176189012e-05
+	 iteration time: 6.999291658401489
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.403702237252503e-13
+
+Kutta solver time: 4.1385 s
+
+
+	 iteration: 173
+	 residual norm 2.899719800146793e-05
+	 iteration time: 7.041715860366821
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 5.095070199079288e-12
+
+Kutta solver time: 4.1304 s
+
+
+	 iteration: 174
+	 residual norm 2.9099935832214934e-05
+	 iteration time: 7.030915975570679
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 9.71445146547012e-16
+
+Kutta solver time: 6.1715 s
+
+
+	 iteration: 175
+	 residual norm 2.920335851074417e-05
+	 iteration time: 9.086472034454346
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 4.295175326518574e-15
+
+Kutta solver time: 6.8312 s
+
+
+	 iteration: 176
+	 residual norm 2.9307208472067167e-05
+	 iteration time: 9.732032775878906
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.3031992979483107e-12
+
+Kutta solver time: 4.3723 s
+
+
+	 iteration: 177
+	 residual norm 2.9411239917032862e-05
+	 iteration time: 7.2818403244018555
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -2.861489517558269e-11
+
+Kutta solver time: 4.2184 s
+
+
+	 iteration: 178
+	 residual norm 2.95152188963919e-05
+	 iteration time: 7.125325441360474
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -1.7555401576885288e-15
+
+Kutta solver time: 6.2148 s
+
+
+	 iteration: 179
+	 residual norm 2.96189233553201e-05
+	 iteration time: 9.125205039978027
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 2.5326962749261384e-15
+
+Kutta solver time: 6.1918 s
+
+
+	 iteration: 180
+	 residual norm 2.97221431257977e-05
+	 iteration time: 9.107019186019897
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: -4.3021142204224816e-16
+
+Kutta solver time: 6.2335 s
+
+
+	 iteration: 181
+	 residual norm 2.9824679860669587e-05
+	 iteration time: 9.13479471206665
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.942645432879587e-11
+
+Kutta solver time: 4.1154 s
+
+
+	 iteration: 182
+	 residual norm 2.9926346957257447e-05
+	 iteration time: 7.02416729927063
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: 2.091368744849831e-12
+
+Kutta solver time: 4.161 s
+
+
+	 iteration: 183
+	 residual norm 3.002696940171405e-05
+	 iteration time: 7.067489862442017
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -1.8151112557429627e-11
+
+Kutta solver time: 6.0284 s
+
+
+	 iteration: 184
+	 residual norm 3.012638361569867e-05
+	 iteration time: 8.954289436340332
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.5692213073978962e-12
+
+Kutta solver time: 4.1812 s
+
+
+	 iteration: 185
+	 residual norm 3.0224437258188788e-05
+	 iteration time: 7.1366753578186035
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 2 iterations
+Dot product at TE: -3.1517774501388374e-12
+
+Kutta solver time: 4.4799 s
+
+
+	 iteration: 186
+	 residual norm 3.0320989008064218e-05
+	 iteration time: 7.437592029571533
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.5501488981328748e-14
+
+Kutta solver time: 6.5785 s
+
+
+	 iteration: 187
+	 residual norm 3.0415908323776653e-05
+	 iteration time: 9.578071355819702
+--------------------------------------------------
+
+--------------------------------------------------
+
+Kutta condition applied in 3 iterations
+Dot product at TE: 1.6167622796103842e-15
+
+Kutta solver time: 11.3887 s
+
+
+	 iteration: 188
+	 residual norm 3.0509075184292157e-05
+	 iteration time: 14.563877820968628
+--------------------------------------------------
+

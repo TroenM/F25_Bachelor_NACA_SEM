@@ -1,0 +1,10 @@
+Loaded dependency [python3/3.13.2]: sqlite3/3.49.0
+Loaded dependency [python3/3.13.2]: gcc/12.4.0-binutils-2.42
+Loaded module: python3/3.13.2
+
+Loading python3/3.13.2
+  Loading requirement: sqlite3/3.49.0 gcc/12.4.0-binutils-2.42
+Loaded module: mpi/5.0.3-gcc-12.4.0-binutils-2.42
+sh: line 1: cls: command not found
+TERM environment variable not set.
+/zhome/ce/3/186843/.lsbatch/1764515674.27220029.shell: line 18: 1315156 Killed                  python3 -u HPC_Class_FS.py
