@@ -29,10 +29,10 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 1, # Polynomial degree
+    "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS": 200,
+    "nFS": 100,
     "FR": 0.5672,
     "continue": False
 }
@@ -49,14 +49,14 @@ meshSettings = {
     
     "h": 1.034,
     "interface_ratio": 5,
-    "nAirfoil": meshSettings["nFS"]//2,
+    "nAirfoil": hypParams["nFS"]//2,
     "centerOfAirfoil": (0.5,0.0),
 
     "nFS": hypParams["nFS"],
     "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
-    "nLowerInlet": meshSettings["nFS"]//10,
-    "nLowerOutlet": meshSettings["nFS"]//10,
-    "nBed": meshSettings["nFS"]//2,
+    "nLowerInlet": hypParams["nFS"]//10,
+    "nLowerOutlet": hypParams["nFS"]//10,
+    "nBed": hypParams["nFS"]//2,
     "test": True
     }
 
