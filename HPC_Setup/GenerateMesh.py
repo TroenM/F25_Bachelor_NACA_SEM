@@ -5,7 +5,7 @@ import os
 P = 3
 meshSettings = {
     "airfoilNumber": "0012",
-    "alpha_deg": 3,
+    "alpha_deg": 5,
     "circle": True,
 
     "xlim": (-8.5,19.5),
@@ -18,7 +18,7 @@ meshSettings = {
     "nAirfoil": "calculated down below for a ration that Morten found, this seemed stable, but fast",
     "centerOfAirfoil": (0.5,0.0),
 
-    "nFS": int(200),
+    "nFS": int(300),
     "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
     "nLowerInlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
     "nLowerOutlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
@@ -284,12 +284,20 @@ def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[np.floa
 
     ylim = (y_bed, h + y_interface)
     y_data = np.array([y_interface, *ylim])
-    print(y_interface, ylim)
     np.save("y_data", y_data)
+
+    del(gmsh)
+    print("Mesh Saved")
 
 
 if __name__ =="__main__":
     createFSMesh("0012", meshSettings["alpha_deg"], meshSettings)
+    import firedrake as fd
+    mesh = fd.Mesh("mesh.msh")
+
+    V = fd.FunctionSpace(mesh, "CG", P)
+    print("DOF: ", V.dof_count)
+
 
     
 

@@ -1,10 +1,8 @@
 import os;
 os.environ["OMP_NUM_THREADS"] = "1"
-os.system('cls||clear')
 
-
-import firedrake as fd
 from GenerateMesh import getMeshSettings, naca_4digit, P
+import firedrake as fd
 from firedrake.pyplot import tripcolor
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,7 +10,6 @@ from time import time
 import shutil
 import sys
 import copy
-
 
 import os
 if os.getcwd()[-21:] == 'F25_Bachelor_NACA_SEM':
@@ -32,47 +29,35 @@ IMPORTANT: The boundaries should be indexed as follows:
 
 hypParams = {
     "P": P, # Polynomial degree
-    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
+    "V_inf": fd.as_vector((0.5672*np.sqrt(9.81), 0.0)), # Free stream velocity 
     "rho": 1.225 # Density of air [kg/m^3]
 }
 meshSettings = getMeshSettings()
-
-# meshSettings = {
-    # "airfoilNumber": "0012", # NACA airfoil number
-    # "alpha_deg": 5, # Angle of attack in degrees
-    # "centerOfAirfoil": (0.5, 0), # Center of airfoil (x,y)
-    # "circle": True, # Whether to use a circular or elliptical vortex
-# 
-    # "xlim": (-8, 27), # x-limits of the domain
-    # "ylim": (-4, 1), # y-limits of the domain
-# 
-    # "nIn": 40, # Number of external nodes on inlet boundary 
-    # "nOut": 40, # Number of external nodes on outlet boundary
-    # "nBed": 150, # Number of external nodes on bed boundary
-    # "nFS": 2500, # Number of external nodes on free surface boundary
-    # "nAirfoil": 200 # Number of external nodes on airfoil boundary
-# }
 
 solverSettings = {
     "maxItKutta": 50,
     "tolKutta": 1e-10,
     "maxItFreeSurface": 10000,
-    "minItFreeSurface": 1000, # Let the solver ramp up for x iterations before checking for convergence
+    "minItFreeSurface": 100, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
     "maxItWeak1d": 2500 , # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 5e-3, # Time step for free surface update
+    "dt": 2e-3, # Time step for free surface update
+
+    ################ This enables continuing from where the solver last stopped. You can just comment the line out if you want it to start from the beginning
+    "startIteration": np.where(np.load("TestResults/arrays/residuals.npy")[:,1] == 0)[0][0]-1
 }
+
 
 outputSettings = {
     "outputPath": "./TestResults/",
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 50, # Output interval in free surface time steps
+    "outputIntervalFS": 100, # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -104,7 +89,6 @@ class FSSolver:
         # Computed mesh parameters
         ### Choose either uniform mesh on top or original mesh
         self.mesh = fd.Mesh("mesh.msh")
-        #self.mesh, self.yInterface, self.ylim = naca_mesh(self.airfoilNumber, np.rad2deg(self.alpha), meshSettings)
         self.yInterface, *self.ylim = np.load("y_data.npy")
         self.a = 1
         self.b = 1 if self.circle else int(self.airfoilNumber[2:])/100
@@ -153,11 +137,22 @@ class FSSolver:
         self.outputIntervalKutta = outputSettings["outputIntervalKutta"]
         self.outputIntervalFS = outputSettings["outputIntervalFS"]
 
-        self.etas = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
-        self.phis = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
-        self.ws = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
-        self.coordsFS_array = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)))
-        self.residual_array = np.zeros((self.maxItFreeSurface+1, 2))
+        self.startIteration = solverSettings.get("startIteration", 0)
+        
+        if not self.startIteration:
+            self.etas = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
+            self.phis = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
+            self.ws = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
+            self.coordsFS_array = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)))
+            self.residual_array = np.zeros((self.maxItFreeSurface+1, 2))
+        else:
+            print("Continued solve at iteration: ", self.startIteration)
+            self.etas = np.load("TestResults/arrays/eta.npy")
+            self.phis = np.load("TestResults/arrays/phiTilde.npy")
+            self.ws = np.load("TestResults/arrays/ws.npy")
+            self.coordsFS_array = np.load("TestResults/arrays/coordsFS.npy")
+            self.residual_array = np.load("TestResults/arrays/residuals.npy")
+
 
         
         print("Initialized FSSolver with:\n" + f"P={self.P}\n" + 
@@ -446,15 +441,23 @@ Dot product at TE: {dotProductTE}
     #=================================================================#
     def __saveOutputPath__(self) -> None:
         if self.writeFreeSurface:
-            if os.path.exists(self.outputPath + "FSIterations"):
-                shutil.rmtree(self.outputPath + "FSIterations")
-
+            if os.path.exists(self.outputPath + "FSIterationsContinued"):
+                shutil.rmtree(self.outputPath + "FSIterationsContinued")
+            
             try:
-                os.remove(self.outputPath + "FSIterations.pvd")
+                os.remove(self.outputPath + "FSIterationsContinued.pvd")
             except:
                 pass
-
-            outfileFS = fd.VTKFile(self.outputPath + "FSIterations.pvd")
+            if self.startIteration==0:
+                if os.path.exists(self.outputPath + "FSIterations"):
+                    shutil.rmtree(self.outputPath + "FSIterations")
+                try:
+                    os.remove(self.outputPath + "FSIterations.pvd")
+                except:
+                    pass
+                outfileFS = fd.VTKFile(self.outputPath + "FSIterations.pvd")
+            else:
+                outfileFS = fd.VTKFile(self.outputPath + "FSIterationsContinued.pvd")
             #self.u.rename("Velocity")
             return outfileFS
     
@@ -482,18 +485,42 @@ Dot product at TE: {dotProductTE}
 
     def __initPhiTilde__(self) -> None:
         V1 = fd.FunctionSpace(self.fsMesh, "CG", 1)
-        self.phiTilde = fd.Function(V1)
-        self.phiTilde_prev = fd.Function(V1)
-        self.phiTilde.dat.data[:] = self.FSEvaluator(self.phi)
-        self.phiTilde_prev.dat.data[:] = self.FSEvaluator(self.phi)
+        if not self.startIteration:
+            self.phiTilde = fd.Function(V1)
+            self.phiTilde_prev = fd.Function(V1)
+            self.phiTilde.dat.data[:] = self.FSEvaluator(self.phi)
+            self.phiTilde_prev.dat.data[:] = self.FSEvaluator(self.phi)
+        else:
+            self.phiTilde = fd.Function(V1)
+            self.phiTilde_prev = fd.Function(V1)
+
+            self.phiTilde.dat.data[:] = self.phis[self.startIteration,:]
+            self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde)
+
+            self.phiTilde_prev.dat.data[:] = self.phis[self.startIteration-1,:]
 
         self.inletValue = fd.Constant(self.phiTilde.dat.data_ro[self.coordsFS[:,0].argmin()]) # phiTilde = constant at inflow boundary
         return None
     
     def __initEta__(self):
         V1 = fd.FunctionSpace(self.fsMesh, "CG", 1)
-        self.eta = fd.Function(V1).interpolate(fd.Constant(self.ylim[1]))
-        self.eta2d = fd.Function(self.V).interpolate(fd.Constant(self.ylim[1]))
+        if not self.startIteration:
+            self.eta = fd.Function(V1).interpolate(fd.Constant(self.ylim[1]))
+            self.eta2d = fd.Function(self.V).interpolate(fd.Constant(self.ylim[1]))
+        else:
+            self.eta = fd.Function(V1)
+            self.newEta = fd.Function(V1)
+            self.wn = fd.Function(V1)
+
+            self.eta.dat.data[:] = self.etas[self.startIteration-1,:]
+            self.eta2d = self.__lift_1d_to_2d__(self.eta)
+
+            self.newEta.dat.data[:] = self.etas[self.startIteration,:]
+            self.newEta2d = self.__lift_1d_to_2d__(self.newEta)
+
+            self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
+
+            self.wn.dat.data[:] = self.ws[self.startIteration, :]
         return None
 
     def __lift_1d_to_2d__(self, u1D):
@@ -508,9 +535,15 @@ Dot product at TE: {dotProductTE}
 
         return u2D
     
-    def __dampenPhiTilde__(self, iter:0, fsMesh):
-        if iter == 0:
-            self.phiTarget = self.phiTilde
+    def __dampenPhiTilde__(self, iter, fsMesh):
+        if iter == 0 or (self.startIteration and iter-1 == self.startIteration):
+            if iter == 0:
+                self.phiTarget = self.phiTilde
+            else:
+                V1 = fd.FunctionSpace(self.fsMesh, "CG", 1)
+                self.phiTarget = fd.Function(V1)
+                self.phiTarget.dat.data[:] = self.phis[0,:]
+
             VSigma = fd.FunctionSpace(fsMesh, "CG", 1)  # scalar continuous space for sigma
             x = fd.SpatialCoordinate(fsMesh)[0]
             x_min = fd.Constant(self.xlim[0])
@@ -534,7 +567,7 @@ Dot product at TE: {dotProductTE}
 
             self.sigma = fd.Function(VSigma, name="sigma")
             self.sigma.interpolate(sigma_expr)
-        else:
+        if iter != 0:
             self.phiTilde.interpolate((1 - self.sigma) * self.phiTilde + self.sigma * self.phiTarget)
         return None
 
@@ -577,7 +610,7 @@ Dot product at TE: {dotProductTE}
 
         # Define dampening parameters
         xmin, xmax = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
-        Fr = 0.5672 # From Simone
+        Fr = fd.sqrt(self.V_inf[0]**2 + self.V_inf[1])/9.81 # From Simone
         xd_in = fd.Constant(xmin + 4.02112  * np.pi * Fr**2) 
         xd_out = fd.Constant(xmax - 2.5 * np.pi * Fr**2)
         x = fd.SpatialCoordinate(fsMesh)[0]
@@ -699,7 +732,7 @@ Dot product at TE: {dotProductTE}
         return None
     
     def __shiftSurface__(self):
-        # V1 = fd.FunctionSpace(self.mesh, "CG", 1)
+        #V1 = fd.FunctionSpace(self.mesh, "CG", 1)
 
         coords = self.mesh.coordinates.dat.data
         M = self.yInterface
@@ -725,8 +758,8 @@ Dot product at TE: {dotProductTE}
         # self.__shiftSurface2DEta__()
 
         # Change the firedrake function spaces to match the new mesh
-        #self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
-        #self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
+        # self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
+        # self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
         # self.W1 = fd.VectorFunctionSpace(self.mesh, "CG", 1)
         # Find points at free surface
         fSIndecies = self.W1.boundary_nodes(4)
@@ -778,7 +811,7 @@ f"""\t iteration: {i+1}
 {"-"*50 + "\n"}""")
             # global deleteLines
             # if not deleteLines:
-                # deleteLines = True
+            #     deleteLines = True
 
             print(block)
             return False 
@@ -789,12 +822,13 @@ f"""\t iteration: {i+1}
 
         # Stop kutta condition from writing
         self.writeKutta = False
-        
-        # Initialize FS solver by applying kutta condition to a standard poisson solve
-        self.__doKuttaSolve__()
 
         # Saving output path
         outfileFS = self.__saveOutputPath__()
+        
+        # Initialize FS solver by applying kutta condition to a standard poisson solve
+        if not self.startIteration:
+            self.__doKuttaSolve__()
 
         # Initialize phi tilde and eta
         self.__initPhiTilde__()
@@ -802,12 +836,13 @@ f"""\t iteration: {i+1}
 
         print("Initialization done \n" + "-"*50 + "\n")
         # Start main loop
-        for iteration in range(self.maxItFreeSurface):
+        for iteration in range(self.startIteration, self.maxItFreeSurface):
             # Note time for start of iteration
             iteration_time = time()
 
             # Calculate free surface
-            self.__weak1dFsEq__(iteration)
+            if not (self.startIteration == iteration and self.startIteration):
+                self.__weak1dFsEq__(iteration)
             
             # Update mesh data
             # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1)) # ONLY FOR TESTING
