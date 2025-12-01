@@ -4,7 +4,7 @@
 #BSUB -e NACA_SEM_HPC.err
 
 #BSUB -q hpc
-#BSUB -R "rusage[mem=4GB]"
+#BSUB -R "rusage[mem=10GB]" # Multplied by number of cores (n=3 -> 30GB)
 #BSUB -N
 #BSUB -W 12:00 
 
@@ -13,6 +13,6 @@
 
 
 module purge
-source ~/venv-firedrake/bin/activate
+source ~/venv-firedrake/bin/activate # Activate is modified to include gcc and openmpi paths
 
-python3 -u HPC_Class_FS.py
+python3 -u HPC_Class_FS.py 

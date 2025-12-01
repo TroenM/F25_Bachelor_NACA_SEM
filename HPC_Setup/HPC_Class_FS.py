@@ -36,7 +36,6 @@ hypParams = {
     "rho": 1.225 # Density of air [kg/m^3]
 }
 meshSettings = getMeshSettings()
-print(meshSettings)
 
 # meshSettings = {
     # "airfoilNumber": "0012", # NACA airfoil number
@@ -57,7 +56,7 @@ print(meshSettings)
 solverSettings = {
     "maxItKutta": 50,
     "tolKutta": 1e-10,
-    "maxItFreeSurface": 1000,
+    "maxItFreeSurface": 10000,
     "minItFreeSurface": 1000, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
@@ -65,7 +64,7 @@ solverSettings = {
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
-    "dt": 2e-2, # Time step for free surface update
+    "dt": 5e-3, # Time step for free surface update
 }
 
 outputSettings = {
@@ -73,7 +72,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 1, # Output interval in free surface time steps
+    "outputIntervalFS": 50, # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -700,7 +699,7 @@ Dot product at TE: {dotProductTE}
         return None
     
     def __shiftSurface__(self):
-        V1 = fd.FunctionSpace(self.mesh, "CG", 1)
+        # V1 = fd.FunctionSpace(self.mesh, "CG", 1)
 
         coords = self.mesh.coordinates.dat.data
         M = self.yInterface
@@ -726,9 +725,9 @@ Dot product at TE: {dotProductTE}
         # self.__shiftSurface2DEta__()
 
         # Change the firedrake function spaces to match the new mesh
-        self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
-        self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
-        self.W1 = fd.VectorFunctionSpace(self.mesh, "CG", 1)
+        #self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
+        #self.W = fd.VectorFunctionSpace(self.mesh, "CG", self.P)
+        # self.W1 = fd.VectorFunctionSpace(self.mesh, "CG", 1)
         # Find points at free surface
         fSIndecies = self.W1.boundary_nodes(4)
         self.coordsFS = (fd.Function(self.W1).interpolate(self.mesh.coordinates).dat.data)[fSIndecies,:]
@@ -777,9 +776,9 @@ f"""\t iteration: {i+1}
 \t residual norm {self.residuals}
 \t iteration time: {time() - iteration_time}
 {"-"*50 + "\n"}""")
-            global deleteLines
-            if not deleteLines:
-                deleteLines = True
+            # global deleteLines
+            # if not deleteLines:
+                # deleteLines = True
 
             print(block)
             return False 
