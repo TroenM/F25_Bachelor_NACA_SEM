@@ -29,43 +29,30 @@ IMPORTANT: The boundaries should be indexed as follows:
 """
 
 hypParams = {
-    "P": 3, # Polynomial degree
-    "V_inf": fd.as_vector((10.0, 0.0)), # Free stream velocity
-    "rho": 1.225 # Density of air [kg/m^3]
+    "P": 1, # Polynomial degree
+    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
+    "rho": 1.225, # Density of air [kg/m^3]
+    "FR": 0.5672,
+    "continue": False
 }
-
-# meshSettings = {
-    # "airfoilNumber": "0012", # NACA airfoil number
-    # "alpha_deg": 5, # Angle of attack in degrees
-    # "centerOfAirfoil": (0.5, 0), # Center of airfoil (x,y)
-    # "circle": True, # Whether to use a circular or elliptical vortex
-# 
-    # "xlim": (-8, 27), # x-limits of the domain
-    # "ylim": (-4, 1), # y-limits of the domain
-# 
-    # "nIn": 40, # Number of external nodes on inlet boundary 
-    # "nOut": 40, # Number of external nodes on outlet boundary
-    # "nBed": 150, # Number of external nodes on bed boundary
-    # "nFS": 2500, # Number of external nodes on free surface boundary
-    # "nAirfoil": 200 # Number of external nodes on airfoil boundary
-# }
+hypParams["nFS"] = int( 600/hypParams["P"] )
 
 meshSettings = {
     "airfoilNumber": "0012",
-    "alpha_deg": 3,
+    "alpha_deg": 5,
     "circle": True,
 
-    "xlim": (-8.5,30),
+    "xlim": (-6.5,10),
     "y_bed": -4,
 
     "scale": 1,
     
     "h": 1.034,
-    "interface_ratio": 10,
+    "interface_ratio": 5,
     "nAirfoil": "calculated down below for a ration that Morten found, this seemed stable, but fast",
     "centerOfAirfoil": (0.5,0.0),
 
-    "nFS": int( 500/hypParams["P"] ),
+    "nFS": hypParams["nFS"],
     "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
     "nLowerInlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
     "nLowerOutlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
@@ -73,10 +60,11 @@ meshSettings = {
     "test": True
     }
 
-meshSettings["nLowerInlet"] = int( meshSettings["nFS"]/10 )
-meshSettings["nLowerOutlet"] = int( meshSettings["nFS"]/10 )
-meshSettings["nAirfoil"] = int( meshSettings["nFS"]/2 )
-meshSettings["nBed"] = int( meshSettings["nFS"]/2 )
+meshSettings["nLowerInlet"] = int( meshSettings["nFS"]/30 )
+meshSettings["nLowerOutlet"] = int( meshSettings["nFS"]/30 )
+meshSettings["nAirfoil"] = int( meshSettings["nFS"]/10 )
+meshSettings["nBed"] = int( meshSettings["nFS"]/5 )
+
 def calculateNUpperSides(meshSettings):
     nFS = meshSettings["nFS"]
     xlim = meshSettings["xlim"]
@@ -99,7 +87,7 @@ solverSettings = {
     "dt": 2e-2, # Time step for free surface update
 
     ################ This enables continuing from where the solver last stopped. You can just comment the line out if you want it to start from the beginning
-    # "startIteration": np.where(np.load("TestResults/arrays/residuals.npy")[:,1] == 0)[0][0]-1
+    "startIteration": np.where(np.load("TestResults/arrays/residuals.npy")[:,1] == 0)[0][0]-1 if hypParams["continue"] else 0
 }
 
 
@@ -157,7 +145,7 @@ class FSSolver:
 
         self.c0 = solverSettings["c0"]
         self.Gammas = []
-        self.dt = solverSettings["dt"]
+        # self.dt = solverSettings["dt"]
 
         # Function spaces
         self.V = fd.FunctionSpace(self.mesh, "CG", self.P)
@@ -178,10 +166,14 @@ class FSSolver:
         self.__gatherPointsAndDefineEvaluators__()
 
         # Computing dt idea from Simone Minniti
-        # sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
-        # diffFSx =np.diff(sortedFSx)
-        # dxx = np.min(diffFSx)
-        # self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
+        diffFSx =np.diff(sortedFSx)
+        dxx = np.min(diffFSx)
+        self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        print(self.dt)
+
+        self.FR = hypParams["FR"]
+        self.g = (self.V_inf[0]**2+self.V_inf[1]**2)/self.FR**2
 
         # Output parameters
         self.outputPath = outputSettings["outputPath"]
@@ -609,9 +601,9 @@ Dot product at TE: {dotProductTE}
             xL0 = x_min + L_damp
             xR0 = x_max - L_damp
 
-            sigma_left = fd.cos(fd.Constant(0.5) * fd.pi * (x - x_min) / L_damp)
+            sigma_left = fd.cos(fd.Constant(0.5) * fd.pi * (x - x_min) / L_damp)**2
 
-            sigma_right = fd.cos(fd.Constant(0.5) * fd.pi * (x_max - x) / L_damp)
+            sigma_right = fd.cos(fd.Constant(0.5) * fd.pi * (x_max - x) / L_damp)**2
 
             sigma_expr = fd.conditional(
                 x < xL0, sigma_left,
@@ -655,8 +647,8 @@ Dot product at TE: {dotProductTE}
             wk = np.linalg.norm(zk - zkm1)/abs(zkm1).mean()
             wkm1 = np.linalg.norm(zkm1 - zkm2)/abs(zkm1).mean()
 
-            Rk    = ek + pk + wk
-            Rkm1  = ekm1 + pkm1 + wkm1
+            Rk    = ek**2 + pk**2 + wk**2
+            Rkm1  = ekm1**2 + pkm1**2 + wkm1**2
             ratio = Rk / Rkm1
         return ratio
 
@@ -669,12 +661,12 @@ Dot product at TE: {dotProductTE}
         else:
             residual = self.residualRatio
             prevDT = self.prevDT
-
+            
             if residual > 1.1:
-                dampedDT = fd.Constant(float(prevDT) * 0.5)
+                dampedDT = fd.Constant(float(prevDT) * 0.7)
             elif residual < 0.98:
                 # dampedDT = min(float(prevDT)* 1.0002, self.dt)
-                dampedDT = float(prevDT)* 1.02
+                dampedDT = min(float(prevDT)* 1.02, self.dt*2)
                 dampedDT = fd.Constant(dampedDT)
             else:
                 dampedDT = prevDT
@@ -685,7 +677,6 @@ Dot product at TE: {dotProductTE}
         Solves the weak form backward Euler forumulation of the phi and eta at the free surface.
         The equations are derived in the report.
         '''
-        iter = self.iter
         fsMesh = self.fsMesh
         # Define function spaces for eta and phiTilde
         V_eta = self.V1FS
@@ -709,10 +700,10 @@ Dot product at TE: {dotProductTE}
         dt = fd.Constant(self.dt)
 
         #### Feedback controlled dt scheme
-        dt = self.dampedDT
-        self.prevDT = fd.Constant(dt)
-        print(dt)
-        print(self.residualRatio)
+        # dt = self.dampedDT
+        # self.prevDT = fd.Constant(dt)
+        # print(dt)
+        # print(self.residualRatio)
 
         # Define additional constants and parameters
         g = fd.Constant(9.81)
@@ -728,11 +719,10 @@ Dot product at TE: {dotProductTE}
 
         # Define dampening parameters
         xmin, xmax = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
-        Fr = 0.5672 # From Simone
-        xd_in = fd.Constant(xmin + 4.02112  * np.pi * Fr**2) 
-        xd_out = fd.Constant(xmax - 2.5 * np.pi * Fr**2)
+        xd_in = fd.Constant(xmin + 4.02112  * np.pi * self.FR**2) 
+        xd_out = fd.Constant(xmax - 2.5 * np.pi * self.FR**2)
         x = fd.SpatialCoordinate(fsMesh)[0]
-        A = fd.Constant(100)
+        A = fd.Constant(3)
 
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin  - xd_in))**2, 0)*eta_n1
@@ -962,11 +952,6 @@ f"""\t iteration: {i+1}
             if not (self.startIteration == iteration and self.startIteration):
                 self.__weak1dFsEq__()
             
-            # Update mesh data
-            # self.newEta = fd.Function(fd.FunctionSpace(self.fsMesh, "CG", 1)) # ONLY FOR TESTING
-            # self.residuals = fd.norm(self.u) # ONLY FOR TESTING
-            # self.newEta.dat.data[:] =  self.fsMesh.coordinates.dat.data_ro[:] #np.sin(self.fsMesh.coordinates.dat.data_ro[:]* 2* np.pi/(8.5+20))/5 + self.ylim[1]
-            # self.newEta2d = self.__lift_1d_to_2d__(self.newEta)
             self.__updateMeshData__()
 
             # Apply kutta condition to a poisson solve on the new mesh
