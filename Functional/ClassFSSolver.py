@@ -32,38 +32,34 @@ hypParams = {
     "P": 1, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
+    "nFS": 200,
     "FR": 0.5672,
     "continue": False
 }
-hypParams["nFS"] = int( 600/hypParams["P"] )
 
 meshSettings = {
     "airfoilNumber": "0012",
     "alpha_deg": 5,
     "circle": True,
 
-    "xlim": (-6.5,10),
+    "xlim": (-7,10),
     "y_bed": -4,
 
     "scale": 1,
     
     "h": 1.034,
     "interface_ratio": 5,
-    "nAirfoil": "calculated down below for a ration that Morten found, this seemed stable, but fast",
+    "nAirfoil": meshSettings["nFS"]//2,
     "centerOfAirfoil": (0.5,0.0),
 
     "nFS": hypParams["nFS"],
     "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
-    "nLowerInlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
-    "nLowerOutlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
-    "nBed": "calculated down below for a ration that Morten found, this seemed stable, but fast",
+    "nLowerInlet": meshSettings["nFS"]//10,
+    "nLowerOutlet": meshSettings["nFS"]//10,
+    "nBed": meshSettings["nFS"]//2,
     "test": True
     }
 
-meshSettings["nLowerInlet"] = int( meshSettings["nFS"]/30 )
-meshSettings["nLowerOutlet"] = int( meshSettings["nFS"]/30 )
-meshSettings["nAirfoil"] = int( meshSettings["nFS"]/10 )
-meshSettings["nBed"] = int( meshSettings["nFS"]/5 )
 
 def calculateNUpperSides(meshSettings):
     nFS = meshSettings["nFS"]
@@ -96,7 +92,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 100, # Output interval in free surface time steps
+    "outputIntervalFS": 1, # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -169,8 +165,7 @@ class FSSolver:
         sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
-        self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
-        print(self.dt)
+        self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))/5
 
         self.FR = hypParams["FR"]
         self.g = (self.V_inf[0]**2+self.V_inf[1]**2)/self.FR**2
@@ -706,7 +701,7 @@ Dot product at TE: {dotProductTE}
         # print(self.residualRatio)
 
         # Define additional constants and parameters
-        g = fd.Constant(9.81)
+        g = fd.Constant(self.g)
         w_n = fd.Function(V_eta)
         # Retrieve w_n from the pure potential phi (Avoids numerical errors in BC-correction)
         u_pot = fd.Function(self.W)
@@ -764,7 +759,7 @@ Dot product at TE: {dotProductTE}
         self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
         # self.phiTilde -= fd.Constant(self.upperLeftFSEvaluator(self.phiTilde))
         # self.__relax_phiTilde__(iter)
-        self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')/float(self.dampedDT)*self.dt
+        self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
 
         # fs_time = time()
         # self.newEta2d   = self.__lift_1d_to_2d__(self.newEta)
