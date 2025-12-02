@@ -1,6 +1,13 @@
 # F25_Bachelor_NACA_SEM
+Last updated Dec 2nd 2025.\
+
+The project is continued. The active folder is `Functional` and latest updates are found in ClassFsSolver.py and MeshEssenetials.py. A version suitable for LSP clusters is found in HPC_Setup, using the latest stable solutions. The solver is still awaiting validation.
+
+
+
+---
 Last updated: 12. Aug 2025.\
-The project is no longer maintained.
+This part of the project is no longer maintained.
 
 This is the code for the bachelor thesis: Spectral element methods for potential flow around bodies.\
 By Magnus Troen and Morten Rønn Østergaard\
