@@ -4,11 +4,11 @@
 #BSUB -e NACA_SEM_HPC.err
 
 #BSUB -q hpc
-#BSUB -R "rusage[mem=10GB]" # Multplied by number of cores (n=3 -> 30GB)
+#BSUB -R "rusage[mem=64GB]" # Multplied by number of cores (n=3 -> 30GB)
 #BSUB -N
 #BSUB -W 12:00 
 
-#BSUB -n 3
+#BSUB -n 1
 #BSUB -R "span[hosts=1]"
 
 
