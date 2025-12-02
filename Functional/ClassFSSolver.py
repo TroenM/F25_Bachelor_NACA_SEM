@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 from time import time
 import shutil
 import sys
-import copy
 
 import os
 if os.getcwd()[-21:] == 'F25_Bachelor_NACA_SEM':
@@ -34,7 +33,7 @@ hypParams = {
     "rho": 1.225, # Density of air [kg/m^3]
     "nFS": 100,
     "FR": 0.5672,
-    "continue": False
+    "continue": True
 }
 
 meshSettings = {
@@ -165,7 +164,7 @@ class FSSolver:
         sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
-        self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))/5
+        self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
 
         self.FR = hypParams["FR"]
         self.g = (self.V_inf[0]**2+self.V_inf[1]**2)/self.FR**2
@@ -487,7 +486,7 @@ Dot product at TE: {dotProductTE}
                 os.remove(self.outputPath + "FSIterationsContinued.pvd")
             except:
                 pass
-            if self.startIteration==0:
+            if not self.startIteration:
                 if os.path.exists(self.outputPath + "FSIterations"):
                     shutil.rmtree(self.outputPath + "FSIterations")
                 try:
@@ -666,12 +665,17 @@ Dot product at TE: {dotProductTE}
             else:
                 dampedDT = prevDT
         return dampedDT
-
+    def __relaxEtaAndPhi__(self, omega_eta, omega_phi, phi_old):
+        self.newEta.assign((1 - omega_eta) * self.eta + omega_eta * self.newEta)
+        self.phiTilde.assign((1 - omega_phi) * phi_old + omega_phi * self.phiTilde)
+        return None
+    
     def __weak1dFsEq__(self):
         '''
         Solves the weak form backward Euler forumulation of the phi and eta at the free surface.
         The equations are derived in the report.
         '''
+        iter = self.iter
         fsMesh = self.fsMesh
         # Define function spaces for eta and phiTilde
         V_eta = self.V1FS
@@ -692,7 +696,8 @@ Dot product at TE: {dotProductTE}
         fs_n1.sub(1).assign(phi_n)   # phi^{n+1} initial guess
 
         #### Static dt scheme
-        dt = fd.Constant(self.dt)
+        jitter = 0.01 * (-1)**(iter//2) * (2**(iter%6)%5)/2
+        dt = fd.Constant(self.dt * (1 + jitter))
 
         #### Feedback controlled dt scheme
         # dt = self.dampedDT
@@ -747,7 +752,8 @@ Dot product at TE: {dotProductTE}
             fd.solve(F == 0, fs_n1, bcs=DBC, J = Jacobian, solver_parameters=solver_parameters)
         except:
             raise BrokenPipeError("FS equations diverged")
-
+        
+        phi_old = self.phiTilde
         # Extract new eta and phiTilde
         self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
 
@@ -757,17 +763,16 @@ Dot product at TE: {dotProductTE}
         # Dampen phiTilde
         self.__dampenPhiTilde__(fsMesh)
         self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
-        # self.phiTilde -= fd.Constant(self.upperLeftFSEvaluator(self.phiTilde))
-        # self.__relax_phiTilde__(iter)
-        self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
 
-        # fs_time = time()
-        # self.newEta2d   = self.__lift_1d_to_2d__(self.newEta)
+
+        # ---- UNDER-RELAXATION HER ----
+        self.__relaxEtaAndPhi__(omega_eta=0.3, omega_phi=0.3, phi_old=phi_old)
+        
+
+        self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')/(1+jitter)
+
         self.newEta2d = None
         self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde)
-        # print("-"*50)
-        # print("Lifting FS 1D equations took ", round(time()-fs_time,2), " seconds.")
-        # print("-"*50)
         
         return None
     
