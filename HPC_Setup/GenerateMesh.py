@@ -2,44 +2,52 @@ import numpy as np
 import os
 
 
-P = 3
+
+hypParams = {
+    "P": 3, # Polynomial degree
+    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
+    "rho": 1.225, # Density of air [kg/m^3]
+    "nFS": 100,
+    "FR": 0.5672,
+    "continue": True
+}
+
 meshSettings = {
     "airfoilNumber": "0012",
     "alpha_deg": 5,
     "circle": True,
 
-    "xlim": (-8.5,19.5),
+    "xlim": (-7,10),
     "y_bed": -4,
 
     "scale": 1,
-
+    
     "h": 1.034,
-    "interface_ratio": 10,
-    "nAirfoil": "calculated down below for a ration that Morten found, this seemed stable, but fast",
+    "interface_ratio": 5,
+    "nAirfoil": hypParams["nFS"]//2,
     "centerOfAirfoil": (0.5,0.0),
 
-    "nFS": int(300),
+    "nFS": hypParams["nFS"],
     "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
-    "nLowerInlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
-    "nLowerOutlet": "calculated down below for a ration that Morten found, this seemed stable, but fast",
-    "nBed": "calculated down below for a ration that Morten found, this seemed stable, but fast",
+    "nLowerInlet": hypParams["nFS"]//10,
+    "nLowerOutlet": hypParams["nFS"]//10,
+    "nBed": hypParams["nFS"]//2,
     "test": True
     }
 
-meshSettings["nLowerInlet"] = int( meshSettings["nFS"]/10 )
-meshSettings["nLowerOutlet"] = int( meshSettings["nFS"]/10 )
-meshSettings["nAirfoil"] = int( meshSettings["nFS"]/2 )
-meshSettings["nBed"] = int( meshSettings["nFS"]/2 )
 def calculateNUpperSides(meshSettings):
     nFS = meshSettings["nFS"]
     xlim = meshSettings["xlim"]
     h = meshSettings["h"]
-    meshSettings["nUpperSides"] =  int( nFS/(xlim[1]-xlim[0]))
+    meshSettings["nUpperSides"] =  int( nFS/(xlim[1]-xlim[0]) * h )
     return None
 calculateNUpperSides(meshSettings)
 
 def getMeshSettings():
     return meshSettings
+
+def gethypParams():
+    return hypParams
     
 
 def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : np.ndarray = np.array([0.5,0])) -> np.ndarray:
@@ -295,7 +303,7 @@ if __name__ =="__main__":
     import firedrake as fd
     mesh = fd.Mesh("mesh.msh")
 
-    V = fd.FunctionSpace(mesh, "CG", P)
+    V = fd.FunctionSpace(mesh, "CG", hypParams["P"])
     print("DOF: ", V.dof_count)
 
 
