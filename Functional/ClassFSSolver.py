@@ -71,7 +71,7 @@ calculateNUpperSides(meshSettings)
 solverSettings = {
     "maxItKutta": 50,
     "tolKutta": 1e-10,
-    "maxItFreeSurface": 10000,
+    "maxItFreeSurface": 20000,
     "minItFreeSurface": 100, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
@@ -81,7 +81,6 @@ solverSettings = {
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
     "dt": 2e-2, # Time step for free surface update
 
-    ################ This enables continuing from where the solver last stopped. You can just comment the line out if you want it to start from the beginning
     "startIteration": np.where(np.load("TestResults/arrays/residuals.npy")[:,1] == 0)[0][0]-1 if hypParams["continue"] else 0
 }
 
@@ -91,7 +90,8 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 1, # Output interval in free surface time steps
+    "outputIntervalFS": 1000, # Output interval in free surface time steps
+    "writeArraysInterval": 1000
 }
 deleteLines = False
 
@@ -175,10 +175,12 @@ class FSSolver:
         self.writeFreeSurface = outputSettings["writeFreeSurface"]
         self.outputIntervalKutta = outputSettings["outputIntervalKutta"]
         self.outputIntervalFS = outputSettings["outputIntervalFS"]
+        self.writeArraysInterval = outputSettings["writeArraysInterval"]
 
         self.startIteration = solverSettings.get("startIteration", 0)
         
         if not self.startIteration:
+            print("HEj")
             self.etas = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
             self.phis = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
             self.ws = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
@@ -508,11 +510,12 @@ Dot product at TE: {dotProductTE}
         self.coordsFS_array[iter, :] = self.fsMesh.coordinates.dat.data_ro.copy()
         self.residual_array[iter] = np.array([self.tolFreeSurface,-1]) if iter == 0 else np.array([self.residuals.copy(), self.dt*(iter)])
 
-        np.save(self.outputPath + "arrays/eta.npy", self.etas)
-        np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
-        np.save(self.outputPath + "arrays/ws.npy", self.ws)
-        np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
-        np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
+        if iter%self.writeArraysInterval == 0:
+            np.save(self.outputPath + "arrays/eta.npy", self.etas)
+            np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
+            np.save(self.outputPath + "arrays/ws.npy", self.ws)
+            np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
+            np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
         return None
 
     def __doKuttaSolve__(self) -> None:
