@@ -1,7 +1,7 @@
 # F25_Bachelor_NACA_SEM
 Last updated Dec 2nd 2025.\
 
-The project is continued. The active folder is `Functional` and latest updates are found in ClassFsSolver.py and MeshEssenetials.py. A version suitable for LSP clusters is found in HPC_Setup, using the latest stable solutions. The solver is still awaiting validation.
+The project is continued. The active folder is `Functional` and latest updates are found in ClassFsSolver.py and MeshEssenetials.py. A version suitable for LSF clusters is found in HPC_Setup, using the latest stable solutions. The solver is still awaiting validation.
 
 
 
