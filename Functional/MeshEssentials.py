@@ -334,8 +334,8 @@ def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[fd.Mesh
 
     # The insulating layer will be 9/10 of the distance from surface to airfoil
     h = meshSettings['h']
-    interface_ratio = meshSettings.get("interface_ratio", 10)
-    naca_eps = h/interface_ratio
+    interface_ratio = meshSettings.get("interface_ratio", 1/10)
+    naca_eps = h*interface_ratio
     h -= naca_eps
 
     xc, yc = meshSettings["centerOfAirfoil"]
@@ -444,44 +444,164 @@ def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[fd.Mesh
     ylim = (y_bed, h + y_interface)
     return mesh, y_interface, ylim
 
+def createBumpMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[fd.MeshGeometry, np.float64, tuple]:  
+    xmin, xmax = meshSettings["xlim"]
+    y_bed = 0
+
+    scale = meshSettings["scale"]
+
+    # The insulating layer will be 9/10 of the distance from surface to airfoil
+    h = meshSettings['h']
+    interface_ratio = meshSettings.get("interface_ratio", 1/10)
+    naca_eps = h*interface_ratio
+    h -= naca_eps
+
+    xc, yc = meshSettings["centerOfAirfoil"]
+    n_airfoil = meshSettings["nAirfoil"]
+
+    n_fs = meshSettings["nFS"]
+    n_lower_inlet = meshSettings["nLowerInlet"]
+    n_lower_outlet = meshSettings["nLowerOutlet"]
+    n_upper_sides = meshSettings["nUpperSides"]
     
+    
+    naca_coords = naca_4digit(airfoil, n = n_airfoil, alpha=alpha, position_of_center=(xc, y_bed))
+    TE = naca_coords[np.argmax(naca_coords[:,0])]
+    TE = np.array([TE[0], 0])
+    LE = naca_coords[np.argmin(naca_coords[:,0])]
+    LE_idx = np.argmin(naca_coords[:,0])
+    # Fetching upper part of naca_coords
+    naca_coords = naca_coords[LE_idx:]
+    naca_coords = np.append(naca_coords, TE).reshape((len(naca_coords)+1, 2))
 
+    y_interface = np.max(naca_coords[:,1]) + naca_eps
 
+    gmsh.initialize()
+    gmsh.option.setNumber("General.Verbosity", 1)
+    # ====================== Lower domain ======================
+    # point Lower Top Left
+    pLTL = gmsh.model.geo.addPoint(xmin, y_interface, 0, scale)
+    pLBL = gmsh.model.geo.addPoint(xmin, y_bed, 0, scale)
+    pLBR = gmsh.model.geo.addPoint(xmax, y_bed, 0, scale)
+    pLTR = gmsh.model.geo.addPoint(xmax, y_interface, 0, scale)
 
+    # Lines going counter clock wise
+    lLInlet = gmsh.model.geo.addLine(pLTL, pLBL) # line Lower Inlet
+    lLOutlet = gmsh.model.geo.addLine(pLBR, pLTR) # line Lower outlet
+    lInterface = gmsh.model.geo.addLine(pLTR, pLTL) # line Interface
 
+    naca_points = []
+    for coord in naca_coords:
+        naca_points.append(gmsh.model.geo.addPoint(coord[0], coord[1], 0, scale))
+    
+    c_naca = gmsh.model.geo.addSpline(naca_points)
 
+    lBeforeNaca = gmsh.model.geo.addLine(pLBL, naca_points[0])
+    lAfterNaca = gmsh.model.geo.addLine(naca_points[-1], pLBR)
+
+    lowerLoop = gmsh.model.geo.addCurveLoop([lLInlet, lBeforeNaca, c_naca, lAfterNaca, lLOutlet, lInterface])
+
+    # ===================== Upper domain ========================
+    pUTL = gmsh.model.geo.addPoint(xmin, h + y_interface, 0, scale)
+    pUTR = gmsh.model.geo.addPoint(xmax, h + y_interface, 0, scale)
+
+    lUInlet = gmsh.model.geo.addLine(pLTL, pUTL)
+    lFreeSurfaces = gmsh.model.geo.addLine(pUTL, pUTR)
+    lUOutlet = gmsh.model.geo.addLine(pUTR, pLTR)
+
+    upperLoop = gmsh.model.geo.addCurveLoop([lUInlet, lFreeSurfaces, lUOutlet, lInterface])
+
+    # ================== Generating Surface ==================
+    # Create the surface
+    lowerDomain = gmsh.model.geo.addPlaneSurface([lowerLoop])
+    upperDomain = gmsh.model.geo.addPlaneSurface([upperLoop])
+    gmsh.model.geo.synchronize()
+
+    # ================== Transfine Constraints ============
+
+    # Ensure fs and interface shares number of nodes.
+    gmsh.model.mesh.setTransfiniteCurve(lFreeSurfaces, n_fs, coef=1)
+    gmsh.model.mesh.setTransfiniteCurve(tag=lInterface, numNodes=n_fs, coef=1)
+
+    # Ensure upper inlet and outlet shares number of nodes
+    gmsh.model.mesh.setTransfiniteCurve(lUInlet, n_upper_sides, coef=1)
+    gmsh.model.mesh.setTransfiniteCurve(lUOutlet, n_upper_sides, coef=1)
+
+    # Structure upper domain
+    gmsh.model.mesh.setTransfiniteSurface(tag=upperDomain)
+    
+    gmsh.model.mesh.setTransfiniteCurve(c_naca, n_airfoil, coef=1)
+
+    gmsh.model.mesh.setTransfiniteCurve(lBeforeNaca, n_fs//2, coef = 1)
+    gmsh.model.mesh.setTransfiniteCurve(lAfterNaca, n_fs//2, coef = 1)
+
+    # Set remaining line numbers
+    gmsh.model.mesh.setTransfiniteCurve(lLInlet, n_lower_inlet, coef = 1)
+    gmsh.model.mesh.setTransfiniteCurve(lLOutlet, n_lower_outlet, coef = 1)
+
+    # ================== Physical Elements ================
+    gmsh.model.addPhysicalGroup(1, [lUInlet, lLInlet], tag = 1, name = "Inlet")
+    gmsh.model.addPhysicalGroup(1, [lUOutlet, lLOutlet], tag = 2, name = "Outlet")
+    gmsh.model.addPhysicalGroup(1, [lBeforeNaca, c_naca, lAfterNaca], tag = 3, name = "Bed")
+    gmsh.model.addPhysicalGroup(1, [lFreeSurfaces], tag = 4, name = "FreeSurface")
+    
+    gmsh.model.addPhysicalGroup(2, [upperDomain, lowerDomain], tag = 1, name = "Fluid")
+
+    gmsh.model.mesh.generate(2)
+
+    if meshSettings.get("show", False):
+        gmsh.fltk.run()
+
+    gmsh.write("temp.msh")
+
+    mesh = fd.Mesh("temp.msh")
+    os.system("rm temp.msh")
+
+    gmsh.finalize()
+    ylim = (y_bed, h + y_interface)
+    return mesh, y_interface, ylim
 
 if __name__ == "__main__":
 
+    hypParams = {
+    "P": 2, # Polynomial degree
+    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
+    "rho": 1.225, # Density of air [kg/m^3]
+    "nFS": 100,
+    "FR": 0.5672,
+    "continue": True
+}
+
     meshSettings = {
-    "xlim": (-8,27),
-    "y_bed": -4,
+        "airfoilNumber": "0012",
+        "alpha_deg": 5,
+        "circle": True,
 
-    "scale": 1,
-    
-    "h": 1,
-    "interface_ratio": 10,
-    "nAirfoil": 100,
-    "centerOfAirfoil": (0,0.5),
+        "xlim": (-7,10),
+        "y_bed": -4,
 
-    "nFS": 300,
-    "nUpperSides": 20,
-    "nLowerInlet": 20,
-    "nLowerOutlet": 20,
-    "nBed": 100,
+        "scale": 1,
 
-    "show": True
-    }
+        "h": 1.034,
+        "interface_ratio": 1/5,
+        "nAirfoil": hypParams["nFS"]//2,
+        "centerOfAirfoil": (0,0),
 
-    mesh, y_interface, ylim = createFSMesh("0012", 5, meshSettings=meshSettings)
-    print(type(mesh))
+        "nFS": hypParams["nFS"],
+        "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
+        "nLowerInlet": hypParams["nFS"]//10,
+        "nLowerOutlet": hypParams["nFS"]//10,
+        "nBed": hypParams["nFS"]//2,
+        "show": True
+        }
 
-    # Mesh settings
-    airfoilNumber = "0012"
-    xlim = (-7, 13)
-    ylim = (-4, 2)
-    nIn = 20
-    nOut = 20
-    nBed = 50
-    nFS = 50 
-    nAirfoil = 100
+    def calculateNUpperSides(meshSettings):
+        nFS = meshSettings["nFS"]
+        xlim = meshSettings["xlim"]
+        h = meshSettings["h"]
+        meshSettings["nUpperSides"] =  int( nFS/(xlim[1]-xlim[0]) * h )
+        return None
+    calculateNUpperSides(meshSettings)
+
+    mesh, y_interface, ylim = createBumpMesh("0012", 0, meshSettings=meshSettings)
+    print(y_interface, ylim)
