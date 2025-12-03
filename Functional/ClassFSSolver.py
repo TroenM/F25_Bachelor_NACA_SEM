@@ -32,9 +32,9 @@ hypParams = {
     "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS": 100,
+    "nFS": 150,
     "FR": 0.5672,
-    "continue": True
+    "continue": False
 }
 
 meshSettings = {
@@ -72,7 +72,7 @@ calculateNUpperSides(meshSettings)
 solverSettings = {
     "maxItKutta": 50,
     "tolKutta": 1e-10,
-    "maxItFreeSurface": 20000,
+    "maxItFreeSurface": 10000,
     "minItFreeSurface": 100, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
@@ -654,6 +654,8 @@ Dot product at TE: {dotProductTE}
         if not self.startIteration:
             self.eta = fd.Function(V1).interpolate(fd.Constant(self.ylim[1]))
             self.eta2d = fd.Function(self.V).interpolate(fd.Constant(self.ylim[1]))
+            self.newEta = fd.Function(V1)
+            self.wn = fd.Function(V1)
         else:
             self.eta = fd.Function(V1)
             self.newEta = fd.Function(V1)
@@ -881,7 +883,7 @@ Dot product at TE: {dotProductTE}
 
 
         # ---- Relax eta and phi_tilde ----
-        self.__relaxEtaAndPhi__(omega_eta=0.3, omega_phi=0.3)
+        self.__relaxEtaAndPhi__(omega_eta=0.5, omega_phi=0.5)
         
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')/(1+jitter)
@@ -1049,6 +1051,10 @@ f"""\t iteration: {i+1}
             # Check solver status
             if self.__checkStatus__(start_time, iteration_time):
                 break
+            import psutil, os
+            if self.iter % 100 == 0:
+                p = psutil.Process(os.getpid())
+                print(f"[mem] iter {self.iter}: {p.memory_info().rss/1e6:.1f} MB")
         return None
 
 
