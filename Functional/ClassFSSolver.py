@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from time import time
 import shutil
 import sys
+from numpy.lib.format import open_memmap
 
 import os
 if os.getcwd()[-21:] == 'F25_Bachelor_NACA_SEM':
@@ -90,8 +91,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 1000, # Output interval in free surface time steps
-    "writeArraysInterval": 1000
+    "outputIntervalFS": 100, # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -165,47 +165,74 @@ class FSSolver:
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
         self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        self.dt_fd = fd.Constant(self.dt)
 
         self.FR = hypParams["FR"]
         self.g = (self.V_inf[0]**2+self.V_inf[1]**2)/self.FR**2
 
+        # For vortex
+        self.vortex = fd.Function(self.W)
+        self.alpha_fd = fd.Constant(self.alpha)
+        self.a_fd = fd.Constant(self.a)
+        self.b_fd = fd.Constant(self.b)
+        self.fd_x, self.fd_y = fd.SpatialCoordinate(self.mesh)
         # Output parameters
         self.outputPath = outputSettings["outputPath"]
         self.writeKutta = outputSettings["writeKutta"]
         self.writeFreeSurface = outputSettings["writeFreeSurface"]
         self.outputIntervalKutta = outputSettings["outputIntervalKutta"]
         self.outputIntervalFS = outputSettings["outputIntervalFS"]
-        self.writeArraysInterval = outputSettings["writeArraysInterval"]
 
         self.startIteration = solverSettings.get("startIteration", 0)
         
+
+        arrays_dir = os.path.join(self.outputPath, "arrays")
+        os.makedirs(arrays_dir, exist_ok=True)
+
+        n_steps = self.maxItFreeSurface + 1
+        n_fs    = len(self.coordsFS)
+
         if not self.startIteration:
-            print("HEj")
-            self.etas = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
-            self.phis = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
-            self.ws = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)), dtype=np.float64)
-            self.coordsFS_array = np.zeros((self.maxItFreeSurface+1, len(self.coordsFS)))
-            self.residual_array = np.zeros((self.maxItFreeSurface+1, 2))
+            self.etas = open_memmap(os.path.join(arrays_dir, "eta.npy"),
+                                    mode="w+",
+                                    dtype="float64",
+                                    shape=(n_steps, n_fs))
+            self.phis = open_memmap(os.path.join(arrays_dir, "phiTilde.npy"),
+                                    mode="w+",
+                                    dtype="float64",
+                                    shape=(n_steps, n_fs))
+            self.ws   = open_memmap(os.path.join(arrays_dir, "ws.npy"),
+                                    mode="w+",
+                                    dtype="float64",
+                                    shape=(n_steps, n_fs))
+            self.coordsFS_array = open_memmap(os.path.join(arrays_dir, "coordsFS.npy"),
+                                            mode="w+",
+                                            dtype="float64",
+                                            shape=(n_steps, n_fs))
+            self.residual_array = open_memmap(os.path.join(arrays_dir, "residuals.npy"),
+                                            mode="w+",
+                                            dtype="float64",
+                                            shape=(n_steps, 2))
         else:
-            self.etas = np.load("TestResults/arrays/eta.npy")
-            self.phis = np.load("TestResults/arrays/phiTilde.npy")
-            self.ws = np.load("TestResults/arrays/ws.npy")
-            self.coordsFS_array = np.load("TestResults/arrays/coordsFS.npy")
-            self.residual_array = np.load("TestResults/arrays/residuals.npy")
+            # open existing as memmaps from arrays you can both read+write
+            self.etas = np.load(os.path.join(arrays_dir, "eta.npy"), mmap_mode="r+")
+            self.phis = np.load(os.path.join(arrays_dir, "phiTilde.npy"), mmap_mode="r+")
+            self.ws   = np.load(os.path.join(arrays_dir, "ws.npy"), mmap_mode="r+")
+            self.coordsFS_array = np.load(os.path.join(arrays_dir, "coordsFS.npy"), mmap_mode="r+")
+            self.residual_array = np.load(os.path.join(arrays_dir, "residuals.npy"), mmap_mode="r+")
 
 
-        
         print("Initialized FSSolver with:\n" + f"P={self.P}\n" + 
               f"alpha={np.round(np.rad2deg(self.alpha), 2)} deg\n" + 
               f"V_inf={self.V_inf}\n" + 
               f"Degrees of freedom: {self.V.dof_count}\n" + 
               f"dt: {self.dt}\n" + 
               f"ylim: {self.ylim}\n")
-        
         print(f"Initialization time: {np.round(time() - time_init, 2)} s")
         print("-"*50 + "\n")
         return None
     
+
     def __normaliseVector__(self, vector : np.ndarray) -> np.ndarray:
         if type(vector) != np.ndarray or np.linalg.norm(vector) == 0:
             raise TypeError("The vector has to be a numpy array of length more than 0")
@@ -334,12 +361,12 @@ class FSSolver:
         Computes the vortex field for the given vortex strength
         """
         # Define alpha, a and b as firedrake coordinates
-        alpha = fd.Constant(self.alpha)
-        a = fd.Constant(self.a)
-        b = fd.Constant(self.b)
+        alpha = self.alpha_fd
+        a = self.a_fd
+        b = self.b_fd
 
         # Gather coordinates from fd mesh
-        fd_x, fd_y = fd.SpatialCoordinate(self.mesh)
+        fd_x, fd_y = self.fd_x, self.fd_y
 
         # Translate coordinates such that they have their center in origo
         x_translated = fd_x - self.centerOfVortex[0]
@@ -362,10 +389,7 @@ class FSSolver:
         u_yFinal = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
 
         # project the final vectorfunction onto the original coordinates of the mesh
-        vortex = fd.Function(self.W)
-        vortex.project(fd.as_vector([u_xFinal, u_yFinal]))
-        self.vortex = vortex
-
+        self.vortex.project(fd.as_vector([u_xFinal, u_yFinal]))
         return None
     
     def __boundaryCorrection__(self):
@@ -476,6 +500,55 @@ Dot product at TE: {dotProductTE}
                 break
         return None
     
+    def __BuildPoissonSolver__(self):
+        v = fd.TestFunction(self.V)
+        phi_trial = fd.TrialFunction(self.V)
+
+        rhs = fd.Constant(0.0)
+        n = fd.FacetNormal(self.mesh)
+
+        a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
+        L = rhs * v * fd.dx
+
+        # Neumann parts: V_inf can be a Constant/Function
+        V_inf_fd = self.V_inf   # Constant or Function
+        for bcidx in [1, 2]:
+            L += fd.dot(V_inf_fd, n) * v * fd.ds(bcidx)
+
+        bc_inlet = fd.DirichletBC(self.V, self.phiTilde2d, 4)
+
+        problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=[bc_inlet])
+
+        self.poissonSolver = fd.LinearVariationalSolver(problem)
+        self.u = fd.Function(self.W)
+        return None
+    
+    def __BuildBCSolver__(self):
+        v = fd.TestFunction(self.V)
+        phi_trial = fd.TrialFunction(self.V)
+
+        rhs = fd.Constant(0.0)
+        n = fd.FacetNormal(self.mesh)
+
+        a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
+        L = rhs * v * fd.dx
+
+        # self.vortex is a Function on the same mesh.
+        for bcidx in range(1, 6):
+            L += fd.dot(-self.vortex, n) * v * fd.ds(bcidx)
+
+        self.phiBC = fd.Function(self.V, name="phiBC")
+        self.uBC   = fd.Function(self.W, name="uBC")
+
+        problem = fd.LinearVariationalProblem(a, L, self.phiBC)
+
+        self.BCSolver = fd.LinearVariationalSolver(problem)
+        return None
+
+    def __buildKuttaSolver__(self):
+        self.__BuildPoissonSolver__()
+        self.__BuildBCSolver__()
+        return None
     #=================================================================#
     #======================== Free Surface Update ====================#
     #=================================================================#
@@ -504,27 +577,52 @@ Dot product at TE: {dotProductTE}
     def __save_results__(self):
         iter = self.iter
 
-        self.etas[iter, :] = self.FSxEvaluator(self.eta)
-        self.phis[iter, :] = self.FSEvaluator(self.phi)
-        self.ws[iter, :] = self.wn.dat.data_ro[:]
-        self.coordsFS_array[iter, :] = self.fsMesh.coordinates.dat.data_ro.copy()
-        self.residual_array[iter] = np.array([self.tolFreeSurface,-1]) if iter == 0 else np.array([self.residuals.copy(), self.dt*(iter)])
+        self.etas[iter, :]        = self.FSxEvaluator(self.eta)
+        self.phis[iter, :]        = self.FSEvaluator(self.phi)
+        self.ws[iter, :]          = self.wn.dat.data_ro[:]
+        self.coordsFS_array[iter,:] = self.fsMesh.coordinates.dat.data_ro[:]
 
-        if iter%self.writeArraysInterval == 0:
-            np.save(self.outputPath + "arrays/eta.npy", self.etas)
-            np.save(self.outputPath + "arrays/phiTilde.npy", self.phis)
-            np.save(self.outputPath + "arrays/ws.npy", self.ws)
-            np.save(self.outputPath + "arrays/coordsFS.npy", self.coordsFS_array)
-            np.save(self.outputPath + "arrays/residuals.npy", self.residual_array)
+        if iter == 0:
+            self.residual_array[iter, 0] = self.tolFreeSurface
+            self.residual_array[iter, 1] = -1
+        else:
+            self.residual_array[iter, 0] = self.residuals
+            self.residual_array[iter, 1] = self.dt * iter
         return None
 
-    def __doKuttaSolve__(self) -> None:
+    def __doInitialKuttaSolve__(self) -> None:
         '''iter is tool for testing'''
-        if hasattr(self, "phiTilde2d"):
-            self.phi, self.u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]], DBC=[(4, self.phiTilde2d)])
-        else:
-            self.phi, self.u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]])
+        self.phi, self.u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]])
         self.__applyKuttaCondition__()
+        return None
+    
+    def __doKuttaSolve__(self):
+        self.poissonSolver.solve()
+        self.u.interpolate(fd.grad(self.phi))
+
+        t1 = time()
+        # Ensure Gammas is reset
+        self.Gammas = []
+
+        for it in range(self.maxItKutta):
+            # Compute vortex strength and correct it using FBCS
+            Gamma = self.__computeVortexStrength__()
+            self.Gammas.append(self.__FBCS__(Gamma))
+
+            # Compute vortex field
+            self.__computeVortex__()
+            self.u.assign(self.u + self.vortex)
+
+            # Apply boundary correction
+            self.phiBC.assign(0.0)
+            self.BCSolver.solve()
+            self.uBC.interpolate(fd.grad(self.phiBC))
+            self.u.assign(self.u + self.uBC)
+
+            if self.__checkKuttaConvergence__(it):
+                print(f"Kutta solver time: {np.round(time() - t1, 4)} s")
+                print("-"*50*self.writeKutta + "\n")
+                break
         return None
 
     def __initPhiTilde__(self) -> None:
@@ -532,18 +630,23 @@ Dot product at TE: {dotProductTE}
         if not self.startIteration:
             self.phiTilde = fd.Function(V1)
             self.phiTilde_prev = fd.Function(V1)
+            self.phiTilde2d = fd.Function(self.V)
+
             self.phiTilde.dat.data[:] = self.FSEvaluator(self.phi)
             self.phiTilde_prev.dat.data[:] = self.FSEvaluator(self.phi)
         else:
             self.phiTilde = fd.Function(V1)
             self.phiTilde_prev = fd.Function(V1)
+            self.phiTilde2d = fd.Function(self.V)
+            self.phi = fd.Function(self.V)
 
             self.phiTilde.dat.data[:] = self.phis[self.startIteration,:]
-            self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde)
+            self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde, self.phiTilde2d)
 
             self.phiTilde_prev.dat.data[:] = self.phis[self.startIteration-1,:]
 
         self.inletValue = fd.Constant(self.phiTilde.dat.data_ro[self.coordsFS[:,0].argmin()]) # phiTilde = constant at inflow boundary
+        self.upperLeftValue = fd.Constant(self.upperLeftFSEvaluator(self.phiTilde)[0])
         return None
     
     def __initEta__(self):
@@ -557,29 +660,25 @@ Dot product at TE: {dotProductTE}
             self.wn = fd.Function(V1)
 
             self.eta.dat.data[:] = self.etas[self.startIteration-1,:]
-            self.eta2d = self.__lift_1d_to_2d__(self.eta)
+            self.eta2d = None
 
             self.newEta.dat.data[:] = self.etas[self.startIteration,:]
-            self.newEta2d = self.__lift_1d_to_2d__(self.newEta)
+            self.newEta2d = None
 
             self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
 
             self.wn.dat.data[:] = self.ws[self.startIteration, :]
         return None
 
-    def __lift_1d_to_2d__(self, u1D):
+    def __lift_1d_to_2d__(self, u1D, u2D):
         """
         Lift a scalar 1D Firedrake Function u1D(x) to a 2D Function on self.mesh
         by defining u2D(x,y) := u1D(x).
         """
-        V2 = self.V
-        u2D = fd.Function(V2)
-
         u2D.dat.data[:] = np.array(self.allxFSEvaluator(u1D))
-
         return u2D
     
-    def __dampenPhiTilde__(self, fsMesh):
+    def __dampenPhiTilde__(self):
         iter = self.iter
         V1 = self.V1FS
         if iter == 0 or (self.startIteration and iter-1 == self.startIteration):
@@ -589,29 +688,6 @@ Dot product at TE: {dotProductTE}
                 self.phiTarget = fd.Function(V1)
                 self.phiTarget.dat.data[:] = self.phis[0,:]
 
-            VSigma = V1
-            x = fd.SpatialCoordinate(fsMesh)[0]
-            x_min = fd.Constant(self.xlim[0])
-            x_max = fd.Constant(self.xlim[1])
-            L_damp = fd.Constant(2.0)   # width of damping region at each end
-
-            xL0 = x_min + L_damp
-            xR0 = x_max - L_damp
-
-            sigma_left = fd.cos(fd.Constant(0.5) * fd.pi * (x - x_min) / L_damp)**2
-
-            sigma_right = fd.cos(fd.Constant(0.5) * fd.pi * (x_max - x) / L_damp)**2
-
-            sigma_expr = fd.conditional(
-                x < xL0, sigma_left,
-                fd.conditional(
-                    x > xR0, sigma_right,
-                    0.0
-                )
-            )
-
-            self.sigma = fd.Function(VSigma, name="sigma")
-            self.sigma.interpolate(sigma_expr)
         if iter != 0:
             self.phiTilde.interpolate((1 - self.sigma) * self.phiTilde + self.sigma * self.phiTarget)
         return None
@@ -668,123 +744,150 @@ Dot product at TE: {dotProductTE}
             else:
                 dampedDT = prevDT
         return dampedDT
-    def __relaxEtaAndPhi__(self, omega_eta, omega_phi, phi_old):
+    
+    def __relaxEtaAndPhi__(self, omega_eta, omega_phi):
         self.newEta.assign((1 - omega_eta) * self.eta + omega_eta * self.newEta)
-        self.phiTilde.assign((1 - omega_phi) * phi_old + omega_phi * self.phiTilde)
+        self.phiTilde.assign((1 - omega_phi) * self.phiTilde_prev + omega_phi * self.phiTilde)
         return None
     
+    def __defSigma__(self):
+        # For dampening phi tilde
+        L_damp = fd.Constant(2.0) 
+        VSigma = self.V1FS
+        x = fd.SpatialCoordinate(self.fsMesh)[0]
+        x_min, x_max = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
+        L_damp = L_damp  # width of damping region at each end
+        xL0 = x_min + L_damp
+        xR0 = x_max - L_damp
+        sigma_left = fd.cos(fd.Constant(0.5) * fd.pi * (x - x_min) / L_damp)**2
+        sigma_right = fd.cos(fd.Constant(0.5) * fd.pi * (x_max - x) / L_damp)**2
+        sigma_expr = fd.conditional(
+            x < xL0, sigma_left,
+            fd.conditional(
+                x > xR0, sigma_right,
+                0.0
+            )
+        )
+        self.sigma = fd.Function(VSigma, name="sigma")
+        self.sigma.interpolate(sigma_expr)
+        return None
+
+    def __buildFSSolver__(self):
+        # Init FD objects for FS
+        V_eta = self.V1FS
+        V_phi = self.V1FS
+        V_fs = V_eta*V_phi
+        self.fs_n1 = fd.Function(V_fs)
+        eta_n1, phi_n1 = fd.split(self.fs_n1)
+        v_eta, v_phi = fd.TestFunctions(V_fs)
+        self.eta_n = fd.Function(V_eta)
+        self.phi_n = fd.Function(V_phi)
+        g = fd.Constant(self.g)
+        self.w_n = fd.Function(V_eta)
+        self.wn = fd.Function(V_eta)
+        One = fd.Constant(1)
+        point5 = fd.Constant(0.5)
+        xmin_fd, xmax_fd = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
+        xd_in = fd.Constant(xmin_fd + 4.02112  * np.pi * self.FR**2)
+        xd_out = fd.Constant(xmax_fd - 2.5 * np.pi * self.FR**2)
+        x = fd.SpatialCoordinate(self.fsMesh)[0]
+        A = fd.Constant(3)
+        
+        # Dampen eta towards the "normal" height of the domain at the edges
+        eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
+        eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (xmax_fd - xd_out))**2, 0)*eta_n1
+
+        a_eta = fd.inner((eta_n1 - self.eta_n), v_eta)*fd.dx \
+        + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx
+
+        L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) \
+                - self.w_n*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+
+        F_eta = a_eta + self.dt_fd*fd.inner(L_eta, v_eta)*fd.dx
+
+        # phi-equation
+        a_phi = fd.inner((phi_n1 - self.phi_n), v_phi)*fd.dx
+
+        L_phi = g*eta_n1 + point5*(
+            fd.dot(phi_n1.dx(0), phi_n1.dx(0))
+            - (self.w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+        )
+
+        F_phi = a_phi + self.dt_fd*fd.inner(L_phi, v_phi)*fd.dx
+
+        self.F = F_eta + F_phi
+        self.eta_bc_const = fd.Constant(0.0)
+        self.DBC = [fd.DirichletBC(V_fs.sub(0), self.eta_bc_const, 1)]
+
+        J = fd.derivative(self.F, self.fs_n1)
+
+        self.problem = fd.NonlinearVariationalProblem(self.F, self.fs_n1,
+                                                    bcs=self.DBC, J=J)
+
+        self.FSsolver = fd.NonlinearVariationalSolver(
+            self.problem,
+            solver_parameters={
+                "snes_max_it": self.maxItWeak1d,
+                "snes_rtol":   self.tolWeak1d,
+            },
+        )
+
+        self.__defSigma__()
+        self.u_pot = fd.Function(self.W)
+        return None
+
     def __weak1dFsEq__(self):
         '''
         Solves the weak form backward Euler forumulation of the phi and eta at the free surface.
         The equations are derived in the report.
         '''
-        iter = self.iter
-        fsMesh = self.fsMesh
-        # Define function spaces for eta and phiTilde
-        V_eta = self.V1FS
-        V_phi = self.V1FS
-        V_fs = V_eta*V_phi
-        fs_n1 = fd.Function(V_fs)
-        eta_n1, phi_n1 = fd.split(fs_n1)
-        v_eta, v_phi = fd.TestFunctions(V_fs)
-
         # Define previous time step functions
-        eta_n = fd.Function(V_eta)
-        eta_n.dat.data[:] = self.eta.dat.data_ro[:] - self.ylim[1] # Shift eta such that the eta=0 -> y = 0
-        phi_n = fd.Function(V_phi)
-        phi_n.dat.data[:] = self.phiTilde.dat.data_ro[:]
+        self.eta_n.dat.data[:] = self.eta.dat.data_ro[:] - self.ylim[1] # Shift eta such that the eta=0 -> y = 0
+        self.phi_n.dat.data[:] = self.phiTilde.dat.data_ro[:]
 
         # Initial guess for new time step
-        fs_n1.sub(0).assign(eta_n)   # eta^{n+1} initial guess
-        fs_n1.sub(1).assign(phi_n)   # phi^{n+1} initial guess
+        self.fs_n1.sub(0).assign(self.eta_n)   # eta^{n+1} initial guess
+        self.fs_n1.sub(1).assign(self.phi_n)   # phi^{n+1} initial guess
 
-        #### Static dt scheme
-        jitter = 0.01 * (-1)**(iter//2) * (2**(iter%6)%5)/2
-        dt = fd.Constant(self.dt * (1 + jitter))
+        #### Jittery dt scheme
+        jitter = 0.01 * (-1)**(self.iter//2) * (2**(self.iter%6)%5)/2
+        self.dt_fd.assign(self.dt * (1 + jitter))
 
-        #### Feedback controlled dt scheme
-        # dt = self.dampedDT
-        # self.prevDT = fd.Constant(dt)
-        # print(dt)
-        # print(self.residualRatio)
-
-        # Define additional constants and parameters
-        g = fd.Constant(self.g)
-        w_n = fd.Function(V_eta)
+       
         # Retrieve w_n from the pure potential phi (Avoids numerical errors in BC-correction)
-        u_pot = fd.Function(self.W)
-        u_pot.project(fd.grad(self.phi))
-        w_n.dat.data[:] = np.array(self.FSEvaluator(u_pot))[:,1]
-        self.wn = w_n.copy() # For plot export
-
-        One = fd.Constant(1)
-        point5 = fd.Constant(0.5)
-
-        # Define dampening parameters
-        xmin, xmax = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
-        xd_in = fd.Constant(xmin + 4.02112  * np.pi * self.FR**2) 
-        xd_out = fd.Constant(xmax - 2.5 * np.pi * self.FR**2)
-        x = fd.SpatialCoordinate(fsMesh)[0]
-        A = fd.Constant(3)
-
-        # Dampen eta towards the "normal" height of the domain at the edges
-        eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin  - xd_in))**2, 0)*eta_n1
-        eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (xmax - xd_out))**2, 0)*eta_n1
-
-        # Define variational problem
-        a_eta = fd.inner((eta_n1 - eta_n), v_eta)*fd.dx + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx
-        L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) - w_n*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
-        F_eta = a_eta + dt*fd.inner(L_eta, v_eta)*fd.dx
-
-        a_phi = fd.inner((phi_n1 - phi_n), v_phi) * fd.dx
-        L_phi = g*eta_n1 + point5*(fd.dot(phi_n1.dx(0), phi_n1.dx(0)) - (w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0))))
-        F_phi = a_phi + dt*fd.inner(L_phi, v_phi)*fd.dx
-
-        F = F_eta + F_phi
-
-        # Boundary conditions
-        DBC = []
-        DBC.append(fd.DirichletBC(V_fs.sub(0), fd.Constant(0), 1)) # eta = 0 at inflow
-        # DBC.append(fd.DirichletBC(V_fs.sub(1), self.inletValue, 2)) # phiTilde = constant at outflow
-
-        # Solve variational problem
-        Jacobian = fd.derivative(F, fs_n1)
-        solver_parameters = {"snes_max_it": self.maxItWeak1d, "snes_rtol": self.tolWeak1d}
+        self.u_pot.project(fd.grad(self.phi))
+        self.w_n.dat.data[:] = np.array(self.FSEvaluator(self.u_pot))[:,1]
+        self.wn.assign(self.w_n) # For plot export
 
         try:
-            fd.solve(F == 0, fs_n1, bcs=DBC, J = Jacobian, solver_parameters=solver_parameters)
+            self.FSsolver.solve()
         except:
             raise BrokenPipeError("FS equations diverged")
         
-        phi_old = self.phiTilde
-        # Extract new eta and phiTilde
-        self.newEta, self.phiTilde = fs_n1.sub(0), fs_n1.sub(1)
 
-        upperLeftValue = fd.Constant(self.upperLeftFSEvaluator(self.phiTilde)[0])
-        self.phiTilde.assign(self.phiTilde - upperLeftValue)
+        self.phiTilde_prev.assign(self.phiTilde)
+        # Extract new eta and phiTilde
+        eta_sub, phi_sub = self.fs_n1.sub(0), self.fs_n1.sub(1)
+
+        self.newEta.assign(eta_sub)
+        self.phiTilde.assign(phi_sub)
+
+        self.upperLeftValue.assign(self.upperLeftFSEvaluator(self.phiTilde)[0])
+        self.phiTilde.assign(self.phiTilde - self.upperLeftValue)
 
         # Dampen phiTilde
-        self.__dampenPhiTilde__(fsMesh)
+        self.__dampenPhiTilde__()
         self.newEta.dat.data[:] += self.ylim[1] # Shift eta back to original position
 
 
-        # ---- UNDER-RELAXATION HER ----
-        self.__relaxEtaAndPhi__(omega_eta=0.3, omega_phi=0.3, phi_old=phi_old)
+        # ---- Relax eta and phi_tilde ----
+        self.__relaxEtaAndPhi__(omega_eta=0.3, omega_phi=0.3)
         
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')/(1+jitter)
 
         self.newEta2d = None
-        self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde)
-        
-        return None
-    
-    def __relax_phiTilde__(self, iter):
-        """Relaxes the solution of phiTilde to avoid erratic behavior during first couple of iterations"""
-        relax_start = 0.3
-        theta = fd.Constant(np.min([relax_start + (1-relax_start)/500 * iter, 1]))
-        self.phiTilde.project(theta*self.phiTilde + (1-theta)*self.phiTilde_prev)
-        self.phiTilde_prev = self.phiTilde.copy()
+        self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde, self.phiTilde2d) 
         return None
     
     def __prepxy__(self, eta):
@@ -813,33 +916,6 @@ Dot product at TE: {dotProductTE}
         self.allxFSEvaluator = fd.PointEvaluator(self.fsMesh, self.allPoints[:,0]).evaluate
         self.upperLeftFSEvaluator = fd.PointEvaluator(self.fsMesh, self.xlim[0]).evaluate
         self.FSxEvaluator = fd.PointEvaluator(self.fsMesh, self.xFS).evaluate
-        return None
-    
-    # def __shiftSurface2DEta__(self):
-        mesh = self.mesh
-        x, y = fd.SpatialCoordinate(mesh)
-        V1 = fd.FunctionSpace(mesh, "CG", 1)
-        W1 = fd.VectorFunctionSpace(mesh, "CG", 1)
-        V = self.V
-        W = self.W
-
-        # Define maximal y value of coordinates on airfoil 
-        coords = mesh.coordinates.dat.data_ro[:]
-        # naca_idx = V1.boundary_nodes(5)
-        # M = fd.Constant(np.max(coords[naca_idx][:,1])) 
-        M = self.yInterface
-        
-        # scaling function
-        s = fd.interpolate(self.newEta2d/self.eta2d, V)
-
-        # Shift only coords above M
-        y_new = fd.conditional(fd.ge(y, M), M + s*(y-M), y)
-
-        # Set new coordinates of mesh
-        X_new = fd.project(fd.as_vector([x, y_new]), W1)
-        mesh.coordinates.assign(X_new)
-
-        self.mesh.coordinates.dat.data[:] = mesh.coordinates.dat.data
         return None
     
     def __shiftSurface__(self):
@@ -878,8 +954,8 @@ Dot product at TE: {dotProductTE}
         
         #self.__gatherPointsAndDefineEvaluators__()
         # Update eta
-        self.eta = self.newEta
-        self.eta2d = self.newEta2d
+        self.eta.assign(self.newEta)
+        #self.eta2d.assign(self.newEta2d)
         return None
     
     def __checkStatus__(self, start_time, iteration_time):
@@ -938,11 +1014,14 @@ f"""\t iteration: {i+1}
         
         # Initialize FS solver by applying kutta condition to a standard poisson solve
         if not self.startIteration:
-            self.__doKuttaSolve__()
+            self.__doInitialKuttaSolve__()
 
         # Initialize phi tilde and eta
         self.__initPhiTilde__()
         self.__initEta__()
+
+        self.__buildFSSolver__()
+        self.__buildKuttaSolver__()
 
         print("Initialization done \n" + "-"*50 + "\n")
         # Start main loop
