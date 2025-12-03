@@ -567,32 +567,32 @@ if __name__ == "__main__":
     "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS": 100,
+    "nFS": 200,
     "FR": 0.5672,
     "continue": True
 }
 
     meshSettings = {
         "airfoilNumber": "0012",
-        "alpha_deg": 5,
+        "alpha_deg": 0,
         "circle": True,
 
-        "xlim": (-7,10),
+        "xlim": (-7,15),
         "y_bed": -4,
 
         "scale": 1,
 
         "h": 1.034,
         "interface_ratio": 1/5,
-        "nAirfoil": hypParams["nFS"]//2,
+        "nAirfoil": hypParams["nFS"]//10,
         "centerOfAirfoil": (0,0),
 
         "nFS": hypParams["nFS"],
         "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
-        "nLowerInlet": hypParams["nFS"]//10,
-        "nLowerOutlet": hypParams["nFS"]//10,
+        "nLowerInlet": hypParams["nFS"]//20,
+        "nLowerOutlet": hypParams["nFS"]//20,
         "nBed": hypParams["nFS"]//2,
-        "show": True
+        "show": False
         }
 
     def calculateNUpperSides(meshSettings):
@@ -604,4 +604,6 @@ if __name__ == "__main__":
     calculateNUpperSides(meshSettings)
 
     mesh, y_interface, ylim = createBumpMesh("0012", 0, meshSettings=meshSettings)
-    print(y_interface, ylim)
+    
+    V = fd.FunctionSpace(mesh, "CG", hypParams["P"])
+    print("DOF: ", V.dof_count)
