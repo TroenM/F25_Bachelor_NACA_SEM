@@ -412,9 +412,9 @@ def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[fd.Mesh
     gmsh.model.mesh.setTransfiniteSurface(tag=upperDomain)
 
     # Set remaining line numbers
-    gmsh.model.mesh.setTransfiniteCurve(lbed, n_bed, coef=1)
-    gmsh.model.mesh.setTransfiniteCurve(lLInlet, n_lower_inlet, coef = 1)
-    gmsh.model.mesh.setTransfiniteCurve(lLOutlet, n_lower_outlet, coef = 1)
+    gmsh.model.mesh.setTransfiniteCurve(lbed, n_bed, coef=1.01)
+    gmsh.model.mesh.setTransfiniteCurve(lLInlet, n_lower_inlet, coef = 1.1)
+    gmsh.model.mesh.setTransfiniteCurve(lLOutlet, n_lower_outlet, coef = 1/1.1)
 
     for line in naca_lines:
         gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(naca_lines), coef=1)
