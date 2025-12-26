@@ -32,7 +32,7 @@ hypParams = {
     "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS": 150,
+    "nFS": 100,
     "FR": 0.5672,
     "continue": False
 }
@@ -42,21 +42,21 @@ meshSettings = {
     "alpha_deg": 5,
     "circle": True,
 
-    "xlim": (-7,10),
+    "xlim": (-7,11),
     "y_bed": -4,
 
     "scale": 1,
     
     "h": 1.034,
-    "interface_ratio": 5,
-    "nAirfoil": hypParams["nFS"]//2,
+    "interface_ratio": 1/4,
+    "nAirfoil": hypParams["nFS"]//4,
     "centerOfAirfoil": (0.5,0.0),
 
     "nFS": hypParams["nFS"],
     "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
-    "nLowerInlet": hypParams["nFS"]//10,
+    "nLowerInlet": hypParams["nFS"]//7,
     "nLowerOutlet": hypParams["nFS"]//10,
-    "nBed": hypParams["nFS"]//2,
+    "nBed": int(hypParams["nFS"]//2.5),
     "test": True
     }
 
@@ -65,7 +65,7 @@ def calculateNUpperSides(meshSettings):
     nFS = meshSettings["nFS"]
     xlim = meshSettings["xlim"]
     h = meshSettings["h"]
-    meshSettings["nUpperSides"] =  int( nFS/(xlim[1]-xlim[0]) * h )
+    meshSettings["nUpperSides"] =  int( nFS/(xlim[1]-xlim[0]) * h*1.3 )
     return None
 calculateNUpperSides(meshSettings)
 
@@ -91,7 +91,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 100, # Output interval in free surface time steps
+    "outputIntervalFS": 10, # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -123,7 +123,7 @@ class FSSolver:
         # Computed mesh parameters
         ### Choose either uniform mesh on top or original mesh
         self.mesh, self.yInterface, self.ylim = createFSMesh(self.airfoilNumber, np.rad2deg(self.alpha), meshSettings)
-        #self.mesh, self.yInterface, self.ylim = naca_mesh(self.airfoilNumber, np.rad2deg(self.alpha), meshSettings)
+        # self.mesh, self.yInterface, self.ylim = naca_mesh(self.airfoilNumber, np.rad2deg(self.alpha), meshSettings)
         self.a = 1
         self.b = 1 if self.circle else int(self.airfoilNumber[2:])/100
 
@@ -164,13 +164,15 @@ class FSSolver:
         sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
-        self.dt = 0.1 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        self.dt = 0.2 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
         self.dt_fd = fd.Constant(self.dt)
 
         self.FR = hypParams["FR"]
         self.g = (self.V_inf[0]**2+self.V_inf[1]**2)/self.FR**2
 
         # For vortex
+        self.u = fd.Function(self.W, name="Velocity")
+        self.pressure = fd.Function(self.V, name = "Pressure")
         self.vortex = fd.Function(self.W)
         self.alpha_fd = fd.Constant(self.alpha)
         self.a_fd = fd.Constant(self.a)
@@ -389,7 +391,7 @@ class FSSolver:
         u_yFinal = u_x * fd.sin(-alpha) + u_y * fd.cos(-alpha)
 
         # project the final vectorfunction onto the original coordinates of the mesh
-        self.vortex.project(fd.as_vector([u_xFinal, u_yFinal]))
+        self.vortex.interpolate(fd.as_vector([u_xFinal, u_yFinal]))
         return None
     
     def __boundaryCorrection__(self):
@@ -445,11 +447,9 @@ Dot product at TE: {dotProductTE}
 
     def __getPressureCoefficients__(self) -> fd.Function:
         # Defining the firedrake function
-        pressure = fd.Function(self.V, name = "Pressure_coeff")
-
         # Defining pressure coefficents in all of the domain from the formula given in the report.
-        pressure.interpolate(1 - (fd.sqrt(fd.dot(self.u, self.u))/self.V_inf[0]) ** 2)
-        return pressure
+        self.pressure.interpolate(1 - (fd.sqrt(fd.dot(self.u, self.u))/self.V_inf[0]) ** 2)
+        return None
 
     def __applyKuttaCondition__(self):
         """
@@ -520,7 +520,6 @@ Dot product at TE: {dotProductTE}
         problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=[bc_inlet])
 
         self.poissonSolver = fd.LinearVariationalSolver(problem)
-        self.u = fd.Function(self.W)
         return None
     
     def __BuildBCSolver__(self):
@@ -694,6 +693,20 @@ Dot product at TE: {dotProductTE}
             self.phiTilde.interpolate((1 - self.sigma) * self.phiTilde + self.sigma * self.phiTarget)
         return None
     
+    def __dampenWs__(self):
+        iter = self.iter
+        V1 = self.V1FS
+        if iter == 0 or (self.startIteration and iter-1 == self.startIteration):
+            if iter == 0:
+                self.wTarget = self.w_n
+            else:
+                self.wTarget = fd.Function(V1)
+                self.wTarget.dat.data[:] = self.ws[0,:]
+
+        if iter != 0:
+            self.w_n.interpolate((1 - self.sigma) * self.w_n + self.sigma * self.wTarget)
+        return None
+    
     @property
     def residualRatio(self):
         iter = self.iter
@@ -790,17 +803,17 @@ Dot product at TE: {dotProductTE}
         One = fd.Constant(1)
         point5 = fd.Constant(0.5)
         xmin_fd, xmax_fd = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
-        xd_in = fd.Constant(xmin_fd + 4.02112  * np.pi * self.FR**2)
-        xd_out = fd.Constant(xmax_fd - 2.5 * np.pi * self.FR**2)
+        xd_in = fd.Constant(xmin_fd + 7.02112  * np.pi * self.FR**2)
+        xd_out = fd.Constant(xmax_fd - 7.02112 * np.pi * self.FR**2)
         x = fd.SpatialCoordinate(self.fsMesh)[0]
-        A = fd.Constant(3)
+        A = fd.Constant(5)
         
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
         eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (xmax_fd - xd_out))**2, 0)*eta_n1
 
         a_eta = fd.inner((eta_n1 - self.eta_n), v_eta)*fd.dx \
-        + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx
+        + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx #if self.iter != 0 else fd.inner((eta_n1 - self.eta_n), v_eta)*fd.dx
 
         L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) \
                 - self.w_n*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
@@ -830,7 +843,7 @@ Dot product at TE: {dotProductTE}
             self.problem,
             solver_parameters={
                 "snes_max_it": self.maxItWeak1d,
-                "snes_rtol":   self.tolWeak1d,
+                "snes_rtol":   self.tolWeak1d
             },
         )
 
@@ -857,9 +870,10 @@ Dot product at TE: {dotProductTE}
 
        
         # Retrieve w_n from the pure potential phi (Avoids numerical errors in BC-correction)
-        self.u_pot.project(fd.grad(self.phi))
+        self.u_pot.interpolate(fd.grad(self.phi))
         self.w_n.dat.data[:] = np.array(self.FSEvaluator(self.u_pot))[:,1]
-        self.wn.assign(self.w_n) # For plot export
+        self.__dampenWs__()
+        self.wn.assign(self.w_n)# For plot export
 
         try:
             self.FSsolver.solve()
@@ -883,7 +897,7 @@ Dot product at TE: {dotProductTE}
 
 
         # ---- Relax eta and phi_tilde ----
-        self.__relaxEtaAndPhi__(omega_eta=0.5, omega_phi=0.5)
+        self.__relaxEtaAndPhi__(omega_eta=0.2, omega_phi=0.2)
         
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')/(1+jitter)
@@ -998,7 +1012,7 @@ f"""\t iteration: {i+1}
 \t iteration time: {time() - iteration_time}
 {"-"*50 + "\n"}""")
             global deleteLines
-            if not deleteLines:
+            if not True:
                 deleteLines = True
 
             print(block)
@@ -1022,13 +1036,20 @@ f"""\t iteration: {i+1}
         self.__initPhiTilde__()
         self.__initEta__()
 
-        self.__buildFSSolver__()
+        
         self.__buildKuttaSolver__()
+        self.__buildFSSolver__()
 
         print("Initialization done \n" + "-"*50 + "\n")
         # Start main loop
+        import psutil
+        import subprocess
         for iteration in range(self.startIteration, self.maxItFreeSurface):
             self.iter = iteration
+            if iteration % 10 == 0:
+                p = psutil.Process(os.getpid())
+                print(f"[mem-before] iter {iteration}: {p.memory_info().rss/1e6:.1f} MB")
+
             # Note time for start of iteration
             iteration_time = time()
 
@@ -1044,17 +1065,12 @@ f"""\t iteration: {i+1}
             # Save result
             self.__save_results__()
             if (iteration % self.outputIntervalFS) == 0:
-                pressure = self.__getPressureCoefficients__()
-                pressure.rename("Pressure")
-                outfileFS.write(self.u, pressure)
+                self.__getPressureCoefficients__()
+                outfileFS.write(self.u, self.pressure)
 
             # Check solver status
             if self.__checkStatus__(start_time, iteration_time):
                 break
-            import psutil, os
-            if self.iter % 100 == 0:
-                p = psutil.Process(os.getpid())
-                print(f"[mem] iter {self.iter}: {p.memory_info().rss/1e6:.1f} MB")
         return None
 
 
