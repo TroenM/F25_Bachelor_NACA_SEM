@@ -32,7 +32,7 @@ hypParams = {
     "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS": 100,
+    "nFS": 1000,
     "FR": 0.5672,
     "continue": False
 }
@@ -42,21 +42,21 @@ meshSettings = {
     "alpha_deg": 5,
     "circle": True,
 
-    "xlim": (-7,11),
+    "xlim": (-7,18),
     "y_bed": -4,
 
     "scale": 1,
     
     "h": 1.034,
     "interface_ratio": 1/4,
-    "nAirfoil": hypParams["nFS"]//4,
+    "nAirfoil": int( hypParams["nFS"]//2 ),
     "centerOfAirfoil": (0.5,0.0),
 
-    "nFS": hypParams["nFS"],
+    "nFS": int( hypParams["nFS"] ),
     "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
-    "nLowerInlet": hypParams["nFS"]//7,
-    "nLowerOutlet": hypParams["nFS"]//10,
-    "nBed": int(hypParams["nFS"]//2.5),
+    "nLowerInlet": int( hypParams["nFS"]//7 ),
+    "nLowerOutlet": int( hypParams["nFS"]//7 ),
+    "nBed": int( hypParams["nFS"]//3 ),
     "test": True
     }
 
@@ -91,7 +91,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 10, # Output interval in free surface time steps
+    "outputIntervalFS": 1, # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -164,7 +164,7 @@ class FSSolver:
         sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
-        self.dt = 0.2 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        self.dt = 0.3 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
         self.dt_fd = fd.Constant(self.dt)
 
         self.FR = hypParams["FR"]
@@ -297,9 +297,10 @@ class FSSolver:
             nullspace = fd.VectorSpaceBasis(constant=True, comm=self.V.mesh().comm)
             fd.solve(a == L, phi, bcs=DBCs, nullspace=nullspace)
             # Normalize phi such that upper left corner is 0
-            phi -= fd.Constant(self.upperLeftEvaluator(phi)[0])
         else:
             fd.solve(a == L, phi, bcs=DBCs)
+
+        phi -= fd.Constant(self.upperLeftEvaluator(phi)[0])
 
         
         
@@ -512,12 +513,12 @@ Dot product at TE: {dotProductTE}
 
         # Neumann parts: V_inf can be a Constant/Function
         V_inf_fd = self.V_inf   # Constant or Function
-        for bcidx in [1, 2]:
-            L += fd.dot(V_inf_fd, n) * v * fd.ds(bcidx)
+        L += fd.dot(V_inf_fd, n) * v * fd.ds(1)
 
-        bc_inlet = fd.DirichletBC(self.V, self.phiTilde2d, 4)
+        bc_FS = fd.DirichletBC(self.V, self.phiTilde2d, 4)
+        bc_outlet = fd.DirichletBC(self.V, self.phiTilde2d, 2)
 
-        problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=[bc_inlet])
+        problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=[bc_FS, bc_outlet])
 
         self.poissonSolver = fd.LinearVariationalSolver(problem)
         return None
@@ -591,7 +592,7 @@ Dot product at TE: {dotProductTE}
 
     def __doInitialKuttaSolve__(self) -> None:
         '''iter is tool for testing'''
-        self.phi, self.u = self.__poissonSolver__(NBC=[(i, self.V_inf) for i in [1,2]])
+        self.phi, self.u = self.__poissonSolver__(DBC=[(2,fd.Constant(0))], NBC=[(1, self.V_inf)])
         self.__applyKuttaCondition__()
         return None
     
@@ -806,17 +807,17 @@ Dot product at TE: {dotProductTE}
         xd_in = fd.Constant(xmin_fd + 7.02112  * np.pi * self.FR**2)
         xd_out = fd.Constant(xmax_fd - 7.02112 * np.pi * self.FR**2)
         x = fd.SpatialCoordinate(self.fsMesh)[0]
-        A = fd.Constant(5)
+        A = fd.Constant(2)
         
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
         eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (xmax_fd - xd_out))**2, 0)*eta_n1
 
         a_eta = fd.inner((eta_n1 - self.eta_n), v_eta)*fd.dx \
-        + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx #if self.iter != 0 else fd.inner((eta_n1 - self.eta_n), v_eta)*fd.dx
+        + fd.inner(fd.Constant(0)*eta_damp_in + eta_damp_out, v_eta)*fd.dx #if self.iter != 0 else fd.inner((eta_n1 - self.eta_n), v_eta)*fd.dx
 
         L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) \
-                - self.w_n*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+                - self.w_n    #*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
 
         F_eta = a_eta + self.dt_fd*fd.inner(L_eta, v_eta)*fd.dx
 
@@ -824,8 +825,8 @@ Dot product at TE: {dotProductTE}
         a_phi = fd.inner((phi_n1 - self.phi_n), v_phi)*fd.dx
 
         L_phi = g*eta_n1 + point5*(
-            fd.dot(phi_n1.dx(0), phi_n1.dx(0))
-            - (self.w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+            fd.dot(phi_n1.dx(0), phi_n1.dx(0)) + (self.w_n**2)
+            #- (self.w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
         )
 
         F_phi = a_phi + self.dt_fd*fd.inner(L_phi, v_phi)*fd.dx
