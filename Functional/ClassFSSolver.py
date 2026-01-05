@@ -32,7 +32,7 @@ hypParams = {
     "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS": 1000,
+    "nFS":250,
     "FR": 0.5672,
     "continue": False
 }
@@ -42,14 +42,14 @@ meshSettings = {
     "alpha_deg": 5,
     "circle": True,
 
-    "xlim": (-7,18),
+    "xlim": (-7,15),
     "y_bed": -4,
 
     "scale": 1,
     
     "h": 1.034,
     "interface_ratio": 1/4,
-    "nAirfoil": int( hypParams["nFS"]//2 ),
+    "nAirfoil": int( hypParams["nFS"]//1.5 ),
     "centerOfAirfoil": (0.5,0.0),
 
     "nFS": int( hypParams["nFS"] ),
@@ -107,6 +107,8 @@ class FSSolver:
         self.V_inf = hypParams["V_inf"]
         self.rho = hypParams["rho"]
 
+        self.nFS = hypParams["nFS"]
+
         # Mesh parameters
         self.airfoilNumber = meshSettings["airfoilNumber"]
         self.centerOfAirfoil = meshSettings["centerOfAirfoil"]
@@ -158,13 +160,22 @@ class FSSolver:
         self.W1FS = fd.VectorFunctionSpace(self.fsMesh, "CG", 1)
         self.V1FS = fd.FunctionSpace(self.fsMesh, "CG", 1)
 
+        self.OutletIndecies = self.W1.boundary_nodes(2) 
+        self.coordsOutlet = (fd.Function(self.W1).interpolate(self.mesh.coordinates).dat.data)[self.OutletIndecies,:]
+        # Define 1D mesh along free surface
+        self.OutletMesh = fd.IntervalMesh(len(self.coordsOutlet)-1, *self.ylim)
+        # Ensure nodes match the x-coordinates of free surface variables
+        self.OutletMesh.coordinates.dat.data[:] = self.coordsOutlet[:,1]
+
+        self.W1Outlet = fd.VectorFunctionSpace(self.OutletMesh, "CG", 1, dim=2)
+
         self.__gatherPointsAndDefineEvaluators__()
 
         # Computing dt idea from Simone Minniti
         sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
-        self.dt = 0.3 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        self.dt =             5 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
         self.dt_fd = fd.Constant(self.dt)
 
         self.FR = hypParams["FR"]
@@ -502,25 +513,55 @@ Dot product at TE: {dotProductTE}
         return None
     
     def __BuildPoissonSolver__(self):
-        v = fd.TestFunction(self.V)
-        phi_trial = fd.TrialFunction(self.V)
+        new = True
+        if not new:
+            v = fd.TestFunction(self.V)
+            phi_trial = fd.TrialFunction(self.V)
 
-        rhs = fd.Constant(0.0)
-        n = fd.FacetNormal(self.mesh)
+            rhs = fd.Constant(0.0)
+            n = fd.FacetNormal(self.mesh)
 
-        a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
-        L = rhs * v * fd.dx
+            a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
+            L = rhs * v * fd.dx
 
-        # Neumann parts: V_inf can be a Constant/Function
-        V_inf_fd = self.V_inf   # Constant or Function
-        L += fd.dot(V_inf_fd, n) * v * fd.ds(1)
+            # Neumann parts: V_inf can be a Constant/Function
+            L += fd.dot(self.V_inf, n) * v * fd.ds(1)
 
-        bc_FS = fd.DirichletBC(self.V, self.phiTilde2d, 4)
-        bc_outlet = fd.DirichletBC(self.V, self.phiTilde2d, 2)
+            bc_FS = fd.DirichletBC(self.V, self.phiTilde2d, 4)
+            bc_outlet = fd.DirichletBC(self.V, self.phiTilde2d, 2)
 
-        problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=[bc_FS, bc_outlet])
+            problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=[bc_FS, bc_outlet])
 
-        self.poissonSolver = fd.LinearVariationalSolver(problem)
+            self.poissonSolver = fd.LinearVariationalSolver(problem)
+        else:
+            v = fd.TestFunction(self.V)
+            phi_trial = fd.TrialFunction(self.V)
+
+            rhs = fd.Constant(0.0)
+            n = fd.FacetNormal(self.mesh)
+
+            self.uOut = fd.Function(self.W1Outlet)
+            self.uOut.interpolate(self.V_inf)
+
+            self.uOut2d = fd.Function(self.W)
+            self.uOut2d.dat.data[:] = np.array(self.allYOutletEvaluator(self.uOut))
+
+            a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
+            L = rhs * v * fd.dx
+
+            # Neumann parts: V_inf can be a Constant/Function
+            L += fd.dot(self.V_inf, n) * v * fd.ds(1)
+
+            # Outlet neumann
+            L += fd.dot(self.uOut2d, n) * v * fd.ds(2)
+
+            bcs = []
+            bcs.append(fd.DirichletBC(self.V, self.phiTilde2d, 4))
+            #bcs.append(fd.DirichletBC(self.V, self.phiTilde2d, 2))
+
+            problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=bcs)
+
+            self.poissonSolver = fd.LinearVariationalSolver(problem)
         return None
     
     def __BuildBCSolver__(self):
@@ -593,13 +634,14 @@ Dot product at TE: {dotProductTE}
     def __doInitialKuttaSolve__(self) -> None:
         '''iter is tool for testing'''
         self.phi, self.u = self.__poissonSolver__(DBC=[(2,fd.Constant(0))], NBC=[(1, self.V_inf)])
+        return None
         self.__applyKuttaCondition__()
         return None
     
     def __doKuttaSolve__(self):
         self.poissonSolver.solve()
         self.u.interpolate(fd.grad(self.phi))
-
+        return None
         t1 = time()
         # Ensure Gammas is reset
         self.Gammas = []
@@ -775,8 +817,8 @@ Dot product at TE: {dotProductTE}
         L_damp = L_damp  # width of damping region at each end
         xL0 = x_min + L_damp
         xR0 = x_max - L_damp
-        sigma_left = fd.cos(fd.Constant(0.5) * fd.pi * (x - x_min) / L_damp)**2
-        sigma_right = fd.cos(fd.Constant(0.5) * fd.pi * (x_max - x) / L_damp)**2
+        sigma_left = fd.cos(fd.Constant(0.5) * fd.pi * (x - x_min) / L_damp)**0.2
+        sigma_right = fd.cos(fd.Constant(0.5) * fd.pi * (x_max - x) / L_damp)**0.2
         sigma_expr = fd.conditional(
             x < xL0, sigma_left,
             fd.conditional(
@@ -807,7 +849,7 @@ Dot product at TE: {dotProductTE}
         xd_in = fd.Constant(xmin_fd + 7.02112  * np.pi * self.FR**2)
         xd_out = fd.Constant(xmax_fd - 7.02112 * np.pi * self.FR**2)
         x = fd.SpatialCoordinate(self.fsMesh)[0]
-        A = fd.Constant(2)
+        A = fd.Constant(3)
         
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
@@ -876,6 +918,13 @@ Dot product at TE: {dotProductTE}
         self.__dampenWs__()
         self.wn.assign(self.w_n)# For plot export
 
+        # Handeling the outlet neumann BC
+        sliceVals = np.array(self.beforeOutletEvaluator(self.u))  # should be shape (ndofs, 2)
+        self.uOut.dat.data[:] = sliceVals
+        relax = 0.5
+        # self.uOut.dat.data[:] = (1-relax)*self.uOut.dat.data[:] + relax*sliceVals
+        self.uOut2d.dat.data[:] = np.array(self.allYOutletEvaluator(self.uOut))
+
         try:
             self.FSsolver.solve()
         except:
@@ -933,6 +982,15 @@ Dot product at TE: {dotProductTE}
         self.allxFSEvaluator = fd.PointEvaluator(self.fsMesh, self.allPoints[:,0]).evaluate
         self.upperLeftFSEvaluator = fd.PointEvaluator(self.fsMesh, self.xlim[0]).evaluate
         self.FSxEvaluator = fd.PointEvaluator(self.fsMesh, self.xFS).evaluate
+
+        self.allYOutletEvaluator = fd.PointEvaluator(self.OutletMesh, self.allPoints[:,1]).evaluate
+        
+        
+        tempFunctionSpace = fd.VectorFunctionSpace(self.OutletMesh, "CG", 1)
+        y_dofs = (fd.Function(tempFunctionSpace).interpolate(self.OutletMesh.coordinates).dat.data)
+        x_slice = float(self.xlim[1] - 0.5)#(self.xlim[1]-self.xlim[0])/self.nFS)
+        self.slice_points = np.column_stack([x_slice*np.ones_like(y_dofs), y_dofs])
+        self.beforeOutletEvaluator = fd.PointEvaluator(self.mesh, self.slice_points).evaluate
         return None
     
     def __shiftSurface__(self):
@@ -973,6 +1031,8 @@ Dot product at TE: {dotProductTE}
         # Update eta
         self.eta.assign(self.newEta)
         #self.eta2d.assign(self.newEta2d)
+
+        self.__gatherPointsAndDefineEvaluators__()
         return None
     
     def __checkStatus__(self, start_time, iteration_time):
