@@ -42,14 +42,14 @@ meshSettings = {
     "alpha_deg": 5,
     "circle": True,
 
-    "xlim": (-7,15),
+    "xlim": (-8,16),
     "y_bed": -4,
 
     "scale": 1,
     
     "h": 1.034,
-    "interface_ratio": 1/4,
-    "nAirfoil": int( hypParams["nFS"]//1.5 ),
+    "interface_ratio": 1/2,
+    "nAirfoil": int( hypParams["nFS"]//1.4 ),
     "centerOfAirfoil": (0.5,0.0),
 
     "nFS": int( hypParams["nFS"] ),
@@ -72,7 +72,7 @@ calculateNUpperSides(meshSettings)
 solverSettings = {
     "maxItKutta": 50,
     "tolKutta": 1e-10,
-    "maxItFreeSurface": 10000,
+    "maxItFreeSurface": 50000,
     "minItFreeSurface": 100, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
@@ -91,7 +91,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 1, # Output interval in free surface time steps
+    "outputIntervalFS": 10, # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -175,7 +175,7 @@ class FSSolver:
         sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
-        self.dt =             5 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        self.dt =             1.2 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
         self.dt_fd = fd.Constant(self.dt)
 
         self.FR = hypParams["FR"]
@@ -803,8 +803,7 @@ Dot product at TE: {dotProductTE}
                 dampedDT = prevDT
         return dampedDT
     
-    def __relaxEtaAndPhi__(self, omega_eta, omega_phi):
-        self.newEta.assign((1 - omega_eta) * self.eta + omega_eta * self.newEta)
+    def __relaxPhi__(self, omega_phi):
         self.phiTilde.assign((1 - omega_phi) * self.phiTilde_prev + omega_phi * self.phiTilde)
         return None
     
@@ -846,17 +845,17 @@ Dot product at TE: {dotProductTE}
         One = fd.Constant(1)
         point5 = fd.Constant(0.5)
         xmin_fd, xmax_fd = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
-        xd_in = fd.Constant(xmin_fd + 7.02112  * np.pi * self.FR**2)
-        xd_out = fd.Constant(xmax_fd - 7.02112 * np.pi * self.FR**2)
+        xd_in = fd.Constant(xmin_fd +  3*2 * np.pi * self.FR**2)
+        xd_out = fd.Constant(xmax_fd - 5*2 * np.pi * self.FR**2)
         x = fd.SpatialCoordinate(self.fsMesh)[0]
-        A = fd.Constant(3)
+        A = fd.Constant(2)
         
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
         eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (xmax_fd - xd_out))**2, 0)*eta_n1
 
         a_eta = fd.inner((eta_n1 - self.eta_n), v_eta)*fd.dx \
-        + fd.inner(fd.Constant(0)*eta_damp_in + eta_damp_out, v_eta)*fd.dx #if self.iter != 0 else fd.inner((eta_n1 - self.eta_n), v_eta)*fd.dx
+        + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx
 
         L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) \
                 - self.w_n    #*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
@@ -893,7 +892,33 @@ Dot product at TE: {dotProductTE}
         self.__defSigma__()
         self.u_pot = fd.Function(self.W)
         return None
+    
+    def __buildHelmholtzFilter__(self):
+        V = self.V1FS
+        u = fd.TrialFunction(V)
+        v = fd.TestFunction(V)
+        h = (self.xlim[1] - self.xlim[0]) / (self.nFS)
+        ell = 4*h
 
+        self.deta = fd.Function(self.V1FS)
+
+        a = (u*v + ell**2 * fd.inner(fd.grad(u), fd.grad(v))) * fd.dx
+
+        rhs_fun = fd.Function(V)                 # will hold eta_raw each call
+        L = rhs_fun * v * fd.dx                  # RHS form
+
+        eta_filt = fd.Function(V, name="eta_filt")
+
+        problem = fd.LinearVariationalProblem(a, L, eta_filt)
+        solver = fd.LinearVariationalSolver(problem, solver_parameters={
+            "ksp_type": "cg",
+            "pc_type": "jacobi",   # 1D: this is usually enough
+            # or "pc_type":"lu" for a direct solve:
+            # "ksp_type":"preonly", "pc_type":"lu"
+        })
+        self.helm_solver, self.eta_rhs, self.eta_filt = solver, rhs_fun, eta_filt
+        return None
+    
     def __weak1dFsEq__(self):
         '''
         Solves the weak form backward Euler forumulation of the phi and eta at the free surface.
@@ -919,11 +944,13 @@ Dot product at TE: {dotProductTE}
         self.wn.assign(self.w_n)# For plot export
 
         # Handeling the outlet neumann BC
-        sliceVals = np.array(self.beforeOutletEvaluator(self.u))  # should be shape (ndofs, 2)
-        self.uOut.dat.data[:] = sliceVals
+        try:
+            sliceVals = np.array(self.beforeOutletEvaluator(self.u))  # should be shape (ndofs, 2)
+            self.uOut.dat.data[:] = sliceVals
+        except:
+            pass
         relax = 0.5
-        # self.uOut.dat.data[:] = (1-relax)*self.uOut.dat.data[:] + relax*sliceVals
-        self.uOut2d.dat.data[:] = np.array(self.allYOutletEvaluator(self.uOut))
+        self.uOut.dat.data[:] = (1-relax)*self.uOut.dat.data[:] + relax*sliceVals
 
         try:
             self.FSsolver.solve()
@@ -947,8 +974,19 @@ Dot product at TE: {dotProductTE}
 
 
         # ---- Relax eta and phi_tilde ----
-        self.__relaxEtaAndPhi__(omega_eta=0.2, omega_phi=0.2)
-        
+        omega_phi = 0.3
+        omega_eta = 0.3
+
+        self.__relaxPhi__(omega_phi=omega_phi)
+
+        #### Hemholtz damping + relaxing of eta
+        self.deta.assign(self.newEta - self.eta)
+
+        self.eta_rhs.assign(self.deta)
+        self.helm_solver.solve()              # deta_filt stored in self.eta_filt
+
+        self.newEta.assign(self.eta + self.eta_filt * fd.Constant(omega_eta))   # update with filtered increment
+                
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')/(1+jitter)
 
@@ -983,7 +1021,14 @@ Dot product at TE: {dotProductTE}
         self.upperLeftFSEvaluator = fd.PointEvaluator(self.fsMesh, self.xlim[0]).evaluate
         self.FSxEvaluator = fd.PointEvaluator(self.fsMesh, self.xFS).evaluate
 
-        self.allYOutletEvaluator = fd.PointEvaluator(self.OutletMesh, self.allPoints[:,1]).evaluate
+        ymin, ymax = self.ylim  # or compute from OutletMesh.coordinates
+        y = self.allPoints[:, 1].copy()
+
+        # small buffer to avoid hitting exactly the endpoint if that causes issues
+        eps = 1e-12 * (ymax - ymin)
+        y = np.clip(y, ymin + eps, ymax - eps)
+
+        self.allYOutletEvaluator = fd.PointEvaluator(self.OutletMesh, y).evaluate
         
         
         tempFunctionSpace = fd.VectorFunctionSpace(self.OutletMesh, "CG", 1)
@@ -1027,12 +1072,14 @@ Dot product at TE: {dotProductTE}
         # Find points at free surface
         self.__shiftFSmesh__()
         
-        #self.__gatherPointsAndDefineEvaluators__()
+        self.__gatherPointsAndDefineEvaluators__()
         # Update eta
         self.eta.assign(self.newEta)
         #self.eta2d.assign(self.newEta2d)
 
-        self.__gatherPointsAndDefineEvaluators__()
+        # self.coordsOutlet = (fd.Function(self.W1).interpolate(self.mesh.coordinates).dat.data)[self.OutletIndecies,:]
+        # self.OutletMesh.coordinates.dat.data[:] = self.coordsOutlet[:,1]
+        # self.__gatherPointsAndDefineEvaluators__()
         return None
     
     def __checkStatus__(self, start_time, iteration_time):
@@ -1100,6 +1147,7 @@ f"""\t iteration: {i+1}
         
         self.__buildKuttaSolver__()
         self.__buildFSSolver__()
+        self.__buildHelmholtzFilter__()
 
         print("Initialization done \n" + "-"*50 + "\n")
         # Start main loop
