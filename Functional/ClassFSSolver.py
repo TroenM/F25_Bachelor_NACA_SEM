@@ -175,7 +175,7 @@ class FSSolver:
         sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
-        self.dt =             1.2 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        self.dt =             5 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
         self.dt_fd = fd.Constant(self.dt)
 
         self.FR = hypParams["FR"]
@@ -541,11 +541,15 @@ Dot product at TE: {dotProductTE}
             n = fd.FacetNormal(self.mesh)
 
             self.uOut = fd.Function(self.W1Outlet)
-            self.uOut.interpolate(self.V_inf)
-
             self.uOut2d = fd.Function(self.W)
-            self.uOut2d.dat.data[:] = np.array(self.allYOutletEvaluator(self.uOut))
+            
+            if not self.startIteration:
+                self.uOut.interpolate(self.V_inf)
+                self.uOut2d.dat.data[:] = np.array(self.allYOutletEvaluator(self.uOut))
+            else:
+                self.uOut2d.interpolate(fd.grad(self.phiTilde2d))
 
+            
             a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
             L = rhs * v * fd.dx
 
@@ -639,6 +643,15 @@ Dot product at TE: {dotProductTE}
         return None
     
     def __doKuttaSolve__(self):
+        # Handeling the outlet neumann BC
+        try:
+            sliceVals = np.array(self.beforeOutletEvaluator(self.u))  # should be shape (ndofs, 2)
+            self.uOut.dat.data[:] = sliceVals
+            relax = 0.5
+            self.uOut.dat.data[:] = (1-relax)*self.uOut.dat.data[:] + relax*sliceVals
+        except:
+            pass
+
         self.poissonSolver.solve()
         self.u.interpolate(fd.grad(self.phi))
         return None
@@ -898,7 +911,7 @@ Dot product at TE: {dotProductTE}
         u = fd.TrialFunction(V)
         v = fd.TestFunction(V)
         h = (self.xlim[1] - self.xlim[0]) / (self.nFS)
-        ell = 4*h
+        ell = 20*h
 
         self.deta = fd.Function(self.V1FS)
 
@@ -916,7 +929,27 @@ Dot product at TE: {dotProductTE}
             # or "pc_type":"lu" for a direct solve:
             # "ksp_type":"preonly", "pc_type":"lu"
         })
-        self.helm_solver, self.eta_rhs, self.eta_filt = solver, rhs_fun, eta_filt
+        self.eta_helm_solver, self.eta_rhs, self.eta_filt = solver, rhs_fun, eta_filt
+
+
+
+        self.dphi = fd.Function(self.V1FS)
+
+        a = (u*v + ell**2 * fd.inner(fd.grad(u), fd.grad(v))) * fd.dx
+
+        rhs_fun = fd.Function(V)
+        L = rhs_fun * v * fd.dx
+
+        phi_filt = fd.Function(V, name="phi_filt")
+
+        problem = fd.LinearVariationalProblem(a, L, phi_filt)
+        solver = fd.LinearVariationalSolver(problem, solver_parameters={
+            "ksp_type": "cg",
+            "pc_type": "jacobi",   # 1D: this is usually enough
+            # or "pc_type":"lu" for a direct solve:
+            # "ksp_type":"preonly", "pc_type":"lu"
+        })
+        self.phi_helm_solver, self.phi_rhs, self.phi_filt = solver, rhs_fun, phi_filt
         return None
     
     def __weak1dFsEq__(self):
@@ -933,8 +966,8 @@ Dot product at TE: {dotProductTE}
         self.fs_n1.sub(1).assign(self.phi_n)   # phi^{n+1} initial guess
 
         #### Jittery dt scheme
-        jitter = 0.01 * (-1)**(self.iter//2) * (2**(self.iter%6)%5)/2
-        self.dt_fd.assign(self.dt * (1 + jitter))
+        # jitter = 0.01 * (-1)**(self.iter//2) * (2**(self.iter%6)%5)/2
+        # self.dt_fd.assign(self.dt * (1 + jitter))
 
        
         # Retrieve w_n from the pure potential phi (Avoids numerical errors in BC-correction)
@@ -942,15 +975,6 @@ Dot product at TE: {dotProductTE}
         self.w_n.dat.data[:] = np.array(self.FSEvaluator(self.u_pot))[:,1]
         self.__dampenWs__()
         self.wn.assign(self.w_n)# For plot export
-
-        # Handeling the outlet neumann BC
-        try:
-            sliceVals = np.array(self.beforeOutletEvaluator(self.u))  # should be shape (ndofs, 2)
-            self.uOut.dat.data[:] = sliceVals
-        except:
-            pass
-        relax = 0.5
-        self.uOut.dat.data[:] = (1-relax)*self.uOut.dat.data[:] + relax*sliceVals
 
         try:
             self.FSsolver.solve()
@@ -977,18 +1001,25 @@ Dot product at TE: {dotProductTE}
         omega_phi = 0.3
         omega_eta = 0.3
 
-        self.__relaxPhi__(omega_phi=omega_phi)
-
         #### Hemholtz damping + relaxing of eta
         self.deta.assign(self.newEta - self.eta)
 
         self.eta_rhs.assign(self.deta)
-        self.helm_solver.solve()              # deta_filt stored in self.eta_filt
+        self.eta_helm_solver.solve()
 
-        self.newEta.assign(self.eta + self.eta_filt * fd.Constant(omega_eta))   # update with filtered increment
-                
+        self.newEta.assign(self.eta + self.eta_filt * fd.Constant(omega_eta))
 
-        self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')/(1+jitter)
+        #### Hemholtz damping + relaxing of phi
+        self.dphi.assign(self.phiTilde - self.phiTilde_prev)
+
+        self.phi_rhs.assign(self.dphi)
+        self.phi_helm_solver.solve()
+
+        self.phiTilde.assign(self.phiTilde_prev + self.phi_filt * fd.Constant(omega_phi))
+
+
+
+        self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')#/(1+jitter)
 
         self.newEta2d = None
         self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde, self.phiTilde2d) 
