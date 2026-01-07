@@ -36,6 +36,7 @@ hypParams = {
     "FR": 0.5672,
     "continue": False,
     "Kutta": True,
+    "DTscaler": 2,
 }
 
 meshSettings = {
@@ -70,7 +71,7 @@ def calculateNUpperSides(meshSettings):
 calculateNUpperSides(meshSettings)
 
 solverSettings = {
-    "maxItKutta": 50,
+    "maxItKutta": 5,
     "tolKutta": 1e-10,
     "maxItFreeSurface": 50000,
     "minItFreeSurface": 100, # Let the solver ramp up for x iterations before checking for convergence
@@ -178,7 +179,7 @@ class FSSolver:
         sortedFSx = np.sort(np.copy(self.coordsFS[:,0]))
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
-        self.originalDT =                                   2 * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        self.originalDT = hypParams["DTscaler"] * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
         
 
         self.FR = hypParams["FR"]
@@ -192,6 +193,7 @@ class FSSolver:
         self.a_fd = fd.Constant(self.a)
         self.b_fd = fd.Constant(self.b)
         self.fd_x, self.fd_y = fd.SpatialCoordinate(self.mesh)
+        self.Gamma_fd = fd.Constant(0.0)
         # Output parameters
         self.outputPath = outputSettings["outputPath"]
         self.writeKutta = outputSettings["writeKutta"]
@@ -397,7 +399,8 @@ class FSSolver:
         ellipseCircumference = fd.pi*(3*(a+b) - fd.sqrt(3*(a+b)**2+4*a*b))
 
         # Compute the unrotated elliptical vortex field onto the "unrotated" coordinates
-        Gamma = self.Gammas[-1]
+        self.Gamma_fd.assign(self.Gammas[-1])
+        Gamma = self.Gamma_fd
         u_x = -Gamma / ellipseCircumference * y_bar/b / ((x_bar/a)**2 + (y_bar/b)**2)
         u_y = Gamma / ellipseCircumference * x_bar/a / ((x_bar/a)**2 + (y_bar/b)**2)
 
@@ -516,25 +519,60 @@ Dot product at TE: {dotProductTE}
         return None
     
     def __BuildPoissonSolver__(self):
-        v = fd.TestFunction(self.V)
-        phi_trial = fd.TrialFunction(self.V)
+        new = True
+        if not new:
+            v = fd.TestFunction(self.V)
+            phi_trial = fd.TrialFunction(self.V)
 
-        rhs = fd.Constant(0.0)
-        n = fd.FacetNormal(self.mesh)
+            rhs = fd.Constant(0.0)
+            n = fd.FacetNormal(self.mesh)
 
-        a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
-        L = rhs * v * fd.dx
+            a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
+            L = rhs * v * fd.dx
 
-        # Neumann parts: V_inf can be a Constant/Function
-        L += fd.dot(self.V_inf, n) * v * fd.ds(1)
-        L += fd.dot(self.V_inf, n) * v * fd.ds(2)
+            # Neumann parts: V_inf can be a Constant/Function
+            L += fd.dot(self.V_inf, n) * v * fd.ds(1)
+            L += fd.dot(self.V_inf, n) * v * fd.ds(2)
 
-        bcs = []
-        bcs.append(fd.DirichletBC(self.V, self.phiTilde2d, 4))
+            bc_FS = fd.DirichletBC(self.V, self.phiTilde2d, 4)
+            # bc_outlet = fd.DirichletBC(self.V, self.phiTilde2d, 2)
 
-        problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=bcs)
+            problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=[bc_FS])
 
-        self.poissonSolver = fd.LinearVariationalSolver(problem)
+            self.poissonSolver = fd.LinearVariationalSolver(problem)
+        else:
+            v = fd.TestFunction(self.V)
+            phi_trial = fd.TrialFunction(self.V)
+
+            rhs = fd.Constant(0.0)
+            n = fd.FacetNormal(self.mesh)
+
+            self.uOut = fd.Function(self.W1Outlet)
+            self.uOut2d = fd.Function(self.W)
+            
+            if not self.startIteration:
+                self.uOut.interpolate(self.V_inf)
+                self.uOut2d.dat.data[:] = np.array(self.allYOutletEvaluator(self.uOut))
+            else:
+                self.uOut2d.interpolate(fd.grad(self.phiTilde2d))
+
+            
+            a = fd.inner(fd.grad(phi_trial), fd.grad(v)) * fd.dx
+            L = rhs * v * fd.dx
+
+            # Neumann parts: V_inf can be a Constant/Function
+            L += fd.dot(self.V_inf, n) * v * fd.ds(1)
+
+            # Outlet neumann
+            L += fd.dot(self.uOut2d, n) * v * fd.ds(2)
+
+            bcs = []
+            bcs.append(fd.DirichletBC(self.V, self.phiTilde2d, 4))
+            #bcs.append(fd.DirichletBC(self.V, self.phiTilde2d, 2))
+
+            problem = fd.LinearVariationalProblem(a, L, self.phi, bcs=bcs)
+
+            self.poissonSolver = fd.LinearVariationalSolver(problem)
         return None
     
     def __BuildBCSolver__(self):
@@ -647,6 +685,7 @@ Dot product at TE: {dotProductTE}
                     print(f"Kutta solver time: {np.round(time() - t1, 4)} s")
                     print("-"*50*self.writeKutta + "\n")
                     break
+                pass
         return None
 
     def __initPhiTilde__(self) -> None:
@@ -787,7 +826,7 @@ Dot product at TE: {dotProductTE}
         + fd.inner(eta_damp_in + eta_damp_out, v_eta)*fd.dx
 
         L_eta = fd.dot(eta_n1.dx(0), phi_n1.dx(0)) \
-                - self.w_n    #*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+                - self.w_n    *(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
 
         F_eta = a_eta + self.dt_fd*fd.inner(L_eta, v_eta)*fd.dx
 
@@ -796,7 +835,7 @@ Dot product at TE: {dotProductTE}
 
         L_phi = g*eta_n1 + point5*(
             fd.dot(phi_n1.dx(0), phi_n1.dx(0)) + (self.w_n**2)
-            #- (self.w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+            - (self.w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
         )
 
         F_phi = a_phi + self.dt_fd*fd.inner(L_phi, v_phi)*fd.dx
@@ -1086,6 +1125,7 @@ f"""\t iteration: {i+1}
     
     @property
     def dt(self):
+        return self.originalDT
         if self.iter < 100 or self.residuals >= 1e-4:
             return self.originalDT
         elif self.residuals < 1e-4:
