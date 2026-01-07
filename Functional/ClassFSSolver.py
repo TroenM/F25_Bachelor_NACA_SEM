@@ -36,7 +36,7 @@ hypParams = {
     "FR": 0.5672,
     "continue": False,
     "Kutta": True,
-    "DTscaler": 2,
+    "DTscaler": 5,
 }
 
 meshSettings = {
@@ -49,8 +49,8 @@ meshSettings = {
 
     "scale": 1,
     
-    "h": 1.034,
-    "interface_ratio": 6/10,
+    "h": 1.0345,
+    "interface_ratio": 5/10,
     "nAirfoil": int( hypParams["nFS"]//1.4 ),
     "centerOfAirfoil": (0.5,0.0),
 
@@ -77,7 +77,7 @@ solverSettings = {
     "minItFreeSurface": 100, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
-    "maxItWeak1d": 2500 , # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
+    "maxItWeak1d": 5000 , # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
@@ -816,7 +816,7 @@ Dot product at TE: {dotProductTE}
         xd_in = fd.Constant(xmin_fd +  3*2 * np.pi * self.FR**2)
         xd_out = fd.Constant(xmax_fd - 5*2 * np.pi * self.FR**2)
         x = fd.SpatialCoordinate(self.fsMesh)[0]
-        A = fd.Constant(100)
+        A = fd.Constant(10)
         
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
@@ -834,8 +834,8 @@ Dot product at TE: {dotProductTE}
         a_phi = fd.inner((phi_n1 - self.phi_n), v_phi)*fd.dx
 
         L_phi = g*eta_n1 + point5*(
-            fd.dot(phi_n1.dx(0), phi_n1.dx(0)) + (self.w_n**2)
-            - (self.w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+            fd.dot(phi_n1.dx(0), phi_n1.dx(0))
+            - (self.w_n**2)*(One+ fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
         )
 
         F_phi = a_phi + self.dt_fd*fd.inner(L_phi, v_phi)*fd.dx
@@ -866,7 +866,7 @@ Dot product at TE: {dotProductTE}
         u = fd.TrialFunction(V)
         v = fd.TestFunction(V)
         h = (self.xlim[1] - self.xlim[0]) / (self.nFS)
-        self.originalEll = 10*h
+        self.originalEll = 3*h
 
         self.deta = fd.Function(self.V1FS)
 
@@ -924,7 +924,7 @@ Dot product at TE: {dotProductTE}
         # Retrieve w_n from the pure potential phi (Avoids numerical errors in BC-correction)
         self.u_pot.interpolate(fd.grad(self.phi))
         self.w_n.dat.data[:] = np.array(self.FSEvaluator(self.u_pot))[:,1]
-        self.__dampenWs__()
+        # self.__dampenWs__()
         self.wn.assign(self.w_n)# For plot export
 
         try:
@@ -947,8 +947,8 @@ Dot product at TE: {dotProductTE}
 
 
         # ---- Relax eta and phi_tilde ----
-        omega_phi = 0.3
-        omega_eta = 0.3
+        omega_phi = 1#0.3
+        omega_eta = 1#0.3
 
         #### Hemholtz damping + relaxing of eta
         self.deta.assign(self.newEta - self.eta)
@@ -1171,6 +1171,9 @@ f"""\t iteration: {i+1}
             if iteration % 10 == 0:
                 p = psutil.Process(os.getpid())
                 print(f"[mem-before] iter {iteration}: {p.memory_info().rss/1e6:.1f} MB")
+                if p.memory_info().rss/1e6 > 20e+3:
+                    print("Memory Exeeded")
+                    return None
 
             # Note time for start of iteration
             iteration_time = time()
