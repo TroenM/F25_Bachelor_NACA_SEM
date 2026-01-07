@@ -1111,15 +1111,13 @@ f"""\t iteration: {i+1}
         if self.iter < 100 or self.residuals >= 1e-4:
             return self.originalEll
         elif self.residuals < 1e-4:
-            return self.originalEll/2
+            return self.originalEll*2/3
         elif self.residuals < 5e-5:
             return self.originalEll/3
         elif self.residuals < 1e-5:
-            return self.originalEll/4
+            return self.originalEll/3
         elif self.residuals < 4e-6:
-            return 2
-        elif self.residuals < 3e-6:
-            return 1
+            return self.originalEll/6
         elif self.residuals < 2e-6:
             return 0
     
