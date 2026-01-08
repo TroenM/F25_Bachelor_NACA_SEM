@@ -36,12 +36,16 @@ hypParams = {
     "FR": 0.5672,
     "continue": False,
     "Kutta": False,
-    "DTscaler": 1,
-    "ellScaler": 3,
+    "DTscaler": 2,
+    "ellScaler": 5,
     "zeroMeanEtaWeight": 1.0,
     "k1Damping": 0.2,
     "k2Damping": 0.1,
     "k3Damping": 0.1,
+    "k4Damping": 0.1,
+    "k5Damping": 0.1,
+    "meshFreq": 10,
+    "etaFreq": 2,
 }
 
 meshSettings = {
@@ -55,7 +59,7 @@ meshSettings = {
     "scale": 1,
     
     "h": 1.0345,
-    "interface_ratio": 5/10,
+    "interface_ratio": 6/10,
     "nAirfoil": int( hypParams["nFS"]//1.4 ),
     "centerOfAirfoil": (0.5,0.0),
 
@@ -97,7 +101,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 30, # Output interval in free surface time steps
+    "outputIntervalFS": hypParams["meshFreq"], # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -122,6 +126,10 @@ class FSSolver:
         self.k1Damping = hypParams.get("k1Damping", 0.0)
         self.k2Damping = hypParams.get("k2Damping", 0.0)
         self.k3Damping = hypParams.get("k3Damping", 0.0)
+        self.k4Damping = hypParams.get("k4Damping", 0.0)
+        self.k5Damping = hypParams.get("k5Damping", 0.0)
+        self.meshFreq = hypParams.get("meshFreq", 1)
+        self.etaFreq = hypParams.get("etaFreq", 1)
 
         # Mesh parameters
         self.airfoilNumber = meshSettings["airfoilNumber"]
@@ -837,7 +845,7 @@ Dot product at TE: {dotProductTE}
         
         spongeScale = fd.Constant(1.0 / self.dt)
 
-        if self.k1Damping or self.k2Damping or self.k3Damping:
+        if self.k1Damping or self.k2Damping or self.k3Damping or self.k4Damping or self.k5Damping:
             L = fd.Constant(self.xlim[1] - self.xlim[0])
             xmin = fd.Constant(self.xlim[0])
 
@@ -855,6 +863,16 @@ Dot product at TE: {dotProductTE}
             self.k3Mode = fd.Function(self.V1FS, name="k3Mode")
             self.k3Mode.interpolate(fd.cos(3 * fd.pi * (x - xmin) / L))
             self.k3ModeNorm = float(fd.assemble(self.k3Mode * self.k3Mode * fd.dx))
+
+        if self.k4Damping:
+            self.k4Mode = fd.Function(self.V1FS, name="k4Mode")
+            self.k4Mode.interpolate(fd.cos(4 * fd.pi * (x - xmin) / L))
+            self.k4ModeNorm = float(fd.assemble(self.k4Mode * self.k4Mode * fd.dx))
+
+        if self.k5Damping:
+            self.k5Mode = fd.Function(self.V1FS, name="k5Mode")
+            self.k5Mode.interpolate(fd.cos(5 * fd.pi * (x - xmin) / L))
+            self.k5ModeNorm = float(fd.assemble(self.k5Mode * self.k5Mode * fd.dx))
 
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
@@ -1039,6 +1057,18 @@ Dot product at TE: {dotProductTE}
                 coeff = numer / self.k3ModeNorm
                 self.newEta.assign(self.newEta - (self.k3Damping * coeff) * self.k3Mode)
 
+        if self.k4Damping:
+            numer = fd.assemble((self.newEta - self.eta) * self.k4Mode * fd.dx)
+            if self.k4ModeNorm != 0.0:
+                coeff = numer / self.k4ModeNorm
+                self.newEta.assign(self.newEta - (self.k4Damping * coeff) * self.k4Mode)
+
+        if self.k5Damping:
+            numer = fd.assemble((self.newEta - self.eta) * self.k5Mode * fd.dx)
+            if self.k5ModeNorm != 0.0:
+                coeff = numer / self.k5ModeNorm
+                self.newEta.assign(self.newEta - (self.k5Damping * coeff) * self.k5Mode)
+
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
 
@@ -1125,18 +1155,11 @@ Dot product at TE: {dotProductTE}
         self.__shiftFSmesh__()
         
         self.__gatherPointsAndDefineEvaluators__()
-        # Update eta
-        self.eta.assign(self.newEta)
-        #self.eta2d.assign(self.newEta2d)
-
-        # self.coordsOutlet = (fd.Function(self.W1).interpolate(self.mesh.coordinates).dat.data)[self.OutletIndecies,:]
-        # self.OutletMesh.coordinates.dat.data[:] = self.coordsOutlet[:,1]
-        # self.__gatherPointsAndDefineEvaluators__()
         return None
     
     def __checkStatus__(self, start_time, iteration_time):
         i = self.iter
-        if (self.residuals < self.tolFreeSurface) and (i > self.minItFreeSurface):
+        if (self.residuals < self.tolFreeSurface) and (i > self.minItFreeSurface) and self.iter % self.meshFreq == 0:
             print(
                 f"""
             {"\n" + "="*50}
@@ -1198,15 +1221,14 @@ f"""\t iteration: {i+1}
 
     @property
     def dt(self):
-        return self.originalDT
         if self.iter < 100 or self.residuals >= 1e-4:
             return self.originalDT
         elif self.residuals < 1e-4:
             return self.originalDT * 2
         elif self.residuals < 5e-5:
-            return self.originalDT * 3
+            return self.originalDT * 6
         elif self.residuals < 1e-5:
-            return self.originalDT * 4
+            return self.originalDT * 10
         return 
     
     @property
@@ -1256,7 +1278,12 @@ f"""\t iteration: {i+1}
             if not (self.startIteration == iteration and self.startIteration):
                 self.__weak1dFsEq__()
             
-            self.__updateMeshData__()
+            if self.iter % self.etaFreq == self.etaFreq-1:
+                self.eta.assign(self.newEta)
+
+            
+            if self.iter % self.meshFreq == self.meshFreq-1:
+                self.__updateMeshData__()
 
             # Apply kutta condition to a poisson solve on the new mesh
             self.__doKuttaSolve__()
