@@ -1,15 +1,14 @@
 import numpy as np
 import os
 
-
-
 hypParams = {
-    "P": 3, # Polynomial degree
-    "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
+    "P": 2, # Polynomial degree
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS": 100,
+    "nFS":750,
     "FR": 0.5672,
-    "continue": True
+    "continue": False,
+    "Kutta": True,
+    "DTscaler": 2,
 }
 
 meshSettings = {
@@ -17,21 +16,21 @@ meshSettings = {
     "alpha_deg": 5,
     "circle": True,
 
-    "xlim": (-7,10),
+    "xlim": (-8,10       *2*3.1415*hypParams["FR"]**2),
     "y_bed": -4,
 
     "scale": 1,
     
     "h": 1.034,
-    "interface_ratio": 5,
-    "nAirfoil": hypParams["nFS"]//2,
+    "interface_ratio": 5/10,
+    "nAirfoil": int( hypParams["nFS"]//1.4 ),
     "centerOfAirfoil": (0.5,0.0),
 
-    "nFS": hypParams["nFS"],
+    "nFS": int( hypParams["nFS"] ),
     "nUpperSides": "Calculated down below to make upper elemets square (if they were not triangular xD)",
-    "nLowerInlet": hypParams["nFS"]//10,
-    "nLowerOutlet": hypParams["nFS"]//10,
-    "nBed": hypParams["nFS"]//2,
+    "nLowerInlet": int( hypParams["nFS"]//7 ),
+    "nLowerOutlet": int( hypParams["nFS"]//7 ),
+    "nBed": int( hypParams["nFS"]//3 ),
     "test": True
     }
 
@@ -39,16 +38,9 @@ def calculateNUpperSides(meshSettings):
     nFS = meshSettings["nFS"]
     xlim = meshSettings["xlim"]
     h = meshSettings["h"]
-    meshSettings["nUpperSides"] =  int( nFS/(xlim[1]-xlim[0]) * h )
+    meshSettings["nUpperSides"] =  int( nFS/(xlim[1]-xlim[0]) * h*1.3 )
     return None
 calculateNUpperSides(meshSettings)
-
-def getMeshSettings():
-    return meshSettings
-
-def gethypParams():
-    return hypParams
-    
 
 def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : np.ndarray = np.array([0.5,0])) -> np.ndarray:
     """
@@ -140,7 +132,7 @@ def naca_4digit(string : str, n : int, alpha : float = 0, position_of_center : n
     return points
 
 
-def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[np.float64, tuple]:
+def createFSMesh(airfoil: str, alpha: float, meshSettings: dict):
     """
     Generates a mesh with a insulating ordered mesh above airfoil for better free surface computations
 
@@ -175,9 +167,9 @@ def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[np.floa
     ylim: (ymin, ymax)
         
     """
-    import gmsh
-    # ===================== Variable Preparation =======================
 
+    # ===================== Variable Preparation =======================
+    import gmsh
     xmin, xmax = meshSettings["xlim"]
     y_bed = meshSettings["y_bed"]
 
@@ -185,8 +177,8 @@ def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[np.floa
 
     # The insulating layer will be 9/10 of the distance from surface to airfoil
     h = meshSettings['h']
-    interface_ratio = meshSettings.get("interface_ratio", 10)
-    naca_eps = h/interface_ratio
+    interface_ratio = meshSettings.get("interface_ratio", 1/10)
+    naca_eps = h*interface_ratio
     h -= naca_eps
 
     xc, yc = meshSettings["centerOfAirfoil"]
@@ -264,8 +256,8 @@ def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[np.floa
 
     # Set remaining line numbers
     gmsh.model.mesh.setTransfiniteCurve(lbed, n_bed, coef=1)
-    gmsh.model.mesh.setTransfiniteCurve(lLInlet, n_lower_inlet, coef = 1)
-    gmsh.model.mesh.setTransfiniteCurve(lLOutlet, n_lower_outlet, coef = 1)
+    gmsh.model.mesh.setTransfiniteCurve(lLInlet, n_lower_inlet, coef = 1.02)
+    gmsh.model.mesh.setTransfiniteCurve(lLOutlet, n_lower_outlet, coef = 1/1.02)
 
     for line in naca_lines:
         gmsh.model.mesh.setTransfiniteCurve(tag = line, numNodes=n_airfoil//len(naca_lines), coef=1)
@@ -287,19 +279,19 @@ def createFSMesh(airfoil: str, alpha: float, meshSettings: dict) -> list[np.floa
         gmsh.fltk.run()
 
     gmsh.write("mesh.msh")
-
+    print("mesh saved")
     gmsh.finalize()
-
     ylim = (y_bed, h + y_interface)
-    y_data = np.array([y_interface, *ylim])
-    np.save("y_data", y_data)
-
-    del(gmsh)
-    print("Mesh Saved")
+    return y_interface, ylim
 
 
 if __name__ =="__main__":
-    createFSMesh("0012", meshSettings["alpha_deg"], meshSettings)
+    y_data = createFSMesh("0012", meshSettings["alpha_deg"], meshSettings)
+    y_interface = y_data[0]
+    ylim = y_data[1]
+    np.save("y_interface.npy", y_interface)
+    np.save("ylim.npy", ylim)
+    
     import firedrake as fd
     mesh = fd.Mesh("mesh.msh")
 
