@@ -32,20 +32,17 @@ hypParams = {
     "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS":150,
-    "FR": 0.5672,
+    "nFS":120,
+    "FR": 1,
     "continue": False,
     "Kutta": False,
-    "DTscaler": 2,
-    "ellScaler": 5,
-    "zeroMeanEtaWeight": 1.0,
-    "k1Damping": 0.2,
-    "k2Damping": 0.1,
-    "k3Damping": 0.1,
-    "k4Damping": 0.1,
-    "k5Damping": 0.1,
-    "meshFreq": 10,
-    "etaFreq": 2,
+    "DTscaler": 1,
+    "ellScaler": 2,
+    "zeroMeanEtaWeight": 1,
+    "meshFreq": 100,
+    "etaFreq": 3,
+    "phiFreq": 1,
+    "resultsFrom": False# "TestResults/Results5672",
 }
 
 meshSettings = {
@@ -59,7 +56,7 @@ meshSettings = {
     "scale": 1,
     
     "h": 1.0345,
-    "interface_ratio": 6/10,
+    "interface_ratio": 4/10,
     "nAirfoil": int( hypParams["nFS"]//1.4 ),
     "centerOfAirfoil": (0.5,0.0),
 
@@ -82,7 +79,7 @@ calculateNUpperSides(meshSettings)
 solverSettings = {
     "maxItKutta": 5,
     "tolKutta": 1e-10,
-    "maxItFreeSurface": 10000,
+    "maxItFreeSurface": 4000,
     "minItFreeSurface": 100, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
@@ -123,13 +120,28 @@ class FSSolver:
         self.Kutta = hypParams["Kutta"]
         self.ellScaler = hypParams["ellScaler"]
         self.zeroMeanEtaWeight = hypParams.get("zeroMeanEtaWeight", 1.0)
-        self.k1Damping = hypParams.get("k1Damping", 0.0)
-        self.k2Damping = hypParams.get("k2Damping", 0.0)
-        self.k3Damping = hypParams.get("k3Damping", 0.0)
-        self.k4Damping = hypParams.get("k4Damping", 0.0)
-        self.k5Damping = hypParams.get("k5Damping", 0.0)
         self.meshFreq = hypParams.get("meshFreq", 1)
         self.etaFreq = hypParams.get("etaFreq", 1)
+        self.phiFreq = hypParams.get("phiFreq", 1)
+        self.resultsFrom = hypParams.get("resultsFrom", False)
+        
+        
+        if self.resultsFrom:
+            try:
+                residuals = np.load(self.resultsFrom + "/residuals.npy")
+                time_step = residuals[:,1]
+                convergedTime = np.where(time_step == 0)[0][0] - 1
+                self.startEta = np.load(self.resultsFrom + "/eta.npy")[convergedTime,:]
+                self.startPhi = np.load(self.resultsFrom + "/phiTilde.npy")[convergedTime,:]
+                self.downscaledX = np.load(self.resultsFrom + "/coordsFS.npy")[convergedTime,:]
+            except:
+                raise ValueError(f"No folder named \"{self.resultsFrom}\" from directory")
+        else:
+            self.startEta = hypParams.get("startEta", False)
+            self.startPhi = hypParams.get("startPhi", False)
+            self.downscaledX = hypParams.get("downscaledX", False)
+
+        
 
         # Mesh parameters
         self.airfoilNumber = meshSettings["airfoilNumber"]
@@ -198,6 +210,7 @@ class FSSolver:
         diffFSx =np.diff(sortedFSx)
         dxx = np.min(diffFSx)
         self.originalDT = hypParams["DTscaler"] * dxx/np.sqrt(float(self.V_inf[0]**2) + float(self.V_inf[1]**2))
+        self.dt_fd = fd.Constant(self.originalDT)
         
 
         self.FR = hypParams["FR"]
@@ -708,17 +721,25 @@ Dot product at TE: {dotProductTE}
 
     def __initPhiTilde__(self) -> None:
         V1 = self.V1FS
-        if not self.startIteration:
-            self.phiTilde = fd.Function(V1)
-            self.phiTilde_prev = fd.Function(V1)
-            self.phiTilde2d = fd.Function(self.V)
+        self.phiTilde = fd.Function(V1)
+        self.phiTilde_prev = fd.Function(V1)
+        self.phiTilde2d = fd.Function(self.V)
 
+        if not self.startIteration:
             self.phiTilde.dat.data[:] = self.FSEvaluator(self.phi)
             self.phiTilde_prev.dat.data[:] = self.FSEvaluator(self.phi)
+            if self.resultsFrom:
+                from scipy.interpolate import interp1d
+                x_prev = self.downscaledX[np.argsort(self.downscaledX)]
+                phi_prev = self.startPhi[np.argsort(self.downscaledX)]
+                f = interp1d(x_prev, phi_prev, kind="cubic", fill_value="extrapolate")
+                phi_new = f(self.coordsFS[:,0])
+
+                self.phiTilde.dat.data[:] = phi_new
+                self.phiTilde2d = self.__lift_1d_to_2d__(self.phiTilde, self.phiTilde2d)
+                self.phiTilde_prev.dat.data[:] = phi_new
+
         else:
-            self.phiTilde = fd.Function(V1)
-            self.phiTilde_prev = fd.Function(V1)
-            self.phiTilde2d = fd.Function(self.V)
             self.phi = fd.Function(self.V)
 
             self.phiTilde.dat.data[:] = self.phis[self.startIteration,:]
@@ -732,16 +753,26 @@ Dot product at TE: {dotProductTE}
 
     def __initEta__(self):
         V1 = self.V1FS
-        if not self.startIteration:
-            self.eta = fd.Function(V1).interpolate(fd.Constant(self.ylim[1]))
-            self.eta2d = fd.Function(self.V).interpolate(fd.Constant(self.ylim[1]))
-            self.newEta = fd.Function(V1)
-            self.wn = fd.Function(V1)
-        else:
-            self.eta = fd.Function(V1)
-            self.newEta = fd.Function(V1)
-            self.wn = fd.Function(V1)
+        self.eta = fd.Function(V1)
+        self.eta2d = fd.Function(self.V)
+        self.newEta = fd.Function(V1)
+        self.wn = fd.Function(V1)
 
+        if not self.startIteration:
+            self.eta.interpolate(fd.Constant(self.ylim[1]))
+            self.eta2d.interpolate(fd.Constant(self.ylim[1]))
+
+            if self.resultsFrom:
+                from scipy.interpolate import interp1d
+                x_prev = self.downscaledX[np.argsort(self.downscaledX)]
+                eta_prev = self.startEta[np.argsort(self.downscaledX)]
+                f = interp1d(x_prev, eta_prev, kind="cubic", fill_value="extrapolate")
+                eta_new = f(self.coordsFS[:,0])
+
+                self.newEta.dat.data[:] = eta_new
+                self.eta2d = self.__lift_1d_to_2d__(self.phiTilde, self.phiTilde2d)
+                self.eta.dat.data[:] = eta_new
+        else:
             self.eta.dat.data[:] = self.etas[self.startIteration-1,:]
             self.eta2d = None
 
@@ -845,35 +876,6 @@ Dot product at TE: {dotProductTE}
         
         spongeScale = fd.Constant(1.0 / self.dt)
 
-        if self.k1Damping or self.k2Damping or self.k3Damping or self.k4Damping or self.k5Damping:
-            L = fd.Constant(self.xlim[1] - self.xlim[0])
-            xmin = fd.Constant(self.xlim[0])
-
-        if self.k1Damping:
-            self.k1Mode = fd.Function(self.V1FS, name="k1Mode")
-            self.k1Mode.interpolate(fd.cos(fd.pi * (x - xmin) / L))
-            self.k1ModeNorm = float(fd.assemble(self.k1Mode * self.k1Mode * fd.dx))
-
-        if self.k2Damping:
-            self.k2Mode = fd.Function(self.V1FS, name="k2Mode")
-            self.k2Mode.interpolate(fd.cos(2 * fd.pi * (x - xmin) / L))
-            self.k2ModeNorm = float(fd.assemble(self.k2Mode * self.k2Mode * fd.dx))
-
-        if self.k3Damping:
-            self.k3Mode = fd.Function(self.V1FS, name="k3Mode")
-            self.k3Mode.interpolate(fd.cos(3 * fd.pi * (x - xmin) / L))
-            self.k3ModeNorm = float(fd.assemble(self.k3Mode * self.k3Mode * fd.dx))
-
-        if self.k4Damping:
-            self.k4Mode = fd.Function(self.V1FS, name="k4Mode")
-            self.k4Mode.interpolate(fd.cos(4 * fd.pi * (x - xmin) / L))
-            self.k4ModeNorm = float(fd.assemble(self.k4Mode * self.k4Mode * fd.dx))
-
-        if self.k5Damping:
-            self.k5Mode = fd.Function(self.V1FS, name="k5Mode")
-            self.k5Mode.interpolate(fd.cos(5 * fd.pi * (x - xmin) / L))
-            self.k5ModeNorm = float(fd.assemble(self.k5Mode * self.k5Mode * fd.dx))
-
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
         eta_damp_out = A*fd.conditional(x > xd_out, ((x - xd_out) / (xmax_fd - xd_out))**2, 0)*eta_n1
@@ -937,6 +939,14 @@ Dot product at TE: {dotProductTE}
         v = fd.TestFunction(V)
         h = (self.xlim[1] - self.xlim[0]) / (self.nFS)
         self.originalEll = self.ellScaler * h
+        x = fd.SpatialCoordinate(self.fsMesh)[0]
+        xmin_fd, xmax_fd = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
+        xd_in = fd.Constant(xmin_fd + 3 * 2 * np.pi * self.FR**2)
+        xd_out = fd.Constant(xmax_fd - 5 * 2 * np.pi * self.FR**2)
+        mask_in = fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd - xd_in))**2, 0.0)
+        mask_out = fd.conditional(x > xd_out, ((x - xd_out) / (xmax_fd - xd_out))**2, 0.0)
+        self.helmholtz_mask = fd.Function(V, name="helmholtz_mask")
+        self.helmholtz_mask.interpolate(mask_in + mask_out)
 
         self.deta = fd.Function(self.V1FS)
 
@@ -950,9 +960,7 @@ Dot product at TE: {dotProductTE}
         problem = fd.LinearVariationalProblem(a, L, eta_filt)
         solver = fd.LinearVariationalSolver(problem, solver_parameters={
             "ksp_type": "cg",
-            "pc_type": "jacobi",   # 1D: this is usually enough
-            # or "pc_type":"lu" for a direct solve:
-            # "ksp_type":"preonly", "pc_type":"lu"
+            "pc_type": "jacobi",
         })
         self.eta_helm_solver, self.eta_rhs, self.eta_filt = solver, rhs_fun, eta_filt
 
@@ -970,9 +978,7 @@ Dot product at TE: {dotProductTE}
         problem = fd.LinearVariationalProblem(a, L, phi_filt)
         solver = fd.LinearVariationalSolver(problem, solver_parameters={
             "ksp_type": "cg",
-            "pc_type": "jacobi",   # 1D: this is usually enough
-            # or "pc_type":"lu" for a direct solve:
-            # "ksp_type":"preonly", "pc_type":"lu"
+            "pc_type": "jacobi",
         })
         self.phi_helm_solver, self.phi_rhs, self.phi_filt = solver, rhs_fun, phi_filt
         return None
@@ -999,6 +1005,8 @@ Dot product at TE: {dotProductTE}
         # self.__dampenWs__()
         self.wn.assign(self.w_n)# For plot export
 
+        self.dt_fd.assign(self.dt)
+
         try:
             self.FSsolver.solve()
         except:
@@ -1009,7 +1017,8 @@ Dot product at TE: {dotProductTE}
         self.newEta.assign(eta_sub)
 
         self.phiTilde_prev.assign(self.phiTilde)
-        self.phiTilde.assign(phi_sub)
+        if self.iter % self.phiFreq == self.phiFreq-1:
+            self.phiTilde.assign(phi_sub)
 
         self.upperLeftValue.assign(self.upperLeftFSEvaluator(self.phiTilde)[0])
         self.phiTilde.assign(self.phiTilde - self.upperLeftValue)
@@ -1018,8 +1027,8 @@ Dot product at TE: {dotProductTE}
 
 
         # ---- Relax eta and phi_tilde ----
-        omega_phi = 0.3
-        omega_eta = 0.3
+        omega_phi = 1
+        omega_eta = 1
 
         #### Hemholtz damping + relaxing of eta
         self.deta.assign(self.newEta - self.eta)
@@ -1027,7 +1036,12 @@ Dot product at TE: {dotProductTE}
         self.eta_rhs.assign(self.deta)
         self.eta_helm_solver.solve()
 
-        self.newEta.assign(self.eta + self.eta_filt * fd.Constant(omega_eta))
+        mask = self.helmholtz_mask
+        one = fd.Constant(1.0)
+        omega_eta_const = fd.Constant(omega_eta)
+        self.newEta.interpolate(
+            self.eta + (mask * self.eta_filt + (one - mask) * self.deta) * omega_eta_const
+        )
 
         #### Hemholtz damping + relaxing of phi
         self.dphi.assign(self.phiTilde - self.phiTilde_prev)
@@ -1035,39 +1049,12 @@ Dot product at TE: {dotProductTE}
         self.phi_rhs.assign(self.dphi)
         self.phi_helm_solver.solve()
 
-        self.phiTilde.assign(self.phiTilde_prev + self.phi_filt * fd.Constant(omega_phi))
+        omega_phi_const = fd.Constant(omega_phi)
+        self.phiTilde.interpolate(
+            self.phiTilde_prev + (mask * self.phi_filt + (one - mask) * self.dphi) * omega_phi_const
+        )
 
 
-
-        if self.k1Damping:
-            numer = fd.assemble((self.newEta - self.eta) * self.k1Mode * fd.dx)
-            if self.k1ModeNorm != 0.0:
-                coeff = numer / self.k1ModeNorm
-                self.newEta.assign(self.newEta - (self.k1Damping * coeff) * self.k1Mode)
-
-        if self.k2Damping:
-            numer = fd.assemble((self.newEta - self.eta) * self.k2Mode * fd.dx)
-            if self.k2ModeNorm != 0.0:
-                coeff = numer / self.k2ModeNorm
-                self.newEta.assign(self.newEta - (self.k2Damping * coeff) * self.k2Mode)
-
-        if self.k3Damping:
-            numer = fd.assemble((self.newEta - self.eta) * self.k3Mode * fd.dx)
-            if self.k3ModeNorm != 0.0:
-                coeff = numer / self.k3ModeNorm
-                self.newEta.assign(self.newEta - (self.k3Damping * coeff) * self.k3Mode)
-
-        if self.k4Damping:
-            numer = fd.assemble((self.newEta - self.eta) * self.k4Mode * fd.dx)
-            if self.k4ModeNorm != 0.0:
-                coeff = numer / self.k4ModeNorm
-                self.newEta.assign(self.newEta - (self.k4Damping * coeff) * self.k4Mode)
-
-        if self.k5Damping:
-            numer = fd.assemble((self.newEta - self.eta) * self.k5Mode * fd.dx)
-            if self.k5ModeNorm != 0.0:
-                coeff = numer / self.k5ModeNorm
-                self.newEta.assign(self.newEta - (self.k5Damping * coeff) * self.k5Mode)
 
 
         self.residuals = fd.norm(self.newEta - self.eta, norm_type='l2')
@@ -1159,7 +1146,7 @@ Dot product at TE: {dotProductTE}
     
     def __checkStatus__(self, start_time, iteration_time):
         i = self.iter
-        if (self.residuals < self.tolFreeSurface) and (i > self.minItFreeSurface) and self.iter % self.meshFreq == 0:
+        if (i > self.minItFreeSurface) and (self.residuals < self.tolFreeSurface) and i % self.meshFreq == 0:
             print(
                 f"""
             {"\n" + "="*50}
@@ -1203,37 +1190,17 @@ f"""\t iteration: {i+1}
     
     @property
     def ell(self):
+        return self.originalEll
         if self.iter < self.minItFreeSurface:
             return self.originalEll
-        
-        r = self.residuals
-        tol = self.tolFreeSurface
 
-        if r >= 100.0 * tol:
+        if self.residuals >= 5e-6:
             return self.originalEll
-        if r >= 30.0 * tol:
-            return 0.75 * self.originalEll
-        if r >= 10.0 * tol:
-            return 0.5 * self.originalEll
-        if r >= 3.0 * tol:
-            return 0.1 * self.originalEll
-        return 0.0
+        return self.originalEll/2
 
     @property
     def dt(self):
-        if self.iter < 100 or self.residuals >= 1e-4:
-            return self.originalDT
-        elif self.residuals < 1e-4:
-            return self.originalDT * 2
-        elif self.residuals < 5e-5:
-            return self.originalDT * 6
-        elif self.residuals < 1e-5:
-            return self.originalDT * 10
-        return 
-    
-    @property
-    def dt_fd(self):
-        return fd.Constant(self.dt)
+        return self.originalDT
     
     def solve(self):
         # Start time
@@ -1261,10 +1228,9 @@ f"""\t iteration: {i+1}
         print("Initialization done \n" + "-"*50 + "\n")
         # Start main loop
         import psutil
-        import subprocess
         for iteration in range(self.startIteration, self.maxItFreeSurface):
             self.iter = iteration
-            if iteration % 10 == 0:
+            if iteration % 100 == 0:
                 p = psutil.Process(os.getpid())
                 print(f"[mem-before] iter {iteration}: {p.memory_info().rss/1e6:.1f} MB")
                 if p.memory_info().rss/1e6 > 20e+3:
@@ -1275,14 +1241,14 @@ f"""\t iteration: {i+1}
             iteration_time = time()
 
             # Calculate free surface
-            if not (self.startIteration == iteration and self.startIteration):
+            if (not (self.startIteration == iteration and self.startIteration)):
                 self.__weak1dFsEq__()
             
             if self.iter % self.etaFreq == self.etaFreq-1:
                 self.eta.assign(self.newEta)
 
             
-            if self.iter % self.meshFreq == self.meshFreq-1:
+            if self.iter % self.meshFreq == 0:
                 self.__updateMeshData__()
 
             # Apply kutta condition to a poisson solve on the new mesh
