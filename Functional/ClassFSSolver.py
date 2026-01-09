@@ -32,17 +32,17 @@ hypParams = {
     "P": 2, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS":120,
-    "FR": 1,
+    "nFS":500,
+    "FR": 0.5672,
     "continue": False,
     "Kutta": False,
     "DTscaler": 1,
-    "ellScaler": 2,
+    "ell": 0.3,
     "zeroMeanEtaWeight": 1,
     "meshFreq": 100,
     "etaFreq": 3,
     "phiFreq": 1,
-    "resultsFrom": False# "TestResults/Results5672",
+    "resultsFrom": "TestResults/Results5672",
 }
 
 meshSettings = {
@@ -118,7 +118,7 @@ class FSSolver:
         self.rho = hypParams["rho"]
         self.nFS = hypParams["nFS"]
         self.Kutta = hypParams["Kutta"]
-        self.ellScaler = hypParams["ellScaler"]
+        self.ell = hypParams["ell"]
         self.zeroMeanEtaWeight = hypParams.get("zeroMeanEtaWeight", 1.0)
         self.meshFreq = hypParams.get("meshFreq", 1)
         self.etaFreq = hypParams.get("etaFreq", 1)
@@ -937,8 +937,6 @@ Dot product at TE: {dotProductTE}
         V = self.V1FS
         u = fd.TrialFunction(V)
         v = fd.TestFunction(V)
-        h = (self.xlim[1] - self.xlim[0]) / (self.nFS)
-        self.originalEll = self.ellScaler * h
         x = fd.SpatialCoordinate(self.fsMesh)[0]
         xmin_fd, xmax_fd = fd.Constant(self.xlim[0]), fd.Constant(self.xlim[1])
         xd_in = fd.Constant(xmin_fd + 3 * 2 * np.pi * self.FR**2)
@@ -1186,17 +1184,7 @@ f"""\t iteration: {i+1}
                 deleteLines = True
 
             print(block)
-            return False 
-    
-    @property
-    def ell(self):
-        return self.originalEll
-        if self.iter < self.minItFreeSurface:
-            return self.originalEll
-
-        if self.residuals >= 5e-6:
-            return self.originalEll
-        return self.originalEll/2
+            return False
 
     @property
     def dt(self):
