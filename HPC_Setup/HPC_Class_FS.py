@@ -31,11 +31,11 @@ hypParams = {
     "P": 3, # Polynomial degree
     "V_inf": fd.as_vector((1.0, 0.0)), # Free stream velocity
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS":500,
+    "nFS":300,
     "FR": 0.5672,
-    "continue": False,
+    "continue": True,
     "Kutta": True,
-    "DTscaler": 2,
+    "DTscaler": 0.02,
 }
 
 meshSettings = {
@@ -48,7 +48,7 @@ meshSettings = {
 
     "scale": 1,
     
-    "h": 1.034,
+    "h": 1.0345,
     "interface_ratio": 5/10,
     "nAirfoil": int( hypParams["nFS"]//1.4 ),
     "centerOfAirfoil": (0.5,0.0),
@@ -69,10 +69,6 @@ def calculateNUpperSides(meshSettings):
     return None
 calculateNUpperSides(meshSettings)
 
-def getMeshSettings():
-    meshdir = meshSettings
-    return meshdir
-
 solverSettings = {
     "maxItKutta": 5,
     "tolKutta": 1e-10,
@@ -80,7 +76,7 @@ solverSettings = {
     "minItFreeSurface": 100, # Let the solver ramp up for x iterations before checking for convergence
     "tolFreeSurface": 1e-6,
 
-    "maxItWeak1d": 2500 , # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
+    "maxItWeak1d": 5000 , # Maximum iterations for free surface SNES solver (Go crazy, this is cheap)
     "tolWeak1d": 1e-8, # Tolerance for free surface SNES solver
 
     "c0": 7, # Initial guess for the adaptive stepsize controller for Gamma
@@ -95,7 +91,7 @@ outputSettings = {
     "writeKutta": True, # Whether to write output for each Kutta iteration
     "writeFreeSurface": True, # Whether to write output for each free surface iteration
     "outputIntervalKutta": 1, # Output interval in time steps
-    "outputIntervalFS": 200, # Output interval in free surface time steps
+    "outputIntervalFS": 30, # Output interval in free surface time steps
 }
 deleteLines = False
 
@@ -134,7 +130,6 @@ class FSSolver:
         self.mesh = fd.Mesh("mesh.msh")
         self.yInterface = np.load("y_interface.npy")
         self.ylim = np.load("ylim.npy")
-
         # self.mesh, self.yInterface, self.ylim = naca_mesh(self.airfoilNumber, np.rad2deg(self.alpha), meshSettings)
         self.a = 1
         self.b = 1 if self.circle else int(self.airfoilNumber[2:])/100
@@ -822,7 +817,7 @@ Dot product at TE: {dotProductTE}
         xd_in = fd.Constant(xmin_fd +  3*2 * np.pi * self.FR**2)
         xd_out = fd.Constant(xmax_fd - 5*2 * np.pi * self.FR**2)
         x = fd.SpatialCoordinate(self.fsMesh)[0]
-        A = fd.Constant(100)
+        A = fd.Constant(10)
         
         # Dampen eta towards the "normal" height of the domain at the edges
         eta_damp_in = A*fd.conditional(x < xd_in, ((x - xd_in) / (xmin_fd  - xd_in))**2, 0)*eta_n1
@@ -840,8 +835,8 @@ Dot product at TE: {dotProductTE}
         a_phi = fd.inner((phi_n1 - self.phi_n), v_phi)*fd.dx
 
         L_phi = g*eta_n1 + point5*(
-            fd.dot(phi_n1.dx(0), phi_n1.dx(0)) + (self.w_n**2)
-            - (self.w_n**2)*(One + fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
+            fd.dot(phi_n1.dx(0), phi_n1.dx(0))
+            - (self.w_n**2)*(One+ fd.dot(eta_n1.dx(0), eta_n1.dx(0)))
         )
 
         F_phi = a_phi + self.dt_fd*fd.inner(L_phi, v_phi)*fd.dx
@@ -872,7 +867,7 @@ Dot product at TE: {dotProductTE}
         u = fd.TrialFunction(V)
         v = fd.TestFunction(V)
         h = (self.xlim[1] - self.xlim[0]) / (self.nFS)
-        self.originalEll = 10*h
+        self.originalEll = 3*h
 
         self.deta = fd.Function(self.V1FS)
 
@@ -930,7 +925,7 @@ Dot product at TE: {dotProductTE}
         # Retrieve w_n from the pure potential phi (Avoids numerical errors in BC-correction)
         self.u_pot.interpolate(fd.grad(self.phi))
         self.w_n.dat.data[:] = np.array(self.FSEvaluator(self.u_pot))[:,1]
-        self.__dampenWs__()
+        # self.__dampenWs__()
         self.wn.assign(self.w_n)# For plot export
 
         try:
@@ -953,8 +948,8 @@ Dot product at TE: {dotProductTE}
 
 
         # ---- Relax eta and phi_tilde ----
-        omega_phi = 0.3
-        omega_eta = 0.3
+        omega_phi = 1#0.3
+        omega_eta = 1#0.3
 
         #### Hemholtz damping + relaxing of eta
         self.deta.assign(self.newEta - self.eta)
@@ -1117,15 +1112,13 @@ f"""\t iteration: {i+1}
         if self.iter < 100 or self.residuals >= 1e-4:
             return self.originalEll
         elif self.residuals < 1e-4:
-            return self.originalEll/2
+            return self.originalEll*2/3
         elif self.residuals < 5e-5:
             return self.originalEll/3
         elif self.residuals < 1e-5:
-            return self.originalEll/4
+            return self.originalEll/3
         elif self.residuals < 4e-6:
-            return 2
-        elif self.residuals < 3e-6:
-            return 1
+            return self.originalEll/6
         elif self.residuals < 2e-6:
             return 0
     
@@ -1205,3 +1198,10 @@ f"""\t iteration: {i+1}
 if __name__ == "__main__":
     solver = FSSolver(hypParams, meshSettings, solverSettings, outputSettings)
     solver.solve()
+
+
+
+
+
+
+

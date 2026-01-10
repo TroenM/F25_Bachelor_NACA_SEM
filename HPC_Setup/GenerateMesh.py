@@ -1,14 +1,15 @@
 import numpy as np
 import os
 
+
 hypParams = {
-    "P": 2, # Polynomial degree
+    "P": 3, # Polynomial degree
     "rho": 1.225, # Density of air [kg/m^3]
-    "nFS":750,
+    "nFS":300,
     "FR": 0.5672,
     "continue": False,
     "Kutta": True,
-    "DTscaler": 2,
+    "DTscaler": 0.02,
 }
 
 meshSettings = {
@@ -21,7 +22,7 @@ meshSettings = {
 
     "scale": 1,
     
-    "h": 1.034,
+    "h": 1.0345,
     "interface_ratio": 5/10,
     "nAirfoil": int( hypParams["nFS"]//1.4 ),
     "centerOfAirfoil": (0.5,0.0),
